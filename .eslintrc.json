@@ -1,40 +1,31 @@
 {
-  "extends": ["eslint:recommended"],
+  "root": true,
   "env": {
     "node": true,
     "es2022": true
   },
+  "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "ecmaVersion": 2022,
-    "sourceType": "module"
+    "sourceType": "module",
+    "project": ["./tsconfig.json"]
   },
+  "plugins": ["@typescript-eslint", "prettier", "vitest"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:vitest/recommended",
+    "prettier"
+  ],
   "rules": {
+    "prettier/prettier": "error",
     "no-console": "off",
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "prefer-const": "error",
-    "no-var": "error",
-    "prefer-arrow-callback": "error",
-    "arrow-spacing": "error",
-    "semi": ["error", "always"],
-    "quotes": ["error", "single"],
-    "indent": ["error", 2],
-    "max-len": ["warn", { "code": 120 }],
-    "complexity": ["warn", 10],
-    "max-depth": ["warn", 4],
-    "max-lines-per-function": ["warn", 50]
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
   },
   "overrides": [
     {
-      "files": ["test/**/*.js"],
-      "env": {
-        "vitest/globals": true
-      },
-      "plugins": ["vitest"],
-      "rules": {
-        "vitest/expect-expect": "error",
-        "vitest/no-disabled-tests": "warn",
-        "vitest/no-focused-tests": "error"
-      }
+      "files": ["test/**/*.ts"],
+      "env": { "vitest/globals": true }
     }
   ]
 }
