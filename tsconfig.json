@@ -12,6 +12,11 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "@utils/*": ["utils/*"]
+    },
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
