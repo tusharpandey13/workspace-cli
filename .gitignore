@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+
+# Production builds
+/dist/
+
+# Test & coverage outputs
+coverage/
+/.nyc_output/
+
+# Log files
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+
+# macOS files
+.DS_Store
+
+# IDE settings
+.vscode/
+.idea/
+
+# Misc
