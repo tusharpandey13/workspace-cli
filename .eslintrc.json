@@ -1,0 +1,40 @@
+{
+  "extends": ["eslint:recommended"],
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-console": "off",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "prefer-const": "error",
+    "no-var": "error",
+    "prefer-arrow-callback": "error",
+    "arrow-spacing": "error",
+    "semi": ["error", "always"],
+    "quotes": ["error", "single"],
+    "indent": ["error", 2],
+    "max-len": ["warn", { "code": 120 }],
+    "complexity": ["warn", 10],
+    "max-depth": ["warn", 4],
+    "max-lines-per-function": ["warn", 50]
+  },
+  "overrides": [
+    {
+      "files": ["test/**/*.js"],
+      "env": {
+        "vitest/globals": true
+      },
+      "plugins": ["vitest"],
+      "rules": {
+        "vitest/expect-expect": "error",
+        "vitest/no-disabled-tests": "warn",
+        "vitest/no-focused-tests": "error"
+      }
+    }
+  ]
+}

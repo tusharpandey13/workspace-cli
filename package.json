@@ -1,0 +1,51 @@
+{
+  "name": "workspace-cli",
+  "version": "0.1.0",
+  "description": "CLI tool to automate multi-worktree development for NextJS-Auth0 SDK engineers.",
+  "preferGlobal": true,
+  "bin": {
+    "workspace": "dist/bin/workspace.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/bin/workspace.ts --help",
+    "start": "node dist/bin/workspace.js --help",
+    "test": "vitest --run",
+    "test:coverage": "vitest --coverage --run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "clean": "rm -rf dist",
+    "install-global": "pnpm run build && pnpm link --global",
+    "uninstall-global": "pnpm unlink --global",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "cli",
+    "workspace",
+    "worktree",
+    "nextjs-auth0"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "dotenv": "^16.4.5",
+    "execa": "^8.0.1",
+    "fs-extra": "^11.2.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

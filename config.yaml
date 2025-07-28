@@ -1,0 +1,49 @@
+# Workspace CLI Configuration
+
+# Define SDK projects and their repositories
+projects:
+  next:
+    name: "NextJS Auth0 SDK"
+    sdk_repo: "nextjs-auth0"
+    sample_repo: "auth0-nextjs-samples"
+    github_org: "auth0"
+    sample_app_path: "Sample-01"  # Path within sample repo to the main sample app
+    env_file: "next.env.local"    # Environment file for this project
+    
+  spa:
+    name: "Auth0 SPA JS SDK"
+    sdk_repo: "~/src/auth0-spa-js"
+    sample_repo: "spajs/spatest"
+    github_org: "auth0"
+    sample_app_path: "/Users/tushar.pandey/src/spajs/spatest"
+    env_file: "spa.env.local"
+
+# Global configuration
+global:
+  # Base directory for all repositories and workspaces
+  src_dir: "~/src"
+  
+  # Workspace directory structure
+  workspace_base: "workspaces"
+  
+  # Default package manager commands
+  package_manager: "pnpm"
+  
+  # GitHub CLI wrapper command (if using custom wrapper)
+  github_cli: "gh"
+  
+  # Environment files directory (relative to config file or absolute)
+  env_files_dir: "./env-files"
+
+# Template configuration
+templates:
+  # Directory containing prompt templates (relative to CLI installation)
+  dir: "./src/templates"
+  
+  # Which templates to copy for each project type
+  common:
+    - "analysis.prompt.md"
+    - "review-changes.prompt.md" 
+    - "tests.prompt.md"
+    - "fix-and-test.prompt.md"
+    - "PR_DESCRIPTION_TEMPLATE.md"
