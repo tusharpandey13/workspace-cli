@@ -53,11 +53,14 @@
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
     "husky": "^9.0.0",
-    "lint-staged": "^15.0.0"
+    "lint-staged": "^15.0.0",
+    "eslint-plugin-vitest": "^0.5.4"
   },
   "lint-staged": {
     "*.{ts,js,md,json}": [
-      "prettier --write",
+      "prettier --write"
+    ],
+    "*.{ts,js}": [
       "eslint --fix"
     ]
   }
