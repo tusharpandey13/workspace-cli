@@ -2,83 +2,81 @@ import fs from 'fs-extra';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 import { configManager } from '../utils/config.js';
-import { 
-  executeCommand, 
-  executeGit, 
-  fileOps,
-  extractRelevantContent,
-  createTestFileName,
-  fetchComments 
-} from '../utils/init-helpers.js';
-import type { 
-  ProjectConfig, 
-  WorkspacePaths, 
-  GitHubIssueData, 
-  PlaceholderValues
+import { executeCommand, fileOps, createTestFileName } from '../utils/init-helpers.js';
+import { ContextDataFetcher } from '../services/contextData.js';
+import type {
+  ProjectConfig,
+  WorkspacePaths,
+  GitHubIssueData,
+  PlaceholderValues,
 } from '../types/index.js';
 
 /**
  * Fetch PR data and extract branch information
  */
-export async function fetchPRData(prId: number, project: ProjectConfig, isDryRun: boolean): Promise<{ data: GitHubIssueData, branchName: string }> {
+export async function fetchPRData(
+  prId: number,
+  project: ProjectConfig,
+  isDryRun: boolean,
+): Promise<{ data: GitHubIssueData; branchName: string }> {
   logger.verbose(`📊 Fetching PR data for #${prId}...`);
-  
+
   // Extract just the repo name from the SDK repo path
   const sdkRepoName = path.basename(project.sdk_repo);
-  const endpoint = `repos/${project.github_org}/${sdkRepoName}/pulls/${prId}`;
-  
+
   try {
-    const result = await executeCommand('gh', ['api', endpoint], { stdio: 'pipe' }, `fetch ${endpoint}`, isDryRun);
-    let rawData: any;
-    
-    if (!isDryRun) {
-      rawData = JSON.parse(result.stdout);
-    } else {
-      rawData = createMockPRData(prId);
+    // For PR data, we need to get the raw GitHub response first to extract branch info
+    let branchName = `pr-${prId}`;
+
+    // Fetch raw PR data to get branch information
+    const result = await executeCommand(
+      'gh',
+      ['api', `repos/${project.github_org}/${sdkRepoName}/pulls/${prId}`],
+      { stdio: 'pipe' },
+      `fetch repos/${project.github_org}/${sdkRepoName}/pulls/${prId}`,
+      isDryRun,
+    );
+
+    if (isDryRun) {
+      // For dry run, use mock branch name
+      branchName = `feature/pr-${prId}-branch`;
+    } else if (result.stdout) {
+      try {
+        const rawPRData = JSON.parse(result.stdout);
+
+        // Extract branch name from head.ref
+        if (rawPRData.head && rawPRData.head.ref) {
+          branchName = rawPRData.head.ref;
+        }
+      } catch (parseError) {
+        logger.warn(
+          `Failed to parse PR data, using fallback branch name: ${(parseError as Error).message}`,
+        );
+      }
     }
-    
-    const extractedData = extractRelevantContent(rawData);
-    
-    // Fetch comments for the PR
-    logger.verbose(`📝 Fetching comments for PR #${prId}...`);
-    extractedData.comments = await fetchComments(rawData.comments_url, prId, isDryRun);
-    
-    // Extract branch name from PR data
-    const branchName = rawData.head?.ref || `pr-${prId}`;
-    
+
+    // Now get the processed GitHub data using ContextDataFetcher
+    const contextFetcher = new ContextDataFetcher();
+    const githubData = await contextFetcher.fetchGitHubData(
+      [prId],
+      project.github_org,
+      sdkRepoName,
+      isDryRun,
+    );
+
+    if (githubData.length === 0) {
+      throw new Error(`No data found for PR #${prId}`);
+    }
+
+    const prData = githubData[0];
+
     return {
-      data: extractedData,
-      branchName: branchName
+      data: prData,
+      branchName: branchName,
     };
   } catch (error) {
     throw new Error(`Failed to fetch PR #${prId}: ${(error as Error).message}`);
   }
-}
-
-/**
- * Create mock PR data for dry run
- */
-function createMockPRData(prId: number): any {
-  return {
-    number: prId,
-    title: 'Example PR: Add new session refresh mechanism',
-    body: 'Dry run data - this would contain the actual PR body with detailed description',
-    state: 'open',
-    html_url: `https://github.com/auth0/repo/pull/${prId}`,
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-01T00:00:00Z',
-    comments_url: `https://api.github.com/repos/auth0/repo/issues/${prId}/comments`,
-    pull_request: {},
-    head: {
-      ref: `feature/pr-${prId}-branch`,
-      sha: 'abc123def456'
-    },
-    base: {
-      ref: 'main'
-    },
-    labels: [{ name: 'enhancement' }, { name: 'feature' }],
-    assignees: [{ login: 'example-user' }]
-  };
 }
 
 /**
@@ -88,21 +86,39 @@ async function getDefaultBranch(repoPath: string, isDryRun: boolean): Promise<st
   if (isDryRun) {
     return 'main'; // Default for dry run
   }
-  
+
   try {
     // Try to get the default branch from remote
-    const result = await executeGit(['symbolic-ref', 'refs/remotes/origin/HEAD'], { cwd: repoPath }, 'get default branch', false);
+    const result = await executeCommand(
+      'git',
+      ['symbolic-ref', 'refs/remotes/origin/HEAD'],
+      { cwd: repoPath },
+      'get default branch',
+      false,
+    );
     const defaultRef = result.stdout.trim();
     const branchName = defaultRef.replace('refs/remotes/origin/', '');
     return branchName;
   } catch {
     // Fallback: check if main or master exists
     try {
-      await executeGit(['show-ref', '--verify', '--quiet', 'refs/heads/main'], { cwd: repoPath }, 'check main branch', false);
+      await executeCommand(
+        'git',
+        ['show-ref', '--verify', '--quiet', 'refs/heads/main'],
+        { cwd: repoPath },
+        'check main branch',
+        false,
+      );
       return 'main';
     } catch {
       try {
-        await executeGit(['show-ref', '--verify', '--quiet', 'refs/heads/master'], { cwd: repoPath }, 'check master branch', false);
+        await executeCommand(
+          'git',
+          ['show-ref', '--verify', '--quiet', 'refs/heads/master'],
+          { cwd: repoPath },
+          'check master branch',
+          false,
+        );
         return 'master';
       } catch {
         return 'main'; // Final fallback
@@ -114,58 +130,107 @@ async function getDefaultBranch(repoPath: string, isDryRun: boolean): Promise<st
 /**
  * Setup git worktrees for PR branch
  */
-async function setupPRWorktrees(project: ProjectConfig, paths: WorkspacePaths, branchName: string, isDryRun: boolean): Promise<void> {
-  const addWorktree = async (repoDir: string, worktreePath: string, targetBranch: string): Promise<void> => {
+async function setupPRWorktrees(
+  project: ProjectConfig,
+  paths: WorkspacePaths,
+  branchName: string,
+  isDryRun: boolean,
+): Promise<void> {
+  const addWorktree = async (
+    repoDir: string,
+    worktreePath: string,
+    targetBranch: string,
+  ): Promise<void> => {
     if (!isDryRun && fs.existsSync(worktreePath)) {
       await fileOps.removeFile(worktreePath, `stale worktree directory: ${worktreePath}`, isDryRun);
     }
-    
+
     try {
-      await executeGit(['worktree', 'prune'], { cwd: repoDir }, `prune worktrees in ${repoDir}`, isDryRun);
+      await executeCommand(
+        'git',
+        ['worktree', 'prune'],
+        { cwd: repoDir },
+        `prune worktrees in ${repoDir}`,
+        isDryRun,
+      );
     } catch {
       // Ignore prune failures
     }
-    
+
     // For PR branch in SDK, we need to fetch it first if it doesn't exist locally
     if (repoDir === paths.sdkRepoPath) {
       try {
-        await executeGit(['fetch', 'origin', `${targetBranch}:${targetBranch}`], { cwd: repoDir }, `fetch PR branch ${targetBranch}`, isDryRun);
+        await executeCommand(
+          'git',
+          ['fetch', 'origin', `${targetBranch}:${targetBranch}`],
+          { cwd: repoDir },
+          `fetch PR branch ${targetBranch}`,
+          isDryRun,
+        );
       } catch {
         // Branch might already exist locally or fetch might fail, continue
       }
     }
-    
+
     try {
-      await executeGit(['worktree', 'add', worktreePath, '-b', targetBranch, 'main'], { cwd: repoDir }, `create new worktree with branch ${targetBranch}`, isDryRun);
+      await executeCommand(
+        'git',
+        ['worktree', 'add', worktreePath, '-b', targetBranch, 'main'],
+        { cwd: repoDir },
+        `create new worktree with branch ${targetBranch}`,
+        isDryRun,
+      );
     } catch {
       try {
-        await executeGit(['worktree', 'add', worktreePath, targetBranch], { cwd: repoDir }, `add existing branch ${targetBranch} to worktree`, isDryRun);
+        await executeCommand(
+          'git',
+          ['worktree', 'add', worktreePath, targetBranch],
+          { cwd: repoDir },
+          `add existing branch ${targetBranch} to worktree`,
+          isDryRun,
+        );
       } catch {
-        await executeGit(['worktree', 'add', '-f', worktreePath, targetBranch], { cwd: repoDir }, `force add branch ${targetBranch} to worktree`, isDryRun);
+        await executeCommand(
+          'git',
+          ['worktree', 'add', '-f', worktreePath, targetBranch],
+          { cwd: repoDir },
+          `force add branch ${targetBranch} to worktree`,
+          isDryRun,
+        );
       }
     }
   };
 
   logger.verbose('🔀 Setting up SDK worktree for PR branch...');
   await addWorktree(paths.sdkRepoPath, paths.sdkPath, branchName);
-  
+
   logger.verbose('🔀 Setting up samples worktree...');
   // For samples, use the default branch since PR branches typically don't exist in sample repos
   const defaultBranch = await getDefaultBranch(paths.sampleRepoPath, isDryRun);
   await addWorktree(paths.sampleRepoPath, paths.samplesPath, defaultBranch);
-  
+
   logger.success('Git worktrees ready for PR');
 }
 
 /**
  * Setup environment and install dependencies for PR
  */
-async function setupPREnvironmentAndDependencies(project: ProjectConfig, projectKey: string, paths: WorkspacePaths, isDryRun: boolean): Promise<void> {
+async function setupPREnvironmentAndDependencies(
+  project: ProjectConfig,
+  projectKey: string,
+  paths: WorkspacePaths,
+  isDryRun: boolean,
+): Promise<void> {
   // Copy environment file
   const envFilePath = configManager.getEnvFilePath(projectKey);
   if (!isDryRun && envFilePath && fs.existsSync(envFilePath)) {
     logger.verbose(`🔑 Copying environment variables from ${envFilePath}...`);
-    await fileOps.copyFile(envFilePath, path.join(paths.sampleAppPath, '.env.local'), `environment file from ${envFilePath} to sample app`, isDryRun);
+    await fileOps.copyFile(
+      envFilePath,
+      path.join(paths.sampleAppPath, '.env.local'),
+      `environment file from ${envFilePath} to sample app`,
+      isDryRun,
+    );
   }
 
   const global = configManager.getGlobal();
@@ -173,26 +238,52 @@ async function setupPREnvironmentAndDependencies(project: ProjectConfig, project
 
   // Install SDK dependencies
   logger.verbose(`📦 Installing SDK dependencies (${packageManager})...`);
-  await executeCommand(packageManager, ['install', '--prefer-offline', '--silent'], { cwd: paths.sdkPath, stdio: 'pipe' }, 'install SDK dependencies', isDryRun);
-  
+  await executeCommand(
+    packageManager,
+    ['install', '--prefer-offline', '--silent'],
+    { cwd: paths.sdkPath, stdio: 'pipe' },
+    'install SDK dependencies',
+    isDryRun,
+  );
+
   // Try to publish SDK to yalc (optional step - don't fail if it doesn't work)
   logger.verbose('📤 Publishing SDK to yalc...');
   try {
-    await executeCommand(packageManager, ['yalc', 'publish', '--silent'], { cwd: paths.sdkPath, stdio: 'pipe' }, 'publish SDK to yalc', isDryRun);
+    await executeCommand(
+      packageManager,
+      ['yalc', 'publish', '--silent'],
+      { cwd: paths.sdkPath, stdio: 'pipe' },
+      'publish SDK to yalc',
+      isDryRun,
+    );
   } catch (error) {
     logger.warn(`⚠️  Failed to publish SDK to yalc: ${(error as Error).message}`);
-    logger.warn('   This is optional - you can manually build and publish the SDK later if needed.');
+    logger.warn(
+      '   This is optional - you can manually build and publish the SDK later if needed.',
+    );
   }
 
   // Install sample app dependencies
   logger.verbose(`📦 Installing sample app dependencies (${packageManager})...`);
-  await executeCommand(packageManager, ['install', '--prefer-offline', '--silent'], { cwd: paths.sampleAppPath, stdio: 'pipe' }, 'install sample app dependencies', isDryRun);
-  
+  await executeCommand(
+    packageManager,
+    ['install', '--prefer-offline', '--silent'],
+    { cwd: paths.sampleAppPath, stdio: 'pipe' },
+    'install sample app dependencies',
+    isDryRun,
+  );
+
   // Try to link SDK into sample app via yalc (optional step - only works if publish succeeded)
   logger.verbose('🔗 Linking SDK into sample app via yalc...');
   const packageName = `@auth0/${path.basename(project.sdk_repo)}`;
   try {
-    await executeCommand(packageManager, ['yalc', 'add', packageName, '--silent'], { cwd: paths.sampleAppPath, stdio: 'pipe' }, 'link SDK into sample app', isDryRun);
+    await executeCommand(
+      packageManager,
+      ['yalc', 'add', packageName, '--silent'],
+      { cwd: paths.sampleAppPath, stdio: 'pipe' },
+      'link SDK into sample app',
+      isDryRun,
+    );
   } catch (error) {
     logger.warn(`⚠️  Failed to link SDK into sample app: ${(error as Error).message}`);
     logger.warn('   This is optional - the workspace is still ready for development.');
@@ -211,22 +302,19 @@ async function generatePRTemplatesAndDocs(options: {
   githubData: GitHubIssueData[];
   isDryRun: boolean;
 }): Promise<void> {
-  const {
-    project,
-    projectKey,
-    prId,
-    branchName,
-    paths,
-    githubData,
-    isDryRun
-  } = options;
+  const { project, projectKey, prId, branchName, paths, githubData, isDryRun } = options;
 
   // Copy templates
   const templates = configManager.getTemplates();
   const templatesDir = templates.dir || path.join(configManager.getCliRoot(), 'src/templates');
-  
+
   logger.verbose(`📄 Copying templates from ${templatesDir}...`);
-  await fileOps.copyFile(templatesDir, paths.workspaceDir, `templates from ${templatesDir} to workspace`, isDryRun);
+  await fileOps.copyFile(
+    templatesDir,
+    paths.workspaceDir,
+    `templates from ${templatesDir} to workspace`,
+    isDryRun,
+  );
 
   // Generate placeholder values and update templates
   const placeholderValues = createPRPlaceholderValues({
@@ -235,12 +323,13 @@ async function generatePRTemplatesAndDocs(options: {
     prId,
     branchName,
     paths,
-    githubData
+    githubData,
   });
 
   if (!isDryRun) {
-    const promptFiles = (await fs.readdir(paths.workspaceDir))
-      .filter((f) => f.endsWith('.prompt.md'));
+    const promptFiles = (await fs.readdir(paths.workspaceDir)).filter((f) =>
+      f.endsWith('.prompt.md'),
+    );
 
     logger.verbose(`📝 Updating ${promptFiles.length} prompt files with placeholders...`);
     for (const file of promptFiles) {
@@ -249,7 +338,12 @@ async function generatePRTemplatesAndDocs(options: {
       for (const [placeholder, value] of Object.entries(placeholderValues)) {
         contents = contents.split(placeholder).join(value);
       }
-      await fileOps.writeFile(promptPath, contents, `prompt file ${file} with placeholders`, isDryRun);
+      await fileOps.writeFile(
+        promptPath,
+        contents,
+        `prompt file ${file} with placeholders`,
+        isDryRun,
+      );
     }
   }
 
@@ -259,7 +353,7 @@ async function generatePRTemplatesAndDocs(options: {
     branchName,
     paths,
     githubData,
-    isDryRun
+    isDryRun,
   });
 }
 
@@ -272,7 +366,7 @@ function createPRPlaceholderValues({
   prId,
   branchName,
   paths,
-  githubData
+  githubData,
 }: {
   project: ProjectConfig;
   projectKey: string;
@@ -282,11 +376,10 @@ function createPRPlaceholderValues({
   githubData: GitHubIssueData[];
 }): PlaceholderValues {
   const testFileName = createTestFileName(githubData);
-  
+
   // Format GitHub data
-  const githubDataFormatted = githubData.length > 0 
-    ? formatGitHubData(githubData)
-    : 'No GitHub data available.';
+  const githubDataFormatted =
+    githubData.length > 0 ? formatGitHubData(githubData) : 'No GitHub data available.';
 
   // Generate key files lists
   const sdkKeyFiles = generateSdkKeyFiles(paths.sdkPath, paths.workspaceDir);
@@ -307,7 +400,7 @@ function createPRPlaceholderValues({
     '{{BUGREPORT_FILE}}': path.basename(prInfoPath),
     '{{RELATED_ISSUES_PRS}}': `This workspace was created for PR #${prId}.`,
     '{{ADDITIONAL_CONTEXT}}': `PR Branch: ${branchName}`,
-    '{{TEST_FILE_NAME}}': testFileName
+    '{{TEST_FILE_NAME}}': testFileName,
   };
 }
 
@@ -315,50 +408,59 @@ function createPRPlaceholderValues({
  * Format GitHub data for templates
  */
 function formatGitHubData(githubData: GitHubIssueData[]): string {
-  return githubData.map(item => {
-    let formatted = `### ${item.type === 'issue' ? 'Issue' : 'PR'} #${item.id}: ${item.title}\n`;
-    formatted += `- **URL**: ${item.url}\n`;
-    formatted += `- **State**: ${item.state}\n`;
-    formatted += `- **Created**: ${item.created_at}\n`;
-    formatted += `- **Updated**: ${item.updated_at}\n`;
-    
-    if (item.labels.length > 0) {
-      formatted += `- **Labels**: ${item.labels.join(', ')}\n`;
-    }
-    if (item.assignees.length > 0) {
-      formatted += `- **Assignees**: ${item.assignees.join(', ')}\n`;
-    }
-    
-    formatted += `\n**Description**:\n${item.body || 'No description provided.'}\n`;
-    
-    if (item.links.length > 0) {
-      const linkList = item.links.map(link => `- ${link}`).join('\n');
-      formatted += `\n**Referenced Links**:\n${linkList}\n`;
-    }
-    
-    if (item.comments && item.comments.length > 0) {
-      formatted += `\n**Comments**:\n`;
-      item.comments.forEach((comment, i) => {
-        formatted += `${i + 1}. **${comment.author}** (${comment.created_at}): ${comment.body}\n`;
-        if (comment.links.length > 0) {
-          formatted += `   Links: ${comment.links.join(', ')}\n`;
-        }
-      });
-    }
-    
-    return formatted;
-  }).join('\n---\n\n');
+  return githubData
+    .map((item) => {
+      let formatted = `### ${item.type === 'issue' ? 'Issue' : 'PR'} #${item.id}: ${item.title}\n`;
+      formatted += `- **URL**: ${item.url}\n`;
+      formatted += `- **State**: ${item.state}\n`;
+      formatted += `- **Created**: ${item.created_at}\n`;
+      formatted += `- **Updated**: ${item.updated_at}\n`;
+
+      if (item.labels.length > 0) {
+        formatted += `- **Labels**: ${item.labels.join(', ')}\n`;
+      }
+      if (item.assignees.length > 0) {
+        formatted += `- **Assignees**: ${item.assignees.join(', ')}\n`;
+      }
+
+      formatted += `\n**Description**:\n${item.body || 'No description provided.'}\n`;
+
+      if (item.links && item.links.length > 0) {
+        const linkList = item.links.map((link) => `- ${link}`).join('\n');
+        formatted += `\n**Referenced Links**:\n${linkList}\n`;
+      }
+
+      if (item.comments && item.comments.length > 0) {
+        formatted += `\n**Comments**:\n`;
+        item.comments.forEach((comment, i) => {
+          formatted += `${i + 1}. **${comment.author}** (${comment.created_at}): ${comment.body}\n`;
+          if (comment.links.length > 0) {
+            formatted += `   Links: ${comment.links.join(', ')}\n`;
+          }
+        });
+      }
+
+      return formatted;
+    })
+    .join('\n---\n\n');
 }
 
 /**
  * Generate SDK key files list
  */
-function generateSdkKeyFiles(sdkPath: string, workspaceDir: string): string {
-  const commonFiles = ['src/server/auth-client.ts', 'src/server/client.ts', 'src/server/cookies.ts', 'src/index.ts'];
-  return commonFiles
-    .filter((rel) => fs.existsSync(path.join(sdkPath, rel)))
-    .map((rel) => `- ${path.basename(sdkPath)}/${rel}`)
-    .join('\n') || '- No key files found';
+function generateSdkKeyFiles(sdkPath: string, _workspaceDir: string): string {
+  const commonFiles = [
+    'src/server/auth-client.ts',
+    'src/server/client.ts',
+    'src/server/cookies.ts',
+    'src/index.ts',
+  ];
+  return (
+    commonFiles
+      .filter((rel) => fs.existsSync(path.join(sdkPath, rel)))
+      .map((rel) => `- ${path.basename(sdkPath)}/${rel}`)
+      .join('\n') || '- No key files found'
+  );
 }
 
 /**
@@ -367,20 +469,20 @@ function generateSdkKeyFiles(sdkPath: string, workspaceDir: string): string {
 function generateSampleKeyFiles(samplesPath: string, workspaceDir: string): string {
   const targetFiles = ['auth.js', 'middleware.js', 'pages/api/auth/[...auth0].js'];
   const matches: string[] = [];
-  
+
   const walk = (dir: string, depth: number = 0): void => {
     if (depth > 3) return; // Limit recursion depth
-    
+
     try {
       for (const entry of fs.readdirSync(dir)) {
         if (['node_modules', '.next', '.yalc'].includes(entry)) continue;
-        
+
         const fp = path.join(dir, entry);
         const stat = fs.statSync(fp);
-        
+
         if (stat.isDirectory()) {
           walk(fp, depth + 1);
-        } else if (targetFiles.some(target => entry === target || fp.endsWith(target))) {
+        } else if (targetFiles.some((target) => entry === target || fp.endsWith(target))) {
           matches.push(path.relative(workspaceDir, fp));
         }
       }
@@ -388,7 +490,7 @@ function generateSampleKeyFiles(samplesPath: string, workspaceDir: string): stri
       // Ignore errors reading directories
     }
   };
-  
+
   walk(samplesPath);
   return matches.map((rel) => `- ${rel}`).join('\n') || '- No key files found';
 }
@@ -448,13 +550,21 @@ export async function initializePRWorkspace(options: {
   const { project, projectKey, prId, branchName, paths, isDryRun } = options;
 
   // Check if workspace already exists
-  if (!isDryRun && fs.existsSync(paths.workspaceDir) && (await fs.readdir(paths.workspaceDir)).length > 0) {
+  if (
+    !isDryRun &&
+    fs.existsSync(paths.workspaceDir) &&
+    (await fs.readdir(paths.workspaceDir)).length > 0
+  ) {
     logger.info('➡️  Workspace already exists, continuing...');
   }
-  
+
   // Create workspace directories
   logger.step(1, 5, 'Creating workspace directories...');
-  await fileOps.ensureDir(paths.workspaceDir, `workspace directory: ${paths.workspaceDir}`, isDryRun);
+  await fileOps.ensureDir(
+    paths.workspaceDir,
+    `workspace directory: ${paths.workspaceDir}`,
+    isDryRun,
+  );
 
   // Setup git worktrees for PR
   logger.step(2, 5, 'Setting up git worktrees for PR...');
@@ -477,16 +587,14 @@ export async function initializePRWorkspace(options: {
     branchName,
     paths,
     githubData: [prData],
-    isDryRun
+    isDryRun,
   });
 
   logger.success(`${project.name} workspace created for PR #${prId}`);
   logger.info(`Workspace location: ${paths.workspaceDir}`);
   logger.info(`PR branch: ${branchName}`);
-  
+
   if (isDryRun) {
     logger.info('🧪 DRY-RUN COMPLETE: No actual changes were made');
   }
 }
-
-
