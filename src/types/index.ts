@@ -25,6 +25,7 @@ export interface Config {
   projects?: Record<string, Omit<ProjectConfig, 'key'>>;
   global?: GlobalConfig;
   templates?: TemplatesConfig;
+  workflows?: WorkflowsConfig;
 }
 
 export interface WorkspacePaths {
@@ -49,9 +50,13 @@ export interface GitHubIssueData {
   updated_at: string;
   labels: string[];
   assignees: string[];
-  comments_url: string;
-  links: string[];
-  comments?: GitHubComment[];
+  milestone?: string | null;
+  comments_url?: string;
+  links?: string[];
+  comments: GitHubComment[];
+  linkedIssues: LinkedIssue[];
+  fileChanges: FileChange[];
+  additionalContext: UrlContent[];
 }
 
 export interface GitHubComment {
@@ -59,6 +64,26 @@ export interface GitHubComment {
   created_at: string;
   body: string;
   links: string[];
+}
+
+export interface LinkedIssue {
+  id: number;
+  title: string;
+  url: string;
+}
+
+export interface FileChange {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface UrlContent {
+  url: string;
+  title: string;
+  content: string;
+  domain: string;
 }
 
 export interface PlaceholderValues {
@@ -113,4 +138,24 @@ export interface GenerateWorkspaceInfoOptions {
   githubData: GitHubIssueData[];
   additionalContext: string[];
   isDryRun: boolean;
+}
+
+/**
+ * Workflow types for intelligent prompt selection
+ */
+export type WorkflowType = 'issue-fix' | 'feature-development' | 'maintenance' | 'exploration';
+
+export interface WorkflowConfig {
+  prompts: string[];
+  description?: string;
+}
+
+export interface WorkflowsConfig {
+  [key: string]: WorkflowConfig;
+}
+
+export interface PromptSelectionResult {
+  workflowType: WorkflowType;
+  selectedPrompts: string[];
+  detectionReason: string;
 }

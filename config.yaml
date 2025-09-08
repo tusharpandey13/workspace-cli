@@ -18,6 +18,24 @@ projects:
     sample_app_path: "/Users/tushar.pandey/src/spajs/spatest"
     env_file: "spa.env.local"
 
+# Workflow-based prompt selection configurations
+workflows:
+  issue-fix:
+    prompts: ["analysis.prompt.md", "fix-and-test.prompt.md", "reproduction.prompt.md", "review-changes.prompt.md"]
+    description: "Bug fixes and hotfixes requiring focused analysis and testing"
+  feature-development:
+    prompts: ["analysis.prompt.md", "feature-analysis.prompt.md", "tests.prompt.md", "review-changes.prompt.md"]
+    description: "New feature development requiring comprehensive planning and implementation"
+  maintenance:
+    prompts: ["analysis.prompt.md", "maintenance-analysis.prompt.md", "tests.prompt.md", "review-changes.prompt.md"]
+    description: "Maintenance tasks including dependency updates and code cleanup"
+  exploration:
+    prompts: ["exploration-analysis.prompt.md", "universal-analysis.prompt.md"]
+    description: "Research and investigation tasks without specific implementation goals"
+  reproduction:
+    prompts: ["reproduction.prompt.md", "tests.prompt.md", "review-changes.prompt.md"]
+    description: "Issue reproduction and testing workflow with pre-configured infrastructure"
+
 # Global configuration
 global:
   # Base directory for all repositories and workspaces
@@ -34,6 +52,38 @@ global:
   
   # Environment files directory (relative to config file or absolute)
   env_files_dir: "./env-files"
+
+# Repository management configuration
+repository:
+  # Always fetch latest changes before creating worktrees
+  ensure_freshness: true
+  
+  # Update main/master branches if they are behind origin
+  auto_update_default_branches: true
+  
+  # Maximum commits behind origin before warning
+  max_commits_behind_warning: 10
+
+# Testing infrastructure configuration  
+testing:
+  # Automatically set up testing infrastructure for sample apps
+  auto_setup_infrastructure: true
+  
+  # Testing tools to install and configure
+  tools:
+    vitest: true          # Unit testing framework
+    playwright: true      # E2E testing framework  
+    msw: true            # Mock Service Worker for API mocking
+    coverage: true       # Code coverage reporting
+    
+  # Test file patterns and directories
+  patterns:
+    test_dir: "tests"
+    coverage_dir: "coverage"
+    reports_dir: "test-results"
+    
+  # Skip infrastructure setup for these sample app types
+  skip_setup: []  # Empty array means setup for all types
 
 # Template configuration
 templates:

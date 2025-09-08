@@ -8,22 +8,21 @@ vi.mock('fs-extra', () => ({
     readdir: vi.fn(),
     readFile: vi.fn(),
     readdirSync: vi.fn(),
-    statSync: vi.fn()
-  }
+    statSync: vi.fn(),
+  },
 }));
 
 vi.mock('../src/utils/init-helpers.js', () => ({
   executeCommand: vi.fn(),
-  executeGit: vi.fn(),
   fileOps: {
     ensureDir: vi.fn(),
     removeFile: vi.fn(),
     copyFile: vi.fn(),
-    writeFile: vi.fn()
+    writeFile: vi.fn(),
   },
   extractRelevantContent: vi.fn(),
   fetchComments: vi.fn(),
-  createTestFileName: vi.fn()
+  createTestFileName: vi.fn(),
 }));
 
 vi.mock('../src/utils/logger.js', () => ({
@@ -32,8 +31,8 @@ vi.mock('../src/utils/logger.js', () => ({
     info: vi.fn(),
     step: vi.fn(),
     success: vi.fn(),
-    warn: vi.fn()
-  }
+    warn: vi.fn(),
+  },
 }));
 
 vi.mock('../src/utils/config.js', () => ({
@@ -41,20 +40,19 @@ vi.mock('../src/utils/config.js', () => ({
     getTemplates: vi.fn(),
     getGlobal: vi.fn(),
     getEnvFilePath: vi.fn(),
-    getCliRoot: vi.fn()
-  }
+    getCliRoot: vi.fn(),
+  },
 }));
 
 // Import after mocking
 import { fetchPRData, initializePRWorkspace } from '../src/commands/pr.js';
 import fs from 'fs-extra';
-import { 
+import {
   executeCommand,
-  executeGit,
   fileOps,
   extractRelevantContent,
   fetchComments,
-  createTestFileName 
+  createTestFileName,
 } from '../src/utils/init-helpers.js';
 import { logger } from '../src/utils/logger.js';
 import { configManager } from '../src/utils/config.js';
@@ -67,7 +65,7 @@ describe('PR Commands', () => {
     sample_repo: 'auth0-nextjs-samples',
     github_org: 'auth0',
     sample_app_path: 'Sample-01',
-    env_file: 'next.env.local'
+    env_file: 'next.env.local',
   };
 
   const mockPaths = {
@@ -76,22 +74,22 @@ describe('PR Commands', () => {
     workspaceDir: '/Users/test/src/workspaces/next/pr-123-feature_test-branch',
     sdkPath: '/Users/test/src/workspaces/next/pr-123-feature_test-branch/nextjs-auth0',
     samplesPath: '/Users/test/src/workspaces/next/pr-123-feature_test-branch/auth0-nextjs-samples',
-    sampleAppPath: '/Users/test/src/workspaces/next/pr-123-feature_test-branch/auth0-nextjs-samples/Sample-01',
+    sampleAppPath:
+      '/Users/test/src/workspaces/next/pr-123-feature_test-branch/auth0-nextjs-samples/Sample-01',
     sdkRepoPath: '/Users/test/src/nextjs-auth0',
-    sampleRepoPath: '/Users/test/src/auth0-nextjs-samples'
+    sampleRepoPath: '/Users/test/src/auth0-nextjs-samples',
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Setup default mock implementations
     (executeCommand as any).mockResolvedValue({ stdout: '{}' });
-    (executeGit as any).mockResolvedValue({ stdout: '' });
     (fileOps.ensureDir as any).mockResolvedValue(undefined);
     (fileOps.removeFile as any).mockResolvedValue(undefined);
     (fileOps.copyFile as any).mockResolvedValue(undefined);
     (fileOps.writeFile as any).mockResolvedValue(undefined);
-    
+
     (extractRelevantContent as any).mockReturnValue({
       id: 123,
       title: 'Test PR',
@@ -104,18 +102,18 @@ describe('PR Commands', () => {
       labels: ['feature'],
       assignees: ['testuser'],
       comments_url: 'https://api.github.com/repos/auth0/nextjs-auth0/issues/123/comments',
-      links: []
+      links: [],
     });
-    
+
     (fetchComments as any).mockResolvedValue([]);
     (createTestFileName as any).mockReturnValue('test-pr-123.spec.ts');
-    
+
     // Mock config manager
     (configManager.getTemplates as any).mockReturnValue({ dir: '/test/templates' });
     (configManager.getGlobal as any).mockReturnValue({ package_manager: 'pnpm' });
     (configManager.getEnvFilePath as any).mockReturnValue('/test/env/next.env.local');
     (configManager.getCliRoot as any).mockReturnValue('/test/cli');
-    
+
     // Mock fs operations
     (fs.existsSync as any).mockReturnValue(false);
     (fs.readdir as any).mockResolvedValue([]);
@@ -141,17 +139,33 @@ describe('PR Commands', () => {
         comments_url: 'https://api.github.com/repos/auth0/nextjs-auth0/issues/123/comments',
         head: {
           ref: 'feature/test-branch',
-          sha: 'abc123'
+          sha: 'abc123',
         },
         base: {
-          ref: 'main'
+          ref: 'main',
         },
-        pull_request: {}
+        pull_request: {},
       });
 
-      (executeCommand as any).mockResolvedValue({ 
-        stdout: mockPRResponse 
-      });
+      // Set up executeCommand to return different responses for different API calls
+      (executeCommand as any).mockImplementation(
+        (
+          _command: string,
+          args: string[],
+          _options: any,
+          _description: string,
+          _isDryRun: boolean,
+        ) => {
+          if (args.includes('pulls/123')) {
+            // Response for the PR-specific call
+            return Promise.resolve({ stdout: mockPRResponse });
+          } else if (args.includes('issues/123')) {
+            // Response for the ContextDataFetcher call
+            return Promise.resolve({ stdout: mockPRResponse });
+          }
+          return Promise.resolve({ stdout: '{}' });
+        },
+      );
 
       const result = await fetchPRData(123, mockProject, false);
 
@@ -159,35 +173,54 @@ describe('PR Commands', () => {
       expect(result.data.id).toBe(123);
       expect(result.data.title).toBe('Test PR');
       expect(result.data.type).toBe('pull_request');
-      
+
       expect(executeCommand).toHaveBeenCalledWith(
         'gh',
         ['api', 'repos/auth0/nextjs-auth0/pulls/123'],
         { stdio: 'pipe' },
         'fetch repos/auth0/nextjs-auth0/pulls/123',
-        false
+        false,
       );
-      
+
       expect(fetchComments).toHaveBeenCalledWith(
         'https://api.github.com/repos/auth0/nextjs-auth0/issues/123/comments',
         123,
-        false
+        false,
       );
     });
 
     it('should return mock data for dry run', async () => {
+      // Set up mock for dry run API call
+      (executeCommand as any).mockImplementation(
+        (command: string, args: string[], options: any, description: string, isDryRun: boolean) => {
+          if (isDryRun && args.includes('pulls/456')) {
+            // For dry run, return mock data with branch info
+            const mockDryRunResponse = JSON.stringify({
+              number: 456,
+              title: 'Mock PR for dry run',
+              head: {
+                ref: 'feature/pr-456-branch',
+                sha: 'mock123',
+              },
+            });
+            return Promise.resolve({ stdout: mockDryRunResponse });
+          }
+          return Promise.resolve({ stdout: '{}' });
+        },
+      );
+
       const result = await fetchPRData(456, mockProject, true);
 
       expect(result.branchName).toBe('feature/pr-456-branch');
       expect(result.data.id).toBe(123); // From mocked extractRelevantContent
       expect(result.data.title).toBe('Test PR');
-      
+
       expect(executeCommand).toHaveBeenCalledWith(
         'gh',
         ['api', 'repos/auth0/nextjs-auth0/pulls/456'],
         { stdio: 'pipe' },
         'fetch repos/auth0/nextjs-auth0/pulls/456',
-        true
+        true,
       );
     });
 
@@ -195,7 +228,7 @@ describe('PR Commands', () => {
       (executeCommand as any).mockRejectedValue(new Error('API rate limit exceeded'));
 
       await expect(fetchPRData(999, mockProject, false)).rejects.toThrow(
-        'Failed to fetch PR #999: API rate limit exceeded'
+        'Failed to fetch PR #999: API rate limit exceeded',
       );
     });
 
@@ -204,11 +237,11 @@ describe('PR Commands', () => {
         head: { ref: 'feature/complex-branch-name/with-slashes' },
         number: 123,
         title: 'Test',
-        body: 'Test'
+        body: 'Test',
       });
 
-      (executeCommand as any).mockResolvedValue({ 
-        stdout: mockPRWithBranch 
+      (executeCommand as any).mockResolvedValue({
+        stdout: mockPRWithBranch,
       });
 
       const result = await fetchPRData(123, mockProject, false);
@@ -219,11 +252,11 @@ describe('PR Commands', () => {
       const mockPRWithoutHead = JSON.stringify({
         number: 123,
         title: 'Test',
-        body: 'Test'
+        body: 'Test',
       });
 
-      (executeCommand as any).mockResolvedValue({ 
-        stdout: mockPRWithoutHead 
+      (executeCommand as any).mockResolvedValue({
+        stdout: mockPRWithoutHead,
       });
 
       const result = await fetchPRData(123, mockProject, false);
@@ -239,27 +272,28 @@ describe('PR Commands', () => {
       branchName: 'feature/test-branch',
       workspaceName: 'pr-123-feature_test-branch',
       paths: mockPaths,
-      isDryRun: false
+      isDryRun: false,
     };
 
     it('should initialize PR workspace successfully', async () => {
       (fs.readdir as any).mockResolvedValue(['analysis.prompt.md', 'tests.prompt.md']);
-      
+
       await initializePRWorkspace(initOptions);
 
       // Verify workspace directory creation
       expect(fileOps.ensureDir).toHaveBeenCalledWith(
         mockPaths.workspaceDir,
         expect.stringContaining('workspace directory'),
-        false
+        false,
       );
 
       // Verify git worktrees setup
-      expect(executeGit).toHaveBeenCalledWith(
+      expect(executeCommand).toHaveBeenCalledWith(
+        'git',
         ['worktree', 'prune'],
         { cwd: mockPaths.sdkRepoPath },
         expect.stringContaining('prune worktrees'),
-        false
+        false,
       );
 
       // Verify dependencies installation
@@ -268,7 +302,7 @@ describe('PR Commands', () => {
         ['install', '--prefer-offline', '--silent'],
         { cwd: mockPaths.sdkPath, stdio: 'pipe' },
         'install SDK dependencies',
-        false
+        false,
       );
 
       // Verify templates copying
@@ -276,12 +310,12 @@ describe('PR Commands', () => {
         '/test/templates',
         mockPaths.workspaceDir,
         expect.stringContaining('templates'),
-        false
+        false,
       );
 
       // Verify success logging
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
 
@@ -296,23 +330,17 @@ describe('PR Commands', () => {
 
     it('should work in dry run mode', async () => {
       const dryRunOptions = { ...initOptions, isDryRun: true };
-      
+
       await initializePRWorkspace(dryRunOptions);
 
       // Verify all operations are called with isDryRun: true
-      expect(fileOps.ensureDir).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(String),
-        true
-      );
+      expect(fileOps.ensureDir).toHaveBeenCalledWith(expect.any(String), expect.any(String), true);
 
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('DRY-RUN COMPLETE')
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('DRY-RUN COMPLETE'));
     });
 
     it('should handle git worktree setup failures gracefully', async () => {
-      (executeGit as any)
+      (executeCommand as any)
         .mockRejectedValueOnce(new Error('Git worktree failed'))
         .mockResolvedValue({ stdout: '' });
 
@@ -320,7 +348,7 @@ describe('PR Commands', () => {
 
       // Should continue despite git errors and complete successfully
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
 
@@ -335,20 +363,20 @@ describe('PR Commands', () => {
         '/test/env/next.env.local',
         path.join(mockPaths.sampleAppPath, '.env.local'),
         expect.stringContaining('environment file'),
-        false
+        false,
       );
     });
 
     it('should update template placeholders correctly', async () => {
       (fs.readdir as any).mockResolvedValue(['analysis.prompt.md', 'tests.prompt.md']);
-      
+
       await initializePRWorkspace(initOptions);
 
       expect(fileOps.writeFile).toHaveBeenCalledWith(
         expect.stringContaining('analysis.prompt.md'),
         expect.any(String),
         expect.stringContaining('prompt file'),
-        false
+        false,
       );
     });
 
@@ -359,13 +387,13 @@ describe('PR Commands', () => {
         expect.stringContaining('PR_INFO_123.md'),
         expect.stringContaining('# PR Info for #123'),
         expect.stringContaining('PR info for #123'),
-        false
+        false,
       );
     });
 
     it('should handle different package managers', async () => {
       (configManager.getGlobal as any).mockReturnValue({
-        package_manager: 'npm'
+        package_manager: 'npm',
       });
 
       await initializePRWorkspace(initOptions);
@@ -375,7 +403,7 @@ describe('PR Commands', () => {
         ['install', '--prefer-offline', '--silent'],
         expect.any(Object),
         expect.any(String),
-        false
+        false,
       );
     });
 
@@ -387,7 +415,7 @@ describe('PR Commands', () => {
         ['yalc', 'add', '@auth0/nextjs-auth0', '--silent'],
         { cwd: mockPaths.sampleAppPath, stdio: 'pipe' },
         'link SDK into sample app',
-        false
+        false,
       );
     });
   });
@@ -401,21 +429,22 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       await initializePRWorkspace(initOptions);
 
-      expect(executeGit).toHaveBeenCalledWith(
+      expect(executeCommand).toHaveBeenCalledWith(
+        'git',
         ['fetch', 'origin', 'feature/test-branch:feature/test-branch'],
         { cwd: mockPaths.sdkRepoPath },
         expect.stringContaining('fetch PR branch'),
-        false
+        false,
       );
     });
 
     it('should handle git fetch failures gracefully', async () => {
-      (executeGit as any)
+      (executeCommand as any)
         .mockResolvedValueOnce({ stdout: '' }) // prune
         .mockRejectedValueOnce(new Error('Fetch failed')) // fetch - should be ignored
         .mockResolvedValue({ stdout: '' }); // subsequent calls
@@ -427,19 +456,19 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       await initializePRWorkspace(initOptions);
 
       // Should continue despite fetch failure
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
 
     it('should use fallback worktree creation strategies', async () => {
-      (executeGit as any)
+      (executeCommand as any)
         // SDK worktree setup
         .mockResolvedValueOnce({ stdout: '' }) // prune SDK
         .mockResolvedValueOnce({ stdout: '' }) // fetch SDK branch
@@ -459,25 +488,27 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       await initializePRWorkspace(initOptions);
 
       // Should have used SDK branch for SDK worktree
-      expect(executeGit).toHaveBeenCalledWith(
+      expect(executeCommand).toHaveBeenCalledWith(
+        'git',
         ['worktree', 'add', mockPaths.sdkPath, 'feature/test-branch'],
         { cwd: mockPaths.sdkRepoPath },
         expect.stringContaining('add existing branch'),
-        false
+        false,
       );
 
       // Should have used default branch (main) for sample worktree
-      expect(executeGit).toHaveBeenCalledWith(
+      expect(executeCommand).toHaveBeenCalledWith(
+        'git',
         ['worktree', 'add', '-f', mockPaths.samplesPath, 'main'],
         { cwd: mockPaths.sampleRepoPath },
         expect.stringContaining('force add branch'),
-        false
+        false,
       );
     });
   });
@@ -493,14 +524,14 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       await initializePRWorkspace(initOptions);
 
       // Should complete successfully without environment file
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
 
@@ -515,7 +546,7 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       await initializePRWorkspace(initOptions);
@@ -524,7 +555,7 @@ describe('PR Commands', () => {
         '/test/cli/src/templates',
         mockPaths.workspaceDir,
         expect.stringContaining('templates'),
-        false
+        false,
       );
     });
   });
@@ -538,12 +569,14 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       (fs.readdir as any).mockResolvedValue(['test.prompt.md']);
-      (fs.readFile as any).mockResolvedValue('Welcome to {{PROJECT_NAME}} project in {{WORKSPACE_DIR}}');
-      
+      (fs.readFile as any).mockResolvedValue(
+        'Welcome to {{PROJECT_NAME}} project in {{WORKSPACE_DIR}}',
+      );
+
       await initializePRWorkspace(initOptions);
 
       // Check that placeholders are replaced correctly
@@ -551,7 +584,7 @@ describe('PR Commands', () => {
         expect.stringContaining('test.prompt.md'),
         expect.stringContaining('NextJS Auth0 SDK'), // PROJECT_NAME placeholder
         expect.any(String),
-        false
+        false,
       );
     });
 
@@ -563,16 +596,16 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       (fs.readdir as any).mockResolvedValue([]);
-      
+
       await initializePRWorkspace(initOptions);
 
       // Should complete successfully even with no prompt files
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
   });
@@ -586,7 +619,7 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       (fs.existsSync as any).mockImplementation((filePath: string) => {
@@ -597,7 +630,7 @@ describe('PR Commands', () => {
 
       // Should complete successfully and handle file detection
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
   });
@@ -611,7 +644,7 @@ describe('PR Commands', () => {
         branchName: 'feature/test-branch',
         workspaceName: 'pr-123-feature_test-branch',
         paths: mockPaths,
-        isDryRun: false
+        isDryRun: false,
       };
 
       (fs.readdirSync as any).mockImplementation((dir: string) => {
@@ -627,7 +660,7 @@ describe('PR Commands', () => {
 
       // Should complete successfully and handle file detection
       expect(logger.success).toHaveBeenCalledWith(
-        expect.stringContaining('workspace created for PR #123')
+        expect.stringContaining('workspace created for PR #123'),
       );
     });
   });
