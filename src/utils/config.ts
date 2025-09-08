@@ -4,7 +4,14 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { ValidationError, FileSystemError } from './errors.js';
 import { logger } from './logger.js';
-import type { Config, ProjectConfig, GlobalConfig, TemplatesConfig, WorkspacePaths } from '../types/index.js';
+import type {
+  Config,
+  ProjectConfig,
+  GlobalConfig,
+  TemplatesConfig,
+  WorkspacePaths,
+  WorkflowsConfig,
+} from '../types/index.js';
 
 /**
  * Configuration manager for workspace CLI
@@ -21,7 +28,7 @@ export class ConfigManager {
       customConfigPath,
       path.join(os.homedir(), '.workspace-config.yaml'),
       path.join(process.cwd(), 'config.yaml'),
-      path.join(this.getCliRoot(), 'config.yaml')
+      path.join(this.getCliRoot(), 'config.yaml'),
     ].filter(Boolean) as string[];
 
     for (const configPath of configPaths) {
@@ -39,14 +46,17 @@ export class ConfigManager {
       const yaml = await import('js-yaml');
       const configContent = await fs.readFile(this.configPath, 'utf8');
       this.config = yaml.load(configContent) as Config;
-      
+
       // Resolve relative paths
       this.resolveConfigPaths();
-      
+
       logger.debug(`Loaded configuration from: ${this.configPath}`);
       return this.config;
     } catch (error) {
-      throw new FileSystemError(`Failed to load configuration: ${(error as Error).message}`, error as Error);
+      throw new FileSystemError(
+        `Failed to load configuration: ${(error as Error).message}`,
+        error as Error,
+      );
     }
   }
 
@@ -63,24 +73,24 @@ export class ConfigManager {
    */
   resolveConfigPaths(): void {
     if (!this.config || !this.configPath) return;
-    
+
     const configDir = path.dirname(this.configPath);
-    
+
     // Resolve global.src_dir
     if (this.config.global?.src_dir?.startsWith('~')) {
       this.config.global.src_dir = this.config.global.src_dir.replace('~', os.homedir());
     }
-    
+
     // Resolve env_files_dir
     if (this.config.global?.env_files_dir?.startsWith('./')) {
       this.config.global.env_files_dir = path.resolve(configDir, this.config.global.env_files_dir);
     }
-    
+
     // Resolve templates directory
     if (this.config.templates?.dir?.startsWith('./')) {
       this.config.templates.dir = path.resolve(this.getCliRoot(), this.config.templates.dir);
     }
-    
+
     // Resolve project sdk_repo paths
     if (this.config.projects) {
       for (const projectKey in this.config.projects) {
@@ -104,13 +114,13 @@ export class ConfigManager {
     if (!project) {
       const availableProjects = Object.keys(this.config.projects || {});
       throw new ValidationError(
-        `Unknown project '${projectKey}'. Available projects: ${availableProjects.join(', ')}`
+        `Unknown project '${projectKey}'. Available projects: ${availableProjects.join(', ')}`,
       );
     }
 
     return {
       key: projectKey,
-      ...project
+      ...project,
     };
   }
 
@@ -137,6 +147,17 @@ export class ConfigManager {
   }
 
   /**
+   * Get workflows configuration
+   */
+  getWorkflows(): WorkflowsConfig {
+    if (!this.config) {
+      throw new ValidationError('Configuration not loaded');
+    }
+
+    return this.config.workflows || {};
+  }
+
+  /**
    * List all available projects
    */
   listProjects(): string[] {
@@ -153,7 +174,7 @@ export class ConfigManager {
   getEnvFilePath(projectKey: string): string | null {
     const project = this.getProject(projectKey);
     const global = this.getGlobal();
-    
+
     if (!project.env_file) {
       return null;
     }
@@ -167,11 +188,11 @@ export class ConfigManager {
    */
   validateProject(projectKey: string): ProjectConfig {
     const project = this.getProject(projectKey);
-    
+
     if (!project.name || !project.sdk_repo || !project.sample_repo || !project.github_org) {
       throw new ValidationError(`Project '${projectKey}' has incomplete configuration`);
     }
-    
+
     return project;
   }
 
@@ -181,20 +202,20 @@ export class ConfigManager {
   getWorkspacePaths(projectKey: string, workspaceName: string): WorkspacePaths {
     const project = this.validateProject(projectKey);
     const global = this.getGlobal();
-    
+
     const srcDir = global.src_dir || path.join(os.homedir(), 'src');
     const workspaceBase = global.workspace_base || 'workspaces';
-    
+
     const baseDir = path.join(srcDir, workspaceBase, project.key);
     const workspaceDir = path.join(baseDir, workspaceName);
-    
+
     // Extract just the repo name from the SDK repo path for the worktree directory
     const sdkRepoName = path.basename(project.sdk_repo);
-    
+
     // Handle sample repo - if it's a URL, extract repo name; if it's a path, use basename
     let sampleRepoName: string;
     let sampleRepoPath: string;
-    
+
     if (project.sample_repo.startsWith('http')) {
       // It's a Git URL - extract repo name without .git extension
       sampleRepoName = path.basename(project.sample_repo, '.git');
@@ -205,10 +226,10 @@ export class ConfigManager {
       sampleRepoName = path.basename(project.sample_repo);
       sampleRepoPath = path.join(srcDir, project.sample_repo);
     }
-    
+
     const sdkPath = path.join(workspaceDir, sdkRepoName);
     const samplesPath = path.join(workspaceDir, sampleRepoName);
-    
+
     // Handle sample app path - for HTTP repos, use the samplesPath directly
     let sampleAppPath: string;
     if (project.sample_app_path) {
@@ -229,7 +250,7 @@ export class ConfigManager {
       samplesPath,
       sampleAppPath,
       sdkRepoPath: project.sdk_repo, // Use the full resolved path for the source repo
-      sampleRepoPath
+      sampleRepoPath,
     };
   }
 }
