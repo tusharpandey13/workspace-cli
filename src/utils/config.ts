@@ -76,10 +76,16 @@ export class ConfigManager {
 
     const configDir = path.dirname(this.configPath);
 
-    // Resolve global.src_dir
+    // Resolve global.src_dir first as other paths depend on it
     if (this.config.global?.src_dir?.startsWith('~')) {
       this.config.global.src_dir = this.config.global.src_dir.replace('~', os.homedir());
+    } else if (!this.config.global?.src_dir) {
+      // Default src_dir if not specified
+      this.config.global = this.config.global || {};
+      this.config.global.src_dir = path.join(os.homedir(), 'src');
     }
+
+    const srcDir = this.config.global.src_dir;
 
     // Resolve env_files_dir
     if (this.config.global?.env_files_dir?.startsWith('./')) {
@@ -91,19 +97,41 @@ export class ConfigManager {
       this.config.templates.dir = path.resolve(this.getCliRoot(), this.config.templates.dir);
     }
 
-    // Resolve project sdk_repo paths
+    // Resolve project repository paths
     if (this.config.projects) {
       for (const projectKey in this.config.projects) {
         const project = this.config.projects[projectKey];
-        if (project.sdk_repo?.startsWith('~')) {
-          project.sdk_repo = project.sdk_repo.replace('~', os.homedir());
+
+        // Resolve sdk_repo path
+        if (project.sdk_repo) {
+          if (project.sdk_repo.startsWith('~')) {
+            project.sdk_repo = project.sdk_repo.replace('~', os.homedir());
+          } else if (!path.isAbsolute(project.sdk_repo) && !project.sdk_repo.startsWith('http')) {
+            // Resolve relative paths relative to src_dir
+            project.sdk_repo = path.resolve(srcDir, project.sdk_repo);
+          }
+        }
+
+        // Resolve sample_repo path if it's a local path (not HTTP URL)
+        if (project.sample_repo && !project.sample_repo.startsWith('http')) {
+          if (project.sample_repo.startsWith('~')) {
+            project.sample_repo = project.sample_repo.replace('~', os.homedir());
+          } else if (!path.isAbsolute(project.sample_repo)) {
+            // Resolve relative paths relative to src_dir
+            project.sample_repo = path.resolve(srcDir, project.sample_repo);
+          }
+        }
+
+        // Resolve sample_app_path if it's an absolute path override
+        if (project.sample_app_path?.startsWith('~')) {
+          project.sample_app_path = project.sample_app_path.replace('~', os.homedir());
         }
       }
     }
   }
 
   /**
-   * Get project configuration by key
+   * Get project configuration by key with repository validation
    */
   getProject(projectKey: string): ProjectConfig {
     if (!this.config) {
@@ -122,6 +150,50 @@ export class ConfigManager {
       key: projectKey,
       ...project,
     };
+  }
+
+  /**
+   * Validate project configuration and repository paths
+   */
+  validateProject(projectKey: string): ProjectConfig {
+    const project = this.getProject(projectKey);
+
+    // Validate required fields
+    if (!project.name || !project.sdk_repo || !project.sample_repo || !project.github_org) {
+      throw new ValidationError(`Project '${projectKey}' has incomplete configuration`);
+    }
+
+    // Validate SDK repository exists (only for local paths, skip HTTP URLs)
+    if (project.sdk_repo && !project.sdk_repo.startsWith('http')) {
+      if (!fs.existsSync(project.sdk_repo)) {
+        throw new ValidationError(
+          `SDK repository does not exist: ${project.sdk_repo}\n` +
+            `Please ensure the repository exists or update the 'sdk_repo' path in config.yaml.\n` +
+            `Current configuration: projects.${projectKey}.sdk_repo = "${project.sdk_repo}"\n` +
+            `Suggestions:\n` +
+            `  1. Clone the repository: git clone https://github.com/${project.github_org}/${path.basename(project.sdk_repo)} ${project.sdk_repo}\n` +
+            `  2. Update config with correct path: sdk_repo: "~/src/${path.basename(project.sdk_repo)}"\n` +
+            `  3. Use absolute path: sdk_repo: "/full/path/to/${path.basename(project.sdk_repo)}"`,
+        );
+      }
+    }
+
+    // Validate sample repository exists (only for local paths, skip HTTP URLs)
+    if (project.sample_repo && !project.sample_repo.startsWith('http')) {
+      const samplePath =
+        project.sample_app_path && path.isAbsolute(project.sample_app_path)
+          ? project.sample_app_path
+          : project.sample_repo;
+
+      if (!fs.existsSync(samplePath)) {
+        logger.warn(
+          `Sample repository does not exist: ${samplePath}\n` +
+            `This may cause sample app setup to fail. Consider cloning the repository first.`,
+        );
+      }
+    }
+
+    return project;
   }
 
   /**
@@ -184,19 +256,6 @@ export class ConfigManager {
   }
 
   /**
-   * Validate project configuration
-   */
-  validateProject(projectKey: string): ProjectConfig {
-    const project = this.getProject(projectKey);
-
-    if (!project.name || !project.sdk_repo || !project.sample_repo || !project.github_org) {
-      throw new ValidationError(`Project '${projectKey}' has incomplete configuration`);
-    }
-
-    return project;
-  }
-
-  /**
    * Get workspace paths for a project
    */
   getWorkspacePaths(projectKey: string, workspaceName: string): WorkspacePaths {
@@ -222,9 +281,15 @@ export class ConfigManager {
       // For spa project, use the absolute sample_app_path as the repo path
       sampleRepoPath = project.sample_app_path || path.join(srcDir, sampleRepoName);
     } else {
-      // It's a directory path
+      // It's a directory path - check if already resolved to absolute path
       sampleRepoName = path.basename(project.sample_repo);
-      sampleRepoPath = path.join(srcDir, project.sample_repo);
+      if (path.isAbsolute(project.sample_repo)) {
+        // Already resolved to absolute path
+        sampleRepoPath = project.sample_repo;
+      } else {
+        // Still relative, resolve it
+        sampleRepoPath = path.join(srcDir, project.sample_repo);
+      }
     }
 
     const sdkPath = path.join(workspaceDir, sdkRepoName);
