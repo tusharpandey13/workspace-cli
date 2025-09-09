@@ -39,8 +39,10 @@ describe('Config', () => {
 
       expect(config.projects?.next).toBeDefined();
       expect(config.projects?.next.name).toBe('NextJS Auth0 SDK');
-      expect(config.projects?.next.sdk_repo).toBe('nextjs-auth0');
-      expect(config.projects?.next.sample_repo).toBe('auth0-nextjs-samples');
+      expect(config.projects?.next.sdk_repo).toBe('/Users/tushar.pandey/src/nextjs-auth0'); // Resolved from relative path
+      expect(config.projects?.next.sample_repo).toBe(
+        '/Users/tushar.pandey/src/auth0-nextjs-samples',
+      ); // Resolved from relative path
       expect(config.projects?.next.github_org).toBe('auth0');
       expect(config.projects?.next.sample_app_path).toBe('Sample-01');
       expect(config.projects?.next.env_file).toBe('next.env.local');
@@ -53,7 +55,7 @@ describe('Config', () => {
       expect(config.projects?.spa).toBeDefined();
       expect(config.projects?.spa.name).toBe('Auth0 SPA JS SDK');
       expect(config.projects?.spa.sdk_repo).toBe('/Users/tushar.pandey/src/auth0-spa-js'); // Resolved from ~
-      expect(config.projects?.spa.sample_repo).toBe('spajs/spatest');
+      expect(config.projects?.spa.sample_repo).toBe('/Users/tushar.pandey/src/spajs/spatest'); // Resolved from relative path
       expect(config.projects?.spa.sample_app_path).toBe('/Users/tushar.pandey/src/spajs/spatest');
       expect(config.projects?.spa.env_file).toBe('spa.env.local');
     });
@@ -87,7 +89,7 @@ describe('Config', () => {
         'review-changes.prompt.md',
         'tests.prompt.md',
         'fix-and-test.prompt.md',
-        'PR_DESCRIPTION_TEMPLATE.md'
+        'PR_DESCRIPTION_TEMPLATE.md',
       ]);
     });
   });
@@ -102,7 +104,7 @@ describe('Config', () => {
             sample_repo: 'auth0-nextjs-samples',
             github_org: 'auth0',
             sample_app_path: 'Sample-01',
-            env_file: 'next.env.local'
+            env_file: 'next.env.local',
           },
           spa: {
             name: 'Auth0 SPA JS SDK',
@@ -110,14 +112,14 @@ describe('Config', () => {
             sample_repo: 'https://github.com/tusharpandey13/auth0-spa-js-debug-app.git',
             github_org: 'auth0',
             sample_app_path: '/Users/tushar.pandey/src/spajs/spatest',
-            env_file: 'spa.env.local'
-          }
+            env_file: 'spa.env.local',
+          },
         },
         global: {
           src_dir: '~/src',
           workspace_base: 'workspaces',
-          package_manager: 'pnpm'
-        }
+          package_manager: 'pnpm',
+        },
       };
 
       const yaml = await import('js-yaml');
@@ -127,20 +129,22 @@ describe('Config', () => {
 
     it('should retrieve next project by key', () => {
       const project = configManager.getProject('next');
-      
+
       expect(project.key).toBe('next');
       expect(project.name).toBe('NextJS Auth0 SDK');
-      expect(project.sdk_repo).toBe('nextjs-auth0');
+      expect(project.sdk_repo).toBe('/Users/tushar.pandey/src/nextjs-auth0'); // Resolved from relative path
       expect(project.github_org).toBe('auth0');
     });
 
     it('should retrieve spa project by key', () => {
       const project = configManager.getProject('spa');
-      
+
       expect(project.key).toBe('spa');
       expect(project.name).toBe('Auth0 SPA JS SDK');
       expect(project.sdk_repo).toBe('/Users/tushar.pandey/src/auth0-spa-js'); // Resolved from ~
-      expect(project.sample_repo).toBe('https://github.com/tusharpandey13/auth0-spa-js-debug-app.git');
+      expect(project.sample_repo).toBe(
+        'https://github.com/tusharpandey13/auth0-spa-js-debug-app.git',
+      );
       expect(project.sample_app_path).toBe('/Users/tushar.pandey/src/spajs/spatest');
       expect(project.env_file).toBe('spa.env.local');
     });
@@ -158,14 +162,14 @@ describe('Config', () => {
     it('should have spa.env.local file', async () => {
       const envFilePath = path.join(process.cwd(), 'env-files', 'spa.env.local');
       const exists = await fs.pathExists(envFilePath);
-      
+
       expect(exists).toBe(true);
     });
 
     it('should have correct environment variables in spa.env.local', async () => {
       const envFilePath = path.join(process.cwd(), 'env-files', 'spa.env.local');
       const content = await fs.readFile(envFilePath, 'utf8');
-      
+
       expect(content).toContain('AUTH0_DOMAIN=');
       expect(content).toContain('AUTH0_CLIENT_ID=');
       expect(content).toContain('AUTH0_CLIENT_SECRET=');
@@ -187,13 +191,13 @@ describe('Config', () => {
             sample_repo: 'https://github.com/tusharpandey13/auth0-spa-js-debug-app.git',
             github_org: 'auth0',
             sample_app_path: '/Users/tushar.pandey/src/spajs/spatest',
-            env_file: 'spa.env.local'
-          }
+            env_file: 'spa.env.local',
+          },
         },
         global: {
           src_dir: '~/src',
-          env_files_dir: './env-files'
-        }
+          env_files_dir: './env-files',
+        },
       };
 
       const yaml = await import('js-yaml');
@@ -202,14 +206,14 @@ describe('Config', () => {
 
     it('should resolve tilde paths in src_dir', async () => {
       const config = await configManager.loadConfig(testConfigPath);
-      
+
       expect(config.global?.src_dir).toBe(path.join(os.homedir(), 'src'));
     });
 
     it('should resolve relative paths in env_files_dir', async () => {
       const config = await configManager.loadConfig(testConfigPath);
       const expectedPath = path.resolve(tempDir, 'env-files');
-      
+
       expect(config.global?.env_files_dir).toBe(expectedPath);
     });
   });
@@ -222,7 +226,7 @@ describe('Config', () => {
 
     it('should validate project keys exist', () => {
       const validKeys = ['next', 'spa'];
-      
+
       for (const key of validKeys) {
         expect(() => configManager.getProject(key)).not.toThrow();
       }
@@ -230,7 +234,7 @@ describe('Config', () => {
 
     it('should ensure spa project has required fields', () => {
       const spaProject = configManager.getProject('spa');
-      
+
       expect(spaProject.name).toBeTruthy();
       expect(spaProject.sdk_repo).toBeTruthy();
       expect(spaProject.sample_repo).toBeTruthy();
@@ -240,14 +244,15 @@ describe('Config', () => {
 
     it('should ensure spa project has valid sample_repo format', () => {
       const spaProject = configManager.getProject('spa');
-      
-      // Can be either a GitHub URL or a relative path
-      const isValidFormat = 
+
+      // Can be either a GitHub URL, relative path, or resolved absolute path
+      const isValidFormat =
         /^https:\/\/github\.com\/[^/]+\/[^/]+\.git$/.test(spaProject.sample_repo) ||
-        /^[^/].*$/.test(spaProject.sample_repo); // Relative path (not starting with /)
-      
+        /^[^/].*$/.test(spaProject.sample_repo) || // Relative path (not starting with /)
+        /^\/.*/.test(spaProject.sample_repo); // Absolute path (resolved)
+
       expect(isValidFormat).toBe(true);
-      expect(spaProject.sample_repo).toBe('spajs/spatest'); // Current configuration
+      expect(spaProject.sample_repo).toBe('/Users/tushar.pandey/src/spajs/spatest'); // Resolved from relative path
     });
   });
 });
