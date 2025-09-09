@@ -33,6 +33,7 @@ interface AnalysisOnlyOptions {
   paths: WorkspacePaths;
   isDryRun: boolean;
   isVerbose: boolean;
+  isSilent: boolean;
 }
 
 /**
@@ -60,10 +61,10 @@ function parseProjectInitArguments(args: string[]): { issueIds: number[]; branch
  * Initialize workspace for a specific project
  */
 async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise<void> {
-  const { project, projectKey, issueIds, branchName, paths, isDryRun } = options;
+  const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent } = options;
 
   // Check if workspace already exists
-  await handleExistingWorkspace(paths.workspaceDir, isDryRun);
+  await handleExistingWorkspace(paths.workspaceDir, isDryRun, isSilent);
 
   // Create workspace directories
   logger.step(1, 6, 'Creating workspace directories...');
@@ -79,7 +80,7 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
 
   // Collect additional context
   logger.step(3, 6, 'Collecting additional context...');
-  const additionalContext = await collectAdditionalContext();
+  const additionalContext = await collectAdditionalContext(isSilent);
 
   // Fetch GitHub data
   logger.step(4, 6, 'Fetching GitHub data...');
@@ -125,10 +126,10 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
  * Initialize workspace for analysis only - skips worktree creation
  */
 async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Promise<void> {
-  const { project, projectKey, issueIds, branchName, paths, isDryRun } = options;
+  const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent } = options;
 
   // Check if workspace already exists
-  await handleExistingWorkspace(paths.workspaceDir, isDryRun);
+  await handleExistingWorkspace(paths.workspaceDir, isDryRun, isSilent);
 
   // Create workspace directories (but not worktrees)
   logger.step(1, 4, 'Creating workspace directories...');
@@ -140,7 +141,7 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 
   // Collect additional context
   logger.step(2, 4, 'Collecting additional context...');
-  const additionalContext = await collectAdditionalContext();
+  const additionalContext = await collectAdditionalContext(isSilent);
 
   // Fetch GitHub data
   logger.step(3, 4, 'Fetching GitHub data...');
@@ -183,8 +184,22 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 /**
  * Handle existing workspace directory
  */
-async function handleExistingWorkspace(workspaceDir: string, isDryRun: boolean): Promise<void> {
+async function handleExistingWorkspace(
+  workspaceDir: string,
+  isDryRun: boolean,
+  isSilent: boolean = false,
+): Promise<void> {
   if (!isDryRun && fs.existsSync(workspaceDir) && (await fs.readdir(workspaceDir)).length > 0) {
+    if (isSilent) {
+      logger.warn(`⚠️  Workspace ${workspaceDir} already exists. Auto-removing in silent mode...`);
+      await fileOps.removeFile(
+        workspaceDir,
+        `existing workspace directory: ${workspaceDir}`,
+        isDryRun,
+      );
+      return;
+    }
+
     const rl = readline.createInterface({ input, output });
     const answer = (
       await rl.question(`Workspace ${workspaceDir} already exists. Clean and overwrite? [y/N] `)
@@ -209,7 +224,12 @@ async function handleExistingWorkspace(workspaceDir: string, isDryRun: boolean):
 /**
  * Collect additional context from user
  */
-async function collectAdditionalContext(): Promise<string[]> {
+async function collectAdditionalContext(isSilent: boolean = false): Promise<string[]> {
+  if (isSilent) {
+    logger.verbose('🔕 Silent mode: Skipping additional context collection');
+    return [];
+  }
+
   console.log('\n🔗 Additional Context Collection');
   const rl = readline.createInterface({ input, output });
 
@@ -929,6 +949,10 @@ export function initCommand(program: Command): void {
       '--analyse',
       'Analysis mode: create workspace and populate prompt files without setting up git worktrees',
     )
+    .option(
+      '--silent',
+      'Silent mode: skip all user input prompts with sensible defaults (fire-and-forget mode)',
+    )
     .addHelpText(
       'after',
       `
@@ -971,7 +995,7 @@ Related commands:
       async (
         projectKey: string,
         args: string[],
-        options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean },
+        options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean; silent?: boolean },
       ) => {
         try {
           // Check if --pr option was used globally
@@ -999,6 +1023,11 @@ Related commands:
           const isVerbose = options.verbose || options.dryRun;
           const isDryRun = options.dryRun || false;
           const isAnalyseMode = options.analyse || false;
+          const isSilent = options.silent || false;
+
+          if (isSilent) {
+            logger.info('🔕 SILENT MODE: Skipping all user input prompts');
+          }
 
           if (isDryRun) {
             logger.info('🧪 DRY-RUN MODE: No actual changes will be made');
@@ -1034,6 +1063,7 @@ Related commands:
               paths,
               isDryRun,
               isVerbose: isVerbose || false,
+              isSilent,
             });
           } else {
             await initializeWorkspace({
@@ -1045,6 +1075,7 @@ Related commands:
               paths,
               isDryRun,
               isVerbose: isVerbose || false,
+              isSilent,
             });
           }
         } catch (error) {

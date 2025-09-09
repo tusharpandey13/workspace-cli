@@ -111,6 +111,7 @@ export interface InitializeWorkspaceOptions {
   paths: WorkspacePaths;
   isDryRun: boolean;
   isVerbose: boolean;
+  isSilent: boolean;
 }
 
 export interface SetupEnvironmentOptions {

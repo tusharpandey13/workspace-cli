@@ -21,7 +21,9 @@ program
   .name('workspace')
   .description('Multi-SDK workspace CLI tool for automated development workflows')
   .version(pkg.version)
-  .addHelpText('after', `
+  .addHelpText(
+    'after',
+    `
 Global Options:
   The following options can be used with any subcommand:
 
@@ -30,6 +32,7 @@ Global Options:
   -v, --verbose          Enable verbose logging output
   --debug                Enable debug logging (most detailed)
   --pr <pr_id>           Initialize workspace for specific pull request
+  --non-interactive      Skip all user input prompts for automated usage
 
 Examples:
   $ workspace init next feature/my-branch
@@ -61,7 +64,8 @@ Getting Started:
   5. Run "workspace clean <project> <workspace>" when done
 
 For detailed help on any command, use:
-  workspace <command> --help`);
+  workspace <command> --help`,
+  );
 
 // Global options
 program.option('-e, --env <path>', 'Path to .workspace.env file');
@@ -69,6 +73,7 @@ program.option('-c, --config <path>', 'Path to configuration file');
 program.option('-v, --verbose', 'Enable verbose logging');
 program.option('--debug', 'Enable debug logging');
 program.option('--pr <pr_id>', 'Open workspace for specific pull request');
+program.option('--non-interactive', 'Skip all user input prompts for automated usage');
 
 // Register subcommands
 initCommand(program);
@@ -78,31 +83,23 @@ cleanCommand(program);
 submitCommand(program);
 projectsCommand(program);
 
-interface ProgramOptions {
-  env?: string;
-  config?: string;
-  verbose?: boolean;
-  debug?: boolean;
-  pr?: string;
-}
-
 program.hook('preAction', async (thisCommand) => {
   try {
     const opts = thisCommand.opts();
-    
+
     // Set logging level based on options
     if (opts.debug) {
       logger.setLevel(LogLevel.DEBUG);
     } else if (opts.verbose) {
       logger.setLevel(LogLevel.VERBOSE);
     }
-    
+
     // Load configuration
     await configManager.loadConfig(opts.config);
-    
+
     // Load environment
     loadEnv(opts.env);
-    
+
     // Validate dependencies
     await validateDependencies();
   } catch (error) {
