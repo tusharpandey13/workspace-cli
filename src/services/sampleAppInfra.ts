@@ -51,6 +51,37 @@ export class SampleAppInfrastructureManager {
     }
   }
 
+  private async detectReactVersion(): Promise<{ major: number; version: string } | null> {
+    try {
+      const packageJsonPath = path.join(this.samplePath, 'package.json');
+
+      if (!fs.existsSync(packageJsonPath)) {
+        return null;
+      }
+
+      const packageJson = await fs.readJson(packageJsonPath);
+      const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+
+      const reactVersion = dependencies.react;
+      if (!reactVersion) {
+        return null;
+      }
+
+      // Extract major version from version string (e.g., "^18.0.0" -> 18, "19.0.0" -> 19)
+      const versionMatch = reactVersion.match(/(\d+)/);
+      if (!versionMatch) {
+        logger.warn(`Could not parse React version: ${reactVersion}`);
+        return null;
+      }
+
+      const major = parseInt(versionMatch[1], 10);
+      return { major, version: reactVersion };
+    } catch (error) {
+      logger.error(`Error detecting React version: ${error}`);
+      return null;
+    }
+  }
+
   async setupTestingInfrastructure(): Promise<void> {
     const appType = await this.detectAppType();
 
@@ -61,7 +92,29 @@ export class SampleAppInfrastructureManager {
 
     logger.info(`🔧 Setting up testing infrastructure for ${appType} sample app...`);
 
+    // Detect React version for version-aware dependency selection
+    const reactVersion = await this.detectReactVersion();
+    if (reactVersion) {
+      logger.verbose(
+        `Detected React version: ${reactVersion.version} (major: ${reactVersion.major})`,
+      );
+    }
+
     const infrastructure = this.getInfrastructureConfig(appType);
+
+    // Update React Testing Library version based on detected React version
+    if (appType === 'next' || appType === 'spa') {
+      let testingLibraryVersion: string;
+      if (reactVersion) {
+        testingLibraryVersion = this.getReactTestingLibraryVersionForReact(reactVersion.major);
+        logger.verbose(`Using @testing-library/react version: ${testingLibraryVersion}`);
+      } else {
+        // No React detected, use default React 18 compatible version
+        testingLibraryVersion = '^14.3.1';
+        logger.verbose(`No React version detected, using default: ${testingLibraryVersion}`);
+      }
+      infrastructure.dependencies['@testing-library/react'] = testingLibraryVersion;
+    }
 
     await this.createDirectories(infrastructure.directories);
     await this.installDependencies(infrastructure.dependencies);
@@ -140,6 +193,41 @@ These reports are automatically generated during CI/CD pipeline execution and ca
 `;
   }
 
+  private getReactTestingLibraryVersion(): string {
+    // Default to React 18 compatible version if detection fails
+    const defaultVersion = '^14.0.0';
+
+    try {
+      // This should be called during runtime when we have access to the detected React version
+      // For now, return a synchronous version that will work for most cases
+      // The actual version selection will be handled by the async setupTestingInfrastructure method
+      return defaultVersion;
+    } catch (error) {
+      logger.warn(`Could not determine React version, defaulting to ${defaultVersion}`);
+      return defaultVersion;
+    }
+  }
+
+  private getReactTestingLibraryVersionForReact(reactMajorVersion: number): string {
+    // Based on @testing-library/react compatibility matrix:
+    // React 19: requires @testing-library/react ^16.1.0+
+    // React 18: supports @testing-library/react ^13.0.0+ (recommend ^14.0.0)
+    // React 17: supports @testing-library/react ^12.0.0
+    switch (reactMajorVersion) {
+      case 19:
+        return '^16.3.0'; // Latest version with React 19 support
+      case 18:
+        return '^14.3.1'; // Latest stable version for React 18
+      case 17:
+        return '^12.1.5'; // Last version supporting React 17
+      default:
+        logger.warn(
+          `Unsupported React version ${reactMajorVersion}, defaulting to React 18 compatible version`,
+        );
+        return '^14.3.1';
+    }
+  }
+
   private getInfrastructureConfig(appType: SampleAppType): TestingInfrastructure {
     const baseConfig = {
       dependencies: {
@@ -157,6 +245,8 @@ These reports are automatically generated during CI/CD pipeline execution and ca
         'test:reporter':
           'vitest --run --reporter=junit --reporter=json --outputFile.junit=./test-results/junit.xml --outputFile.json=./test-results/results.json',
       },
+      configFiles: [],
+      testFiles: [],
       directories: ['tests', 'tests/mocks', 'test-results', 'coverage'],
     };
 
@@ -167,7 +257,7 @@ These reports are automatically generated during CI/CD pipeline execution and ca
           dependencies: {
             ...baseConfig.dependencies,
             jsdom: '^23.0.0',
-            '@testing-library/react': '^14.0.0',
+            '@testing-library/react': this.getReactTestingLibraryVersion(),
             '@testing-library/jest-dom': '^6.0.0',
             '@vitejs/plugin-react': '^4.0.0',
             playwright: '^1.40.0',
@@ -441,13 +531,31 @@ describe('API Routes', () => {
       packageJson.devDependencies = { ...packageJson.devDependencies, ...dependencies };
       await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
 
-      await executeCommand(
-        'npm',
-        ['install'],
-        { cwd: this.samplePath },
-        'install dependencies',
-        false,
-      );
+      // First try normal install
+      try {
+        await executeCommand(
+          'npm',
+          ['install'],
+          { cwd: this.samplePath },
+          'install dependencies',
+          false,
+        );
+      } catch (installError) {
+        // Check if it's a peer dependency conflict
+        const errorMessage = (installError as Error).message;
+        if (errorMessage.includes('ERESOLVE') || errorMessage.includes('peer dep')) {
+          logger.warn('Peer dependency conflict detected, retrying with --legacy-peer-deps');
+          await executeCommand(
+            'npm',
+            ['install', '--legacy-peer-deps'],
+            { cwd: this.samplePath },
+            'install dependencies with legacy peer deps',
+            false,
+          );
+        } else {
+          throw installError;
+        }
+      }
     } catch (error) {
       logger.error(`Failed to install dependencies: ${error}`);
       throw error;
