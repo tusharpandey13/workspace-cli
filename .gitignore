@@ -7,6 +7,8 @@ node_modules/
 # Test & coverage outputs
 coverage/
 /.nyc_output/
+tmp/
+test-results/
 
 # Log files
 logs
@@ -19,6 +21,7 @@ pnpm-debug.log*
 # Environment files
 .env
 .env.*
+env-files/
 
 # macOS files
 .DS_Store
