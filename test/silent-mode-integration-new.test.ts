@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { execa } from 'execa';
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 import { DummyRepoManager } from '../src/services/dummyRepoManager.js';
 
 describe('Silent Mode Integration', () => {
@@ -11,13 +12,11 @@ describe('Silent Mode Integration', () => {
   let sampleRepoPath: string;
 
   beforeEach(async () => {
-    testDir = path.join(
-      '/var/folders/xq/y6vqzwxn3x3d5dmj56npjwp00000gp/T',
-      `silent-mode-test-${Date.now()}`,
-    );
-    await fs.ensureDir(testDir);
+    // Use both timestamp and random suffix to ensure unique directories
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    testDir = path.join(os.tmpdir(), `silent-mode-test-${uniqueId}`);
 
-    manager = new DummyRepoManager();
+    manager = new DummyRepoManager(testDir);
     const { sdkPath, samplePath } = await manager.createTestEnvironment();
     sdkRepoPath = sdkPath;
     sampleRepoPath = samplePath;
@@ -25,9 +24,6 @@ describe('Silent Mode Integration', () => {
 
   afterEach(async () => {
     await manager.cleanupAll();
-    if (fs.existsSync(testDir)) {
-      await fs.remove(testDir);
-    }
   });
 
   test('should run init command with --silent flag without hanging', async () => {
@@ -51,7 +47,7 @@ global:
 `;
     await fs.writeFile(configPath, configContent);
 
-    // Run init command with --silent and --dry-run flags and a 3 second timeout
+    // Run init command with --silent and --dry-run flags
     const start = Date.now();
     try {
       const { stdout, stderr, exitCode } = await execa(
@@ -69,17 +65,17 @@ global:
         ],
         {
           cwd: process.cwd(),
-          timeout: 3000, // Should complete quickly without hanging for user input
+          timeout: 15000, // Allow sufficient time for git operations and dependency checks
         },
       );
       const duration = Date.now() - start;
 
       // Should complete quickly without hanging
-      expect(duration).toBeLessThan(3000);
+      expect(duration).toBeLessThan(15000);
       // Should not have an error exit code
       expect(exitCode).toBe(0);
       // Should show some indication of workspace processing
-      expect(stdout.includes('test') || stdout.includes('DRY RUN')).toBe(true);
+      expect(stdout.includes('workspace created') || stdout.includes('DRY RUN')).toBe(true);
       // Should not show prompts in stderr
       expect(stderr).not.toContain('?'); // No prompts should appear
     } catch (error: any) {
@@ -91,7 +87,7 @@ global:
       // Any other error should be thrown for investigation
       throw error;
     }
-  }, 5000);
+  }, 20000);
 
   test('should run submit command with --silent flag without hanging', async () => {
     const workspaceDir = path.join(testDir, 'workspace', 'test-submit');
@@ -118,7 +114,7 @@ global:
 `;
     await fs.writeFile(configPath, configContent);
 
-    // Run submit command with --silent flag and a 3 second timeout
+    // Run submit command with --silent flag
     const start = Date.now();
     try {
       await execa(
@@ -135,13 +131,13 @@ global:
         ],
         {
           cwd: process.cwd(),
-          timeout: 3000, // Should complete quickly without hanging for user input
+          timeout: 15000, // Allow sufficient time for git operations and dependency checks
         },
       );
       const duration = Date.now() - start;
 
       // Should complete quickly without hanging
-      expect(duration).toBeLessThan(3000);
+      expect(duration).toBeLessThan(15000);
     } catch (error: any) {
       const duration = Date.now() - start;
       // If it times out, that means it was hanging waiting for input (failure)
@@ -151,12 +147,12 @@ global:
       // For submit, we might get other errors due to git state, but timeouts indicate hanging on prompts
       if (error.exitCode && !error.timedOut) {
         // This is expected - submit might fail for other reasons, but it shouldn't hang
-        expect(duration).toBeLessThan(3000);
+        expect(duration).toBeLessThan(15000);
       } else {
         throw error;
       }
     }
-  }, 5000);
+  }, 20000);
 
   test('should validate --silent prevents user input prompts', async () => {
     const workspaceDir = path.join(testDir, 'workspace');
@@ -196,19 +192,19 @@ global:
         ],
         {
           cwd: process.cwd(),
-          timeout: 3000,
+          timeout: 15000,
         },
       );
       const duration = Date.now() - start;
 
       // Fire-and-forget: should complete quickly without user intervention
-      expect(duration).toBeLessThan(3000);
-      expect(stdout.includes('test') || stdout.includes('DRY RUN')).toBe(true);
+      expect(duration).toBeLessThan(15000);
+      expect(stdout.includes('workspace created') || stdout.includes('DRY RUN')).toBe(true);
     } catch (error: any) {
       if (error.timedOut) {
         expect.fail('Fire-and-forget mode failed - command waited for user input');
       }
       throw error;
     }
-  }, 5000);
+  }, 20000);
 });

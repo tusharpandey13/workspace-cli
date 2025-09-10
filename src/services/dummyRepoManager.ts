@@ -34,18 +34,27 @@ export class DummyRepoManager {
     // Ensure base directory exists
     await fs.ensureDir(this.tempDir);
 
-    // Remove existing repo if it exists
+    // Remove existing repo if it exists with extra safety measures
     if (await fs.pathExists(repoPath)) {
-      await fs.remove(repoPath);
+      await this.forceRemoveDirectory(repoPath);
     }
 
-    // Create repo directory
+    // Create repo directory fresh
     await fs.ensureDir(repoPath);
+
+    // Add a small delay to ensure file system operations complete
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     logger.verbose(`Creating dummy ${config.type} repository: ${config.name}`);
 
     try {
-      // Initialize git repository
+      // Initialize git repository with extra safety checks
+      const gitDir = path.join(repoPath, '.git');
+      if (await fs.pathExists(gitDir)) {
+        await this.forceRemoveDirectory(gitDir);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
       await executeCommand('git', ['init'], { cwd: repoPath }, 'initialize git repo', false);
 
       // Configure git user for commits
@@ -64,6 +73,22 @@ export class DummyRepoManager {
         false,
       );
 
+      // Disable GPG signing for tests to avoid terminal size issues
+      await executeCommand(
+        'git',
+        ['config', 'commit.gpgsign', 'false'],
+        { cwd: repoPath },
+        'disable gpg signing',
+        false,
+      );
+      await executeCommand(
+        'git',
+        ['config', 'tag.gpgsign', 'false'],
+        { cwd: repoPath },
+        'disable gpg tag signing',
+        false,
+      );
+
       // Create default files based on repository type
       await this.createDefaultFiles(repoPath, config.type);
 
@@ -76,8 +101,30 @@ export class DummyRepoManager {
         }
       }
 
-      // Initial commit
+      // Verify git repository was properly initialized before proceeding
+      const gitDirPath = path.join(repoPath, '.git');
+      if (!(await fs.pathExists(gitDirPath))) {
+        throw new Error('Git repository was not properly initialized - .git directory missing');
+      }
+
+      // Initial commit with verification
       await executeCommand('git', ['add', '.'], { cwd: repoPath }, 'stage initial files', false);
+
+      // Verify there are files to commit
+      const statusResult = await executeCommand(
+        'git',
+        ['status', '--porcelain'],
+        { cwd: repoPath },
+        'check git status',
+        false,
+      );
+
+      if (statusResult.stdout.trim() === '') {
+        // No files to commit, create a minimal file
+        await fs.writeFile(path.join(repoPath, 'README.md'), '# Test Repository\n');
+        await executeCommand('git', ['add', 'README.md'], { cwd: repoPath }, 'add README', false);
+      }
+
       await executeCommand(
         'git',
         ['commit', '-m', 'Initial commit'],
@@ -194,7 +241,7 @@ export class DummyRepoManager {
       // Store repo path for cleanup
       this.repos.set(config.name, repoPath);
 
-      logger.success(`✅ Created dummy ${config.type} repository: ${repoPath}`);
+      logger.success(`Created dummy ${config.type} repository: ${repoPath}`);
       return repoPath;
     } catch (error) {
       logger.error(`Failed to create dummy repository ${config.name}: ${error}`);
@@ -307,9 +354,77 @@ export class DummyRepoManager {
   async cleanupRepo(name: string): Promise<void> {
     const repoPath = this.repos.get(name);
     if (repoPath && (await fs.pathExists(repoPath))) {
-      await fs.remove(repoPath);
-      this.repos.delete(name);
-      logger.verbose(`Cleaned up dummy repository: ${name}`);
+      try {
+        // First try to remove git locks if they exist
+        const gitPath = path.join(repoPath, '.git');
+        if (await fs.pathExists(gitPath)) {
+          const configLock = path.join(gitPath, 'config.lock');
+          const indexLock = path.join(gitPath, 'index.lock');
+
+          if (await fs.pathExists(configLock)) {
+            await fs.remove(configLock);
+          }
+          if (await fs.pathExists(indexLock)) {
+            await fs.remove(indexLock);
+          }
+        }
+
+        // Use force removal for stubborn directories
+        await this.forceRemoveDirectory(repoPath);
+        this.repos.delete(name);
+        logger.verbose(`Cleaned up dummy repository: ${name}`);
+      } catch (error) {
+        logger.verbose(`Warning: Could not completely clean up repository ${name}: ${error}`);
+        // Still remove from tracking even if cleanup fails
+        this.repos.delete(name);
+      }
+    }
+  }
+
+  /**
+   * Force remove directory with retries for stubborn files
+   */
+  private async forceRemoveDirectory(dirPath: string, maxRetries = 3): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Special handling for .git directories on macOS
+        if (path.basename(dirPath) === '.git' || dirPath.includes('.git')) {
+          try {
+            await executeCommand(
+              'chmod',
+              ['-R', '755', dirPath],
+              {},
+              'make git directory writable',
+              false,
+            );
+          } catch (chmodError) {
+            // Ignore chmod errors, continue with removal
+          }
+        }
+
+        await fs.remove(dirPath);
+        return; // Success
+      } catch (error) {
+        if (attempt === maxRetries) {
+          throw error;
+        }
+
+        // Wait a bit before retrying
+        await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+
+        // Try to make files writable on macOS/Unix systems
+        try {
+          await executeCommand(
+            'chmod',
+            ['-R', '755', dirPath],
+            {},
+            'make directory writable',
+            false,
+          );
+        } catch (chmodError) {
+          // Ignore chmod errors, try removal anyway
+        }
+      }
     }
   }
 
@@ -325,10 +440,14 @@ export class DummyRepoManager {
       await this.cleanupRepo(name);
     }
 
-    // Remove the entire temp directory if it exists
+    // Remove the entire temp directory if it exists and force it
     if (await fs.pathExists(this.tempDir)) {
-      await fs.remove(this.tempDir);
-      logger.verbose(`Removed temp directory: ${this.tempDir}`);
+      try {
+        await this.forceRemoveDirectory(this.tempDir);
+        logger.verbose(`Removed temp directory: ${this.tempDir}`);
+      } catch (error) {
+        logger.verbose(`Warning: Could not completely remove temp directory: ${error}`);
+      }
     }
 
     this.repos.clear();

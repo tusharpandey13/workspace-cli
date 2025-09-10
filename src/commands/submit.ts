@@ -12,12 +12,11 @@ export function submitCommand(program: Command): void {
     .description(
       '**HUMAN-SUPERVISED**: Review, commit, push changes, and create a pull request for the workspace',
     )
-    .argument('<project>', 'Project key (e.g., next, spa)')
-    .argument('<workspace>', 'Workspace name to submit')
     .option(
       '--silent',
       'Silent mode: auto-stage and commit with default message (fire-and-forget mode)',
     )
+    .option('--dry-run', 'Dry run mode: show what would be done without making changes')
     .addHelpText(
       'after',
       `
@@ -57,122 +56,135 @@ Related commands:
   workspace list        List all workspaces
   workspace clean       Clean up after successful submission`,
     )
-    .action(async (project: string, workspace: string, options: { silent?: boolean }) => {
-      try {
-        const validatedProject = validateProjectKey(project);
-        const validatedWorkspace = validateWorkspaceName(workspace);
-        const isSilent = options.silent || false;
-
-        const projectConfig = configManager.validateProject(validatedProject);
-        const paths = configManager.getWorkspacePaths(validatedProject, validatedWorkspace);
-
-        if (!fs.existsSync(paths.sdkPath)) {
-          throw new FileSystemError(`SDK worktree not found at ${paths.sdkPath}`);
-        }
-
-        if (isSilent) {
-          logger.info('🔕 SILENT MODE: Auto-staging and committing with default message');
-        }
-
-        logger.info(`🔍 Reviewing ${projectConfig.name} workspace: ${validatedWorkspace}`);
-
-        // Step 1: Show diff for human review (unless silent)
-        logger.step(1, 5, 'Showing workspace changes for your review...');
+    .action(
+      async (
+        project: string,
+        workspace: string,
+        options: { silent?: boolean; dryRun?: boolean },
+      ) => {
         try {
-          await runGit(['diff', '--stat'], { cwd: paths.sdkPath });
-          if (!isSilent) {
-            await runGit(['diff'], { cwd: paths.sdkPath });
+          const validatedProject = validateProjectKey(project);
+          const validatedWorkspace = validateWorkspaceName(workspace);
+          const isSilent = options.silent || false;
+          const isDryRun = options.dryRun || false;
+
+          const projectConfig = configManager.validateProject(validatedProject);
+          const paths = configManager.getWorkspacePaths(validatedProject, validatedWorkspace);
+
+          if (!fs.existsSync(paths.sdkPath)) {
+            throw new FileSystemError(`SDK worktree not found at ${paths.sdkPath}`);
           }
-        } catch (err) {
-          logger.warn(`No changes to display or git diff failed: ${(err as Error).message}`);
-        }
 
-        // Step 2: Handle staging based on mode
-        logger.step(2, 5, 'Ready to stage changes...');
-        let shouldStage = true;
-
-        if (!isSilent) {
-          const readline = await import('readline');
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
-          const stageAnswer = await new Promise<string>((resolve) => {
-            rl.question('🤔 Stage all changes with "git add ."? [y/N] ', resolve);
-          });
-
-          shouldStage = stageAnswer.toLowerCase() === 'y' || stageAnswer.toLowerCase() === 'yes';
-          rl.close();
-
-          if (!shouldStage) {
-            logger.info('❌ Staging cancelled. You can stage changes manually and re-run submit.');
-            return;
+          if (isSilent) {
+            logger.info('🔕 SILENT MODE: Auto-staging and committing with default message');
           }
-        }
 
-        if (shouldStage) {
+          if (isDryRun) {
+            logger.info('🧪 DRY RUN MODE: Showing what would be done without making changes');
+          }
+
+          logger.info(`🔍 Reviewing ${projectConfig.name} workspace: ${validatedWorkspace}`);
+
+          // Step 1: Show diff for human review (unless silent)
+          logger.step(1, 5, 'Showing workspace changes for your review...');
           try {
-            logger.verbose('Staging changes...');
-            await runGit(['add', '.'], { cwd: paths.sdkPath });
-            logger.success('✅ Changes staged');
-
-            // Step 3: Show staged changes
-            logger.step(3, 5, 'Staged changes:');
-            await runGit(['diff', '--cached', '--stat'], { cwd: paths.sdkPath });
-
-            // Step 4: Handle commit message based on mode
-            logger.step(4, 5, 'Creating commit...');
-            const defaultMessage = `feat: submit ${validatedProject} workspace ${validatedWorkspace}`;
-            let commitMessage = defaultMessage;
-
+            await runGit(['diff', '--stat'], { cwd: paths.sdkPath });
             if (!isSilent) {
-              const readline = await import('readline');
-              const rl = readline.createInterface({
-                input: process.stdin,
-                output: process.stdout,
-              });
-
-              commitMessage = await new Promise<string>((resolve) => {
-                rl.question(`💬 Commit message [${defaultMessage}]: `, (answer) => {
-                  resolve(answer.trim() || defaultMessage);
-                });
-              });
-
-              rl.close();
-            } else {
-              logger.info(`📝 Using default commit message: "${commitMessage}"`);
+              await runGit(['diff'], { cwd: paths.sdkPath });
             }
-
-            await runGit(['commit', '-m', commitMessage], { cwd: paths.sdkPath });
-            logger.success('✅ Commit created');
-
-            // Step 5: Provide manual commands for push and PR
-            logger.step(5, 5, 'Next steps (execute manually):');
-            logger.info('');
-            logger.info('📤 Push changes:');
-            logger.info(`   cd ${paths.sdkPath}`);
-            logger.info('   git push -u origin HEAD');
-            logger.info('');
-            logger.info('🔗 Create pull request:');
-            const global = configManager.getGlobal();
-            const githubCli = global.github_cli || 'gh';
-            logger.info(`   cd ${paths.sdkPath}`);
-            logger.info(`   ${githubCli} pr create --fill`);
-            logger.info('');
-            logger.success(
-              '🎯 Workspace prepared for submission. Execute the commands above manually.',
-            );
           } catch (err) {
-            const error = err as any;
-            if (error.command?.includes('git')) {
-              throw new GitError(`Git operation failed: ${error.message}`, error);
-            }
-            throw new Error(`Submission preparation failed: ${error.message}`);
+            logger.warn(`No changes to display or git diff failed: ${(err as Error).message}`);
           }
+
+          // Step 2: Handle staging based on mode
+          logger.step(2, 5, 'Ready to stage changes...');
+          let shouldStage = true;
+
+          if (!isSilent) {
+            const readline = await import('readline');
+            const rl = readline.createInterface({
+              input: process.stdin,
+              output: process.stdout,
+            });
+
+            const stageAnswer = await new Promise<string>((resolve) => {
+              rl.question('🤔 Stage all changes with "git add ."? [y/N] ', resolve);
+            });
+
+            shouldStage = stageAnswer.toLowerCase() === 'y' || stageAnswer.toLowerCase() === 'yes';
+            rl.close();
+
+            if (!shouldStage) {
+              logger.info(
+                '❌ Staging cancelled. You can stage changes manually and re-run submit.',
+              );
+              return;
+            }
+          }
+
+          if (shouldStage) {
+            try {
+              logger.verbose('Staging changes...');
+              await runGit(['add', '.'], { cwd: paths.sdkPath });
+              logger.success('Changes staged');
+
+              // Step 3: Show staged changes
+              logger.step(3, 5, 'Staged changes:');
+              await runGit(['diff', '--cached', '--stat'], { cwd: paths.sdkPath });
+
+              // Step 4: Handle commit message based on mode
+              logger.step(4, 5, 'Creating commit...');
+              const defaultMessage = `feat: submit ${validatedProject} workspace ${validatedWorkspace}`;
+              let commitMessage = defaultMessage;
+
+              if (!isSilent) {
+                const readline = await import('readline');
+                const rl = readline.createInterface({
+                  input: process.stdin,
+                  output: process.stdout,
+                });
+
+                commitMessage = await new Promise<string>((resolve) => {
+                  rl.question(`💬 Commit message [${defaultMessage}]: `, (answer) => {
+                    resolve(answer.trim() || defaultMessage);
+                  });
+                });
+
+                rl.close();
+              } else {
+                logger.info(`📝 Using default commit message: "${commitMessage}"`);
+              }
+
+              await runGit(['commit', '-m', commitMessage], { cwd: paths.sdkPath });
+              logger.success('Commit created');
+
+              // Step 5: Provide manual commands for push and PR
+              logger.step(5, 5, 'Next steps (execute manually):');
+              logger.info('');
+              logger.info('📤 Push changes:');
+              logger.info(`   cd ${paths.sdkPath}`);
+              logger.info('   git push -u origin HEAD');
+              logger.info('');
+              logger.info('🔗 Create pull request:');
+              const global = configManager.getGlobal();
+              const githubCli = global.github_cli || 'gh';
+              logger.info(`   cd ${paths.sdkPath}`);
+              logger.info(`   ${githubCli} pr create --fill`);
+              logger.info('');
+              logger.success(
+                '🎯 Workspace prepared for submission. Execute the commands above manually.',
+              );
+            } catch (err) {
+              const error = err as any;
+              if (error.command?.includes('git')) {
+                throw new GitError(`Git operation failed: ${error.message}`, error);
+              }
+              throw new Error(`Submission preparation failed: ${error.message}`);
+            }
+          }
+        } catch (error) {
+          handleError(error as Error, logger);
         }
-      } catch (error) {
-        handleError(error as Error, logger);
-      }
-    });
+      },
+    );
 }

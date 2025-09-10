@@ -524,7 +524,7 @@ async function setupWorktrees(
   // 🆕 NEW: Automatically setup testing infrastructure for sample app
   const infraManager = new SampleAppInfrastructureManager();
   await infraManager.setupTestingInfrastructure(paths.samplesPath, project.key);
-  logger.success(`✅ Testing infrastructure configured for ${project.key} sample app`);
+  logger.success(`Testing infrastructure configured for ${project.key} sample app`);
 }
 ```
 

@@ -122,7 +122,7 @@ export class SampleAppInfrastructureManager {
     await this.generateConfigFiles(infrastructure.configFiles);
     await this.generateTestFiles(infrastructure.testFiles);
 
-    logger.success(`✅ Testing infrastructure configured for ${appType} sample app`);
+    logger.success(`Testing infrastructure configured for ${appType} sample app`);
   }
 
   async setupReportingInfrastructure(): Promise<void> {
@@ -130,7 +130,7 @@ export class SampleAppInfrastructureManager {
     await this.createDirectories(reportDirs);
     await this.updateGitignore(['test-results/', 'coverage/', 'reports/', 'playwright-report/']);
     await this.generateReportingConfigs();
-    logger.success('✅ Reporting infrastructure configured');
+    logger.success('Reporting infrastructure configured');
   }
 
   private async generateReportingConfigs(): Promise<void> {
