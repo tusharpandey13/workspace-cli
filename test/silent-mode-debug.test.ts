@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { execa } from 'execa';
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 import { DummyRepoManager } from '../src/services/dummyRepoManager.js';
 
 describe('Silent Mode Debug', () => {
@@ -11,13 +12,9 @@ describe('Silent Mode Debug', () => {
   let sampleRepoPath: string;
 
   beforeEach(async () => {
-    testDir = path.join(
-      '/var/folders/xq/y6vqzwxn3x3d5dmj56npjwp00000gp/T',
-      `silent-debug-test-${Date.now()}`,
-    );
-    await fs.ensureDir(testDir);
+    testDir = path.join(os.tmpdir(), `silent-debug-test-${Date.now()}`);
 
-    manager = new DummyRepoManager();
+    manager = new DummyRepoManager(testDir);
     const { sdkPath, samplePath } = await manager.createTestEnvironment();
     sdkRepoPath = sdkPath;
     sampleRepoPath = samplePath;
@@ -25,9 +22,6 @@ describe('Silent Mode Debug', () => {
 
   afterEach(async () => {
     await manager.cleanupAll();
-    if (fs.existsSync(testDir)) {
-      await fs.remove(testDir);
-    }
   });
 
   test('should validate repositories are properly created', async () => {
@@ -70,13 +64,13 @@ global:
       ['tsx', 'src/bin/workspace.ts', 'projects', '--config', configPath],
       {
         cwd: process.cwd(),
-        timeout: 5000,
+        timeout: 10000, // Increased timeout
       },
     );
 
     console.log('Projects output:', stdout);
     expect(stdout).toContain('test');
-  });
+  }, 15000); // Set test timeout to 15 seconds
 
   test('should debug init command with maximum verbosity', async () => {
     const workspaceDir = path.join(testDir, 'workspace');

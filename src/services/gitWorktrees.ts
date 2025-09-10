@@ -121,7 +121,7 @@ async function ensureRepositoryFreshness(repoPath: string, isDryRun: boolean): P
               `update ${branch} branch`,
               isDryRun,
             );
-            logger.success(`✅ Updated ${branch} branch in ${repoPath}`);
+            logger.success(`Updated ${branch} branch in ${repoPath}`);
           }
         } else {
           logger.verbose(`✅ Repository ${repoPath} is up to date`);
@@ -294,7 +294,7 @@ export async function setupWorktrees(
       await infraManager.setupTestingInfrastructure();
       await infraManager.setupReportingInfrastructure();
 
-      logger.success(`✅ Testing infrastructure configured for ${project.key} sample app`);
+      logger.success(`Testing infrastructure configured for ${project.key} sample app`);
     } catch (error) {
       logger.warn(`Could not set up testing infrastructure: ${error}`);
       // Don't fail the entire operation if infrastructure setup fails
@@ -305,5 +305,5 @@ export async function setupWorktrees(
     logger.verbose('ℹ️  No sample app path configured - skipping testing infrastructure setup');
   }
 
-  logger.success('✅ Git worktrees ready with fresh repositories and testing infrastructure');
+  logger.success('Git worktrees ready with fresh repositories and testing infrastructure');
 }

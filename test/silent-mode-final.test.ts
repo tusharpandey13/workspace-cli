@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { execa } from 'execa';
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 import { DummyRepoManager } from '../src/services/dummyRepoManager.js';
 
 describe('Silent Mode Integration', () => {
@@ -11,13 +12,11 @@ describe('Silent Mode Integration', () => {
   let sampleRepoPath: string;
 
   beforeEach(async () => {
-    testDir = path.join(
-      '/var/folders/xq/y6vqzwxn3x3d5dmj56npjwp00000gp/T',
-      `silent-mode-test-${Date.now()}`,
-    );
-    await fs.ensureDir(testDir);
+    // Use both timestamp and random suffix to ensure unique directories
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    testDir = path.join(os.tmpdir(), `silent-mode-test-${uniqueId}`);
 
-    manager = new DummyRepoManager();
+    manager = new DummyRepoManager(testDir);
     const { sdkPath, samplePath } = await manager.createTestEnvironment();
     sdkRepoPath = sdkPath;
     sampleRepoPath = samplePath;
@@ -25,9 +24,6 @@ describe('Silent Mode Integration', () => {
 
   afterEach(async () => {
     await manager.cleanupAll();
-    if (fs.existsSync(testDir)) {
-      await fs.remove(testDir);
-    }
   });
 
   test('should run init command with --silent flag without hanging', async () => {
