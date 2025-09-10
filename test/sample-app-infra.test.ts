@@ -305,7 +305,7 @@ describe('SampleAppInfrastructureManager', () => {
         'Using @testing-library/react version: ^16.3.0',
       );
       expect(mockLogger.success).toHaveBeenCalledWith(
-        '✅ Testing infrastructure configured for next sample app',
+        'Testing infrastructure configured for next sample app',
       );
     });
 
@@ -329,7 +329,7 @@ describe('SampleAppInfrastructureManager', () => {
       await manager.setupTestingInfrastructure();
 
       expect(mockLogger.success).toHaveBeenCalledWith(
-        '✅ Testing infrastructure configured for next sample app',
+        'Testing infrastructure configured for next sample app',
       );
       // Should not log React version detection
       expect(mockLogger.verbose).not.toHaveBeenCalledWith(

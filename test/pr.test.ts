@@ -12,6 +12,10 @@ vi.mock('fs-extra', () => ({
   },
 }));
 
+vi.mock('execa', () => ({
+  execa: vi.fn(),
+}));
+
 vi.mock('../src/utils/init-helpers.js', () => ({
   executeCommand: vi.fn(),
   fileOps: {
@@ -20,8 +24,6 @@ vi.mock('../src/utils/init-helpers.js', () => ({
     copyFile: vi.fn(),
     writeFile: vi.fn(),
   },
-  extractRelevantContent: vi.fn(),
-  fetchComments: vi.fn(),
   createTestFileName: vi.fn(),
 }));
 
@@ -47,13 +49,8 @@ vi.mock('../src/utils/config.js', () => ({
 // Import after mocking
 import { fetchPRData, initializePRWorkspace } from '../src/commands/pr.js';
 import fs from 'fs-extra';
-import {
-  executeCommand,
-  fileOps,
-  extractRelevantContent,
-  fetchComments,
-  createTestFileName,
-} from '../src/utils/init-helpers.js';
+import { execa } from 'execa';
+import { executeCommand, fileOps, createTestFileName } from '../src/utils/init-helpers.js';
 import { logger } from '../src/utils/logger.js';
 import { configManager } from '../src/utils/config.js';
 
@@ -90,22 +87,6 @@ describe('PR Commands', () => {
     (fileOps.copyFile as any).mockResolvedValue(undefined);
     (fileOps.writeFile as any).mockResolvedValue(undefined);
 
-    (extractRelevantContent as any).mockReturnValue({
-      id: 123,
-      title: 'Test PR',
-      body: 'Test PR description',
-      state: 'open',
-      type: 'pull_request',
-      url: 'https://github.com/auth0/nextjs-auth0/pull/123',
-      created_at: '2025-01-01T00:00:00Z',
-      updated_at: '2025-01-02T00:00:00Z',
-      labels: ['feature'],
-      assignees: ['testuser'],
-      comments_url: 'https://api.github.com/repos/auth0/nextjs-auth0/issues/123/comments',
-      links: [],
-    });
-
-    (fetchComments as any).mockResolvedValue([]);
     (createTestFileName as any).mockReturnValue('test-pr-123.spec.ts');
 
     // Mock config manager
@@ -118,6 +99,9 @@ describe('PR Commands', () => {
     (fs.existsSync as any).mockReturnValue(false);
     (fs.readdir as any).mockResolvedValue([]);
     (fs.readFile as any).mockResolvedValue('template content {{PLACEHOLDER}}');
+
+    // Mock execa for ContextDataFetcher calls
+    (execa as any).mockResolvedValue({ stdout: '{}' });
   });
 
   afterEach(() => {
@@ -150,22 +134,43 @@ describe('PR Commands', () => {
       // Set up executeCommand to return different responses for different API calls
       (executeCommand as any).mockImplementation(
         (
-          _command: string,
+          command: string,
           args: string[],
           _options: any,
           _description: string,
           _isDryRun: boolean,
         ) => {
-          if (args.includes('pulls/123')) {
-            // Response for the PR-specific call
+          if (args.some((arg) => arg.includes('pulls/123'))) {
+            // Response for the PR-specific call to get branch info
             return Promise.resolve({ stdout: mockPRResponse });
-          } else if (args.includes('issues/123')) {
-            // Response for the ContextDataFetcher call
+          } else if (args.some((arg) => arg.includes('issues/123'))) {
+            // Response for the ContextDataFetcher call (different endpoint!)
             return Promise.resolve({ stdout: mockPRResponse });
           }
           return Promise.resolve({ stdout: '{}' });
         },
       );
+
+      // Set up execa mock for ContextDataFetcher
+      (execa as any).mockImplementation((command: string, args: string[]) => {
+        if (command === 'gh' && args.some((arg) => arg.includes('issues/123'))) {
+          return Promise.resolve({ stdout: mockPRResponse });
+        } else if (command === 'gh' && args.some((arg) => arg.includes('pulls/123/files'))) {
+          return Promise.resolve({
+            stdout: JSON.stringify([
+              {
+                filename: 'src/test.ts',
+                status: 'modified',
+                additions: 10,
+                deletions: 5,
+                changes: 15,
+                patch: '@@ -1,5 +1,10 @@\n // Test file changes',
+              },
+            ]),
+          });
+        }
+        return Promise.resolve({ stdout: '{}' });
+      });
 
       const result = await fetchPRData(123, mockProject, false);
 
@@ -179,12 +184,6 @@ describe('PR Commands', () => {
         ['api', 'repos/auth0/nextjs-auth0/pulls/123'],
         { stdio: 'pipe' },
         'fetch repos/auth0/nextjs-auth0/pulls/123',
-        false,
-      );
-
-      expect(fetchComments).toHaveBeenCalledWith(
-        'https://api.github.com/repos/auth0/nextjs-auth0/issues/123/comments',
-        123,
         false,
       );
     });
@@ -212,8 +211,8 @@ describe('PR Commands', () => {
       const result = await fetchPRData(456, mockProject, true);
 
       expect(result.branchName).toBe('feature/pr-456-branch');
-      expect(result.data.id).toBe(123); // From mocked extractRelevantContent
-      expect(result.data.title).toBe('Test PR');
+      expect(result.data.id).toBe(456); // Should match the PR being tested
+      expect(result.data.title).toBe('Fix authentication middleware token validation error'); // This comes from createMockGitHubData
 
       expect(executeCommand).toHaveBeenCalledWith(
         'gh',
