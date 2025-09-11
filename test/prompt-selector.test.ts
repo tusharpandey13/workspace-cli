@@ -184,6 +184,7 @@ describe('PromptSelector', () => {
       const result = emptyPromptSelector.selectPrompts([], 'feature/new-thing');
       expect(result.workflowType).toBe('feature-development');
       expect(result.selectedPrompts).toEqual([
+        'orchestrator.prompt.md',
         'analysis.prompt.md',
         'feature-analysis.prompt.md',
         'tests.prompt.md',

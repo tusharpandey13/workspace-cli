@@ -242,20 +242,32 @@ export class PromptSelector {
    */
   private getDefaultPromptsForWorkflow(workflowType: WorkflowType): string[] {
     const defaultPrompts = {
-      'issue-fix': ['analysis.prompt.md', 'fix-and-test.prompt.md', 'review-changes.prompt.md'],
+      'issue-fix': [
+        'orchestrator.prompt.md',
+        'analysis.prompt.md',
+        'fix-and-test.prompt.md',
+        'reproduction.prompt.md',
+        'review-changes.prompt.md',
+      ],
       'feature-development': [
+        'orchestrator.prompt.md',
         'analysis.prompt.md',
         'feature-analysis.prompt.md',
         'tests.prompt.md',
         'review-changes.prompt.md',
       ],
       maintenance: [
+        'orchestrator.prompt.md',
         'analysis.prompt.md',
         'maintenance-analysis.prompt.md',
         'tests.prompt.md',
         'review-changes.prompt.md',
       ],
-      exploration: ['exploration-analysis.prompt.md', 'universal-analysis.prompt.md'],
+      exploration: [
+        'orchestrator.prompt.md',
+        'exploration-analysis.prompt.md',
+        'universal-analysis.prompt.md',
+      ],
     };
 
     return defaultPrompts[workflowType] || defaultPrompts['feature-development'];

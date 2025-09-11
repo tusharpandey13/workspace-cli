@@ -85,10 +85,12 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   // Fetch GitHub data
   logger.step(4, 6, 'Fetching GitHub data...');
   const contextFetcher = new ContextDataFetcher();
+  // Extract just the repo name from the SDK repo path, similar to pr.ts
+  const sdkRepoName = path.basename(project.sdk_repo);
   const githubData = await contextFetcher.fetchGitHubData(
     issueIds,
     project.github_org,
-    project.sdk_repo,
+    sdkRepoName,
     isDryRun,
   );
 
@@ -146,10 +148,12 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
   // Fetch GitHub data
   logger.step(3, 4, 'Fetching GitHub data...');
   const contextFetcher = new ContextDataFetcher();
+  // Extract just the repo name from the SDK repo path, similar to the main initialization
+  const sdkRepoName = path.basename(project.sdk_repo);
   const githubData = await contextFetcher.fetchGitHubData(
     issueIds,
     project.github_org,
-    project.sdk_repo,
+    sdkRepoName,
     isDryRun,
   );
 
