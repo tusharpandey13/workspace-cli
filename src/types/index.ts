@@ -160,3 +160,83 @@ export interface PromptSelectionResult {
   selectedPrompts: string[];
   detectionReason: string;
 }
+
+/**
+ * Execution plan types for workflow orchestration and step enforcement
+ */
+
+export type StepStatus = 'pending' | 'in-progress' | 'completed' | 'failed' | 'skipped';
+export type WorkflowPhase = 'ANALYZE' | 'DESIGN' | 'IMPLEMENT' | 'VALIDATE' | 'REFLECT' | 'HANDOFF';
+export type ExecutionPlanStatus = 'pending' | 'in-progress' | 'completed' | 'failed';
+
+export interface ValidationRule {
+  id: string;
+  name: string;
+  description: string;
+  type: 'file-exists' | 'content-contains' | 'command-success' | 'test-passes';
+  target: string;
+  expectedValue?: string;
+  isRequired: boolean;
+}
+
+export interface ExecutionStep {
+  id: string;
+  name: string;
+  description: string;
+  phase: WorkflowPhase;
+  dependencies: string[];
+  artifacts: string[];
+  validations: string[];
+  estimatedDuration: string;
+  isRequired: boolean;
+  status: StepStatus;
+  startedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
+export interface ExecutionPhase {
+  id: WorkflowPhase;
+  name: string;
+  description: string;
+  steps: ExecutionStep[];
+  status: StepStatus;
+  isRequired: boolean;
+}
+
+export interface ExecutionPlan {
+  id: string;
+  workflowType: WorkflowType;
+  workspacePath: string;
+  branchName: string;
+  issueIds: number[];
+  createdAt: string;
+  updatedAt: string;
+  version: string;
+  phases: ExecutionPhase[];
+  status: ExecutionPlanStatus;
+  currentPhase: WorkflowPhase;
+  currentStep?: string;
+  metadata: {
+    projectKey: string;
+    githubData: GitHubIssueData[];
+    selectedPrompts: string[];
+    requiredArtifacts: string[];
+    validationRules: ValidationRule[];
+  };
+}
+
+export interface ExecutionCheckpoint {
+  id: string;
+  timestamp: string;
+  phase: WorkflowPhase;
+  step: string;
+  message: string;
+  artifacts: string[];
+}
+
+export interface ExecutionState {
+  executionPlan: ExecutionPlan;
+  lastSaved: string;
+  checkpoints: ExecutionCheckpoint[];
+}
