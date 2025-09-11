@@ -7,6 +7,7 @@ import { configManager } from '../utils/config.js';
 import { executeCommand, fileOps, createTestFileName } from '../utils/init-helpers.js';
 import { ContextDataFetcher } from '../services/contextData.js';
 import { PromptSelector } from '../services/promptSelector.js';
+import { ExecutionPlanService } from '../services/executionPlans.js';
 import readline from 'node:readline/promises';
 import { setupWorktrees } from '../services/gitWorktrees.js';
 import { stdin as input, stdout as output } from 'node:process';
@@ -423,6 +424,25 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
         isDryRun,
       );
     }
+  }
+
+  // Generate execution plan for workflow orchestration
+  logger.verbose('📋 Generating execution plan for workflow orchestration...');
+  if (!isDryRun) {
+    const executionPlan = ExecutionPlanService.generateExecutionPlan(
+      promptSelection.workflowType,
+      paths.workspaceDir,
+      branchName,
+      issueIds,
+      projectKey,
+      githubData,
+      promptSelection.selectedPrompts,
+    );
+
+    await ExecutionPlanService.saveExecutionState(paths.workspaceDir, executionPlan);
+    logger.info(
+      `🎯 Execution plan created with ${executionPlan.phases.length} phases and ${executionPlan.phases.reduce((total, phase) => total + phase.steps.length, 0)} steps`,
+    );
   }
 
   // Generate bug report or workspace info file
