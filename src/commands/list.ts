@@ -12,16 +12,17 @@ function listProjectWorkspaces(project: string): void {
     const projectConfig = configManager.getProject(project);
     const paths = configManager.getWorkspacePaths(project, 'dummy');
     const baseDir = paths.baseDir;
-    
+
     if (!fs.existsSync(baseDir)) {
       logger.info(`No workspaces found for project '${project}' (${projectConfig.name})`);
       return;
     }
-    
-    const dirs = fs.readdirSync(baseDir, { withFileTypes: true })
+
+    const dirs = fs
+      .readdirSync(baseDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
-    
+
     if (dirs.length === 0) {
       logger.info(`No workspaces found for project '${project}' (${projectConfig.name})`);
     } else {
@@ -39,18 +40,19 @@ function listProjectWorkspaces(project: string): void {
 function listAllWorkspaces(): void {
   const projects = configManager.listProjects();
   let hasAnyWorkspaces = false;
-  
+
   for (const projectKey of projects) {
     try {
       const project = configManager.getProject(projectKey);
       const paths = configManager.getWorkspacePaths(projectKey, 'dummy');
       const baseDir = paths.baseDir;
-      
+
       if (fs.existsSync(baseDir)) {
-        const dirs = fs.readdirSync(baseDir, { withFileTypes: true })
+        const dirs = fs
+          .readdirSync(baseDir, { withFileTypes: true })
           .filter((d) => d.isDirectory())
           .map((d) => d.name);
-        
+
         if (dirs.length > 0) {
           console.log(`\n${project.name} (${projectKey}):`);
           dirs.forEach((dir) => console.log(`  ${dir}`));
@@ -58,10 +60,12 @@ function listAllWorkspaces(): void {
         }
       }
     } catch (error) {
-      logger.warn(`Error checking workspaces for project '${projectKey}': ${(error as Error).message}`);
+      logger.warn(
+        `Error checking workspaces for project '${projectKey}': ${(error as Error).message}`,
+      );
     }
   }
-  
+
   if (!hasAnyWorkspaces) {
     logger.info('No workspaces found for any project.');
     console.log('\nTo create a workspace, use:');
@@ -75,8 +79,9 @@ export function listCommand(program: Command): void {
   program
     .command('list [project]')
     .description('List all active workspaces, optionally filtered by project')
-    .argument('[project]', 'Optional project key to filter results (e.g., next, node, react)')
-    .addHelpText('after', `
+    .addHelpText(
+      'after',
+      `
 Examples:
   $ workspace list
     Show all workspaces across all projects
@@ -101,7 +106,8 @@ Description:
 Related commands:
   workspace projects    List available projects
   workspace init        Create a new workspace
-  workspace info        Show details for a specific workspace`)
+  workspace info        Show details for a specific workspace`,
+    )
     .action((project?: string) => {
       try {
         if (project) {

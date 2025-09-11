@@ -9,9 +9,9 @@ export function infoCommand(program: Command): void {
   program
     .command('info <project> <workspace>')
     .description('Display detailed workspace status, paths, and configuration')
-    .argument('<project>', 'Project key (e.g., next, node, react)')
-    .argument('<workspace>', 'Workspace name (usually the branch name with slashes replaced by underscores)')
-    .addHelpText('after', `
+    .addHelpText(
+      'after',
+      `
 Examples:
   $ workspace info next feature_my-new-feature
     Show details for the Next.js workspace "feature_my-new-feature"
@@ -39,41 +39,45 @@ Description:
 Related commands:
   workspace list        List all workspaces
   workspace init        Create a new workspace
-  workspace clean       Remove a workspace`)
+  workspace clean       Remove a workspace`,
+    )
     .action((project: string, workspace: string) => {
       try {
         const validatedProject = validateProjectKey(project);
         const validatedWorkspace = validateWorkspaceName(workspace);
-        
+
         const projectConfig = configManager.validateProject(validatedProject);
         const paths = configManager.getWorkspacePaths(validatedProject, validatedWorkspace);
-        
+
         if (!fs.existsSync(paths.workspaceDir)) {
-          throw new FileSystemError(`Workspace '${validatedWorkspace}' not found for project '${validatedProject}' at ${paths.workspaceDir}`);
+          throw new FileSystemError(
+            `Workspace '${validatedWorkspace}' not found for project '${validatedProject}' at ${paths.workspaceDir}`,
+          );
         }
-        
+
         logger.info(`Project: ${projectConfig.name} (${validatedProject})`);
         logger.info(`Workspace: ${paths.workspaceDir}`);
         logger.info(`SDK Path: ${paths.sdkPath}`);
         logger.info(`Samples Path: ${paths.samplesPath}`);
         logger.info(`Sample App Path: ${paths.sampleAppPath}`);
-        
+
         // Show status of worktrees
         const sdkExists = fs.existsSync(paths.sdkPath);
         const samplesExists = fs.existsSync(paths.samplesPath);
-        
+
         console.log('');
         logger.info('Worktree Status:');
         console.log(`  SDK: ${sdkExists ? '✅ Ready' : '❌ Missing'}`);
         console.log(`  Samples: ${samplesExists ? '✅ Ready' : '❌ Missing'}`);
-        
+
         // Show environment file status
         const envFilePath = configManager.getEnvFilePath(validatedProject);
         if (envFilePath) {
           const envExists = fs.existsSync(envFilePath);
-          console.log(`  Environment: ${envExists ? '✅ Available' : '❌ Missing'} (${envFilePath})`);
+          console.log(
+            `  Environment: ${envExists ? '✅ Available' : '❌ Missing'} (${envFilePath})`,
+          );
         }
-        
       } catch (error) {
         handleError(error as Error, logger);
       }

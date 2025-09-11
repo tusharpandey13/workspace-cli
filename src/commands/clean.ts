@@ -10,9 +10,9 @@ export function cleanCommand(program: Command): void {
   program
     .command('clean <project> <workspace>')
     .description('Clean up and remove workspace, including all git worktrees and files')
-    .argument('<project>', 'Project key (e.g., next, node, react)')
-    .argument('<workspace>', 'Workspace name to clean up')
-    .addHelpText('after', `
+    .addHelpText(
+      'after',
+      `
 Examples:
   $ workspace clean next feature_my-new-feature
     Remove the Next.js workspace "feature_my-new-feature"
@@ -40,12 +40,13 @@ Description:
 Related commands:
   workspace list        List all workspaces
   workspace info        Check workspace status before cleaning
-  workspace submit      Commit and push changes before cleaning`)
+  workspace submit      Commit and push changes before cleaning`,
+    )
     .action(async (project: string, workspace: string) => {
       try {
         const validatedProject = validateProjectKey(project);
         const validatedWorkspace = validateWorkspaceName(workspace);
-        
+
         const projectConfig = configManager.validateProject(validatedProject);
         const paths = configManager.getWorkspacePaths(validatedProject, validatedWorkspace);
 
@@ -54,29 +55,42 @@ Related commands:
         if (fs.existsSync(paths.sdkPath)) {
           try {
             logger.verbose('Removing SDK worktree...');
-            await runGit(['worktree', 'remove', paths.sdkPath, '--force'], { cwd: paths.sdkRepoPath });
+            await runGit(['worktree', 'remove', paths.sdkPath, '--force'], {
+              cwd: paths.sdkRepoPath,
+            });
             logger.success('SDK worktree removed');
           } catch (err) {
-            throw new GitError(`Failed to remove SDK worktree: ${(err as Error).message}`, err as Error);
+            throw new GitError(
+              `Failed to remove SDK worktree: ${(err as Error).message}`,
+              err as Error,
+            );
           }
         }
-        
+
         if (fs.existsSync(paths.samplesPath)) {
           try {
             logger.verbose('Removing samples worktree...');
-            await runGit(['worktree', 'remove', paths.samplesPath, '--force'], { cwd: paths.sampleRepoPath });
+            await runGit(['worktree', 'remove', paths.samplesPath, '--force'], {
+              cwd: paths.sampleRepoPath,
+            });
             logger.success('Samples worktree removed');
           } catch (err) {
-            throw new GitError(`Failed to remove samples worktree: ${(err as Error).message}`, err as Error);
+            throw new GitError(
+              `Failed to remove samples worktree: ${(err as Error).message}`,
+              err as Error,
+            );
           }
         }
-        
+
         try {
           logger.verbose('Removing workspace directory...');
           await fs.remove(paths.workspaceDir);
           logger.success('Workspace cleaned successfully');
         } catch (err) {
-          throw new FileSystemError(`Failed to remove workspace directory: ${(err as Error).message}`, err as Error);
+          throw new FileSystemError(
+            `Failed to remove workspace directory: ${(err as Error).message}`,
+            err as Error,
+          );
         }
       } catch (error) {
         handleError(error as Error, logger);
