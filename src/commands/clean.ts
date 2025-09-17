@@ -52,28 +52,28 @@ Related commands:
 
         logger.info(`Cleaning ${projectConfig.name} workspace: ${validatedWorkspace}`);
 
-        if (fs.existsSync(paths.sdkPath)) {
+        if (fs.existsSync(paths.sourcePath)) {
           try {
-            logger.verbose('Removing SDK worktree...');
-            await runGit(['worktree', 'remove', paths.sdkPath, '--force'], {
-              cwd: paths.sdkRepoPath,
+            logger.verbose('Removing source worktree...');
+            await runGit(['worktree', 'remove', paths.sourcePath, '--force'], {
+              cwd: paths.sourceRepoPath,
             });
-            logger.success('SDK worktree removed');
+            logger.success('Source worktree removed');
           } catch (err) {
             throw new GitError(
-              `Failed to remove SDK worktree: ${(err as Error).message}`,
+              `Failed to remove source worktree: ${(err as Error).message}`,
               err as Error,
             );
           }
         }
 
-        if (fs.existsSync(paths.samplesPath)) {
+        if (paths.destinationPath && fs.existsSync(paths.destinationPath)) {
           try {
-            logger.verbose('Removing samples worktree...');
-            await runGit(['worktree', 'remove', paths.samplesPath, '--force'], {
-              cwd: paths.sampleRepoPath,
+            logger.verbose('Removing destination worktree...');
+            await runGit(['worktree', 'remove', paths.destinationPath, '--force'], {
+              cwd: paths.destinationRepoPath!,
             });
-            logger.success('Samples worktree removed');
+            logger.success('Destination worktree removed');
           } catch (err) {
             throw new GitError(
               `Failed to remove samples worktree: ${(err as Error).message}`,

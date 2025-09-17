@@ -7,8 +7,8 @@ const CLI_PATH = path.resolve(__dirname, '../dist/bin/workspace.js');
 describe('CLI Help Tests', () => {
   it('should display main help with --help', () => {
     const output = execSync(`node ${CLI_PATH} --help`, { encoding: 'utf8' });
-    
-    expect(output).toContain('Multi-SDK workspace CLI tool');
+
+    expect(output).toContain('Stack-agnostic workspace CLI tool');
     expect(output).toContain('Global Options:');
     expect(output).toContain('Examples:');
     expect(output).toContain('Getting Started:');
@@ -19,7 +19,7 @@ describe('CLI Help Tests', () => {
 
   it('should display init command help with -h', () => {
     const output = execSync(`node ${CLI_PATH} init -h`, { encoding: 'utf8' });
-    
+
     expect(output).toContain('Initialize a new workspace with git worktrees');
     expect(output).toContain('Examples:');
     expect(output).toContain('Description:');
@@ -29,7 +29,7 @@ describe('CLI Help Tests', () => {
 
   it('should display list command help', () => {
     const output = execSync(`node ${CLI_PATH} list --help`, { encoding: 'utf8' });
-    
+
     expect(output).toContain('List all active workspaces');
     expect(output).toContain('Examples:');
     expect(output).toContain('workspace list next');
@@ -38,7 +38,7 @@ describe('CLI Help Tests', () => {
 
   it('should display projects command help', () => {
     const output = execSync(`node ${CLI_PATH} projects --help`, { encoding: 'utf8' });
-    
+
     expect(output).toContain('List all available projects');
     expect(output).toContain('Examples:');
     expect(output).toContain('Description:');
@@ -47,7 +47,7 @@ describe('CLI Help Tests', () => {
 
   it('should display info command help', () => {
     const output = execSync(`node ${CLI_PATH} info --help`, { encoding: 'utf8' });
-    
+
     expect(output).toContain('Display detailed workspace status');
     expect(output).toContain('Examples:');
     expect(output).toContain('✅ Ready - Component is properly set up');
@@ -56,7 +56,7 @@ describe('CLI Help Tests', () => {
 
   it('should display clean command help', () => {
     const output = execSync(`node ${CLI_PATH} clean --help`, { encoding: 'utf8' });
-    
+
     expect(output).toContain('Clean up and remove workspace');
     expect(output).toContain('⚠️  WARNING: This action is irreversible!');
     expect(output).toContain('Examples:');
@@ -65,8 +65,10 @@ describe('CLI Help Tests', () => {
 
   it('should display submit command help', () => {
     const output = execSync(`node ${CLI_PATH} submit --help`, { encoding: 'utf8' });
-    
-    expect(output).toContain('**HUMAN-SUPERVISED**: Review, commit, push changes, and create a pull request');
+
+    expect(output).toContain(
+      '**HUMAN-SUPERVISED**: Review, commit, push changes, and create a pull request',
+    );
     expect(output).toContain('Examples:');
     expect(output).toContain('Requirements:');
     expect(output).toContain('GitHub CLI (gh) must be installed');

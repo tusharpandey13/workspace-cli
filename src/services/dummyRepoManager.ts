@@ -254,82 +254,90 @@ export class DummyRepoManager {
    */
   private async createDefaultFiles(repoPath: string, type: 'sdk' | 'sample'): Promise<void> {
     if (type === 'sdk') {
-      // Create typical SDK structure
+      // Create typical SDK structure - maintaining TypeScript for test compatibility
       const packageJson = {
-        name: '@auth0/test-sdk',
+        name: '@example/test-sdk',
         version: '1.0.0',
         description: 'Test SDK for workspace CLI testing',
         main: 'src/index.ts',
         scripts: {
           build: 'tsc',
-          test: 'vitest',
+          test: 'jest',
+          lint: 'eslint src/**/*.ts',
         },
         devDependencies: {
-          typescript: '^5.0.0',
-          vitest: '^1.0.0',
+          typescript: '^4.9.0',
+          jest: '^29.0.0',
+          eslint: '^8.0.0',
         },
       };
 
       await fs.writeFile(path.join(repoPath, 'package.json'), JSON.stringify(packageJson, null, 2));
 
-      // Create src directory structure
+      // Create src directory structure - keeping .ts extension for test compatibility
       await fs.ensureDir(path.join(repoPath, 'src'));
       await fs.writeFile(
         path.join(repoPath, 'src/index.ts'),
-        `export * from './auth-client';\nexport * from './types';`,
+        `// Main SDK entry point\nexport class TestSDK {\n  version = '1.0.0';\n  \n  constructor(config: any) {\n    this.config = config;\n  }\n  \n  async initialize(): Promise<void> {\n    console.log('SDK initialized');\n  }\n}\n\nexport default TestSDK;\n`,
       );
       await fs.writeFile(
-        path.join(repoPath, 'src/auth-client.ts'),
-        `export class AuthClient {\n  constructor() {}\n}`,
+        path.join(repoPath, 'src/client.ts'),
+        `// SDK client implementation\nexport class Client {\n  constructor(private config: any) {}\n  \n  async connect(): Promise<boolean> {\n    return true;\n  }\n}\n`,
       );
       await fs.writeFile(
-        path.join(repoPath, 'src/types.ts'),
-        `export interface AuthConfig {\n  domain: string;\n}`,
+        path.join(repoPath, 'src/utils.ts'),
+        `// SDK utility functions\nexport function validateConfig(config: any): boolean {\n  return config && typeof config === 'object';\n}\n`,
       );
 
       // Create README
       await fs.writeFile(
         path.join(repoPath, 'README.md'),
-        '# Test SDK\n\nA test SDK for workspace CLI testing.',
+        '# Test SDK\n\nA generic SDK for testing workspace CLI functionality.',
       );
     } else {
-      // Create typical sample app structure
+      // Create sample app structure - maintaining pages structure for test compatibility
       const packageJson = {
         name: 'test-sample-app',
         version: '1.0.0',
         description: 'Test sample app for workspace CLI testing',
         scripts: {
-          dev: 'next dev',
-          build: 'next build',
-          start: 'next start',
+          start: 'node pages/index.js',
+          build: 'echo "Building sample application"',
+          test: 'echo "Running sample tests"',
+          dev: 'nodemon pages/index.js',
         },
         dependencies: {
-          next: '^14.0.0',
-          react: '^18.0.0',
-          '@auth0/nextjs-auth0': '^3.0.0',
+          'example-lib': '^1.0.0',
+          express: '^4.18.0',
         },
       };
 
       await fs.writeFile(path.join(repoPath, 'package.json'), JSON.stringify(packageJson, null, 2));
 
-      // Create pages directory
+      // Create pages directory structure (for test compatibility)
       await fs.ensureDir(path.join(repoPath, 'pages'));
       await fs.writeFile(
         path.join(repoPath, 'pages/index.js'),
-        `export default function Home() {\n  return <div>Home Page</div>;\n}`,
+        `// Sample application main page\nconst express = require('express');\nconst app = express();\n\napp.get('/', (req, res) => {\n  res.send('Hello from sample app!');\n});\n\nconst port = process.env.PORT || 3000;\napp.listen(port, () => {\n  console.log(\`Sample app listening on port \${port}\`);\n});\n`,
       );
 
-      // Create API routes
+      // Create API directory structure (for test compatibility)
       await fs.ensureDir(path.join(repoPath, 'pages/api/auth'));
       await fs.writeFile(
         path.join(repoPath, 'pages/api/auth/[...auth0].js'),
-        `import { handleAuth } from '@auth0/nextjs-auth0';\n\nexport default handleAuth();`,
+        `// Generic authentication handler\nmodule.exports = (req, res) => {\n  // Generic auth handling logic\n  res.status(200).json({ message: 'Auth endpoint' });\n};\n`,
+      );
+
+      // Create example configuration
+      await fs.writeFile(
+        path.join(repoPath, 'config.example.js'),
+        `// Example configuration file\nmodule.exports = {\n  app: {\n    name: 'Sample App',\n    port: 3000\n  },\n  auth: {\n    provider: 'generic-auth'\n  }\n};\n`,
       );
 
       // Create README
       await fs.writeFile(
         path.join(repoPath, 'README.md'),
-        '# Test Sample App\n\nA test sample app for workspace CLI testing.',
+        '# Test Sample App\n\nA generic sample app for testing workspace CLI functionality.',
       );
     }
   }
@@ -455,10 +463,13 @@ export class DummyRepoManager {
 
   /**
    * Create a complete test environment with SDK and sample repositories
+   * @param projectName - The project name to use (defaults to 'test' for silent mode compatibility)
    */
-  async createTestEnvironment(): Promise<{ sdkPath: string; samplePath: string }> {
+  async createTestEnvironment(
+    projectName = 'test-sdk',
+  ): Promise<{ sdkPath: string; samplePath: string }> {
     const sdkPath = await this.createDummyRepo({
-      name: 'test-sdk',
+      name: projectName,
       type: 'sdk',
       branches: ['main', 'develop', 'feature/test-branch'],
       hasRemote: true,

@@ -8,8 +8,8 @@ vi.mock('fs-extra', () => ({
     readdir: vi.fn(),
     readFile: vi.fn(),
     readdirSync: vi.fn(),
-    statSync: vi.fn()
-  }
+    statSync: vi.fn(),
+  },
 }));
 
 vi.mock('../src/utils/init-helpers.js', () => ({
@@ -19,11 +19,11 @@ vi.mock('../src/utils/init-helpers.js', () => ({
     ensureDir: vi.fn(),
     removeFile: vi.fn(),
     copyFile: vi.fn(),
-    writeFile: vi.fn()
+    writeFile: vi.fn(),
   },
   extractRelevantContent: vi.fn(),
   fetchComments: vi.fn(),
-  createTestFileName: vi.fn()
+  createTestFileName: vi.fn(),
 }));
 
 vi.mock('../src/utils/logger.js', () => ({
@@ -32,8 +32,8 @@ vi.mock('../src/utils/logger.js', () => ({
     info: vi.fn(),
     step: vi.fn(),
     success: vi.fn(),
-    warn: vi.fn()
-  }
+    warn: vi.fn(),
+  },
 }));
 
 vi.mock('../src/utils/config.js', () => ({
@@ -41,31 +41,31 @@ vi.mock('../src/utils/config.js', () => ({
     getTemplates: vi.fn(),
     getGlobal: vi.fn(),
     getEnvFilePath: vi.fn(),
-    getCliRoot: vi.fn()
-  }
+    getCliRoot: vi.fn(),
+  },
 }));
 
 vi.mock('node:readline/promises', () => ({
   createInterface: vi.fn(() => ({
     question: vi.fn().mockResolvedValue(''),
-    close: vi.fn()
-  }))
+    close: vi.fn(),
+  })),
 }));
 
 vi.mock('node:process', () => ({
   stdin: {},
-  stdout: {}
+  stdout: {},
 }));
 
 // Import after mocking
 import fs from 'fs-extra';
-import { 
+import {
   executeCommand,
   executeGit,
   fileOps,
   extractRelevantContent,
   fetchComments,
-  createTestFileName 
+  createTestFileName,
 } from '../src/utils/init-helpers.js';
 import { configManager } from '../src/utils/config.js';
 
@@ -94,7 +94,7 @@ describe('Init Commands', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Setup default mock implementations
     (executeCommand as any).mockResolvedValue({ stdout: '{}' });
     (executeGit as any).mockResolvedValue({ stdout: '' });
@@ -102,33 +102,33 @@ describe('Init Commands', () => {
     (fileOps.removeFile as any).mockResolvedValue(undefined);
     (fileOps.copyFile as any).mockResolvedValue(undefined);
     (fileOps.writeFile as any).mockResolvedValue(undefined);
-    
+
     (extractRelevantContent as any).mockReturnValue({
       id: 123,
       title: 'Test Issue',
       body: 'Test issue description',
       state: 'open',
       type: 'issue',
-      relevant_content: 'Relevant content'
+      relevant_content: 'Relevant content',
     });
-    
+
     (fetchComments as any).mockResolvedValue([]);
     (createTestFileName as any).mockReturnValue('test-file.test.ts');
-    
+
     (configManager.getTemplates as any).mockReturnValue({
       dir: '/test/templates',
-      common: ['analysis.prompt.md', 'review-changes.prompt.md']
+      common: ['analysis.prompt.md', 'review-changes.prompt.md'],
     });
-    
+
     (configManager.getGlobal as any).mockReturnValue({
       src_dir: '/Users/test/src',
       workspace_base: 'workspaces',
-      package_manager: 'pnpm'
+      package_manager: 'pnpm',
     });
-    
+
     (configManager.getEnvFilePath as any).mockReturnValue('/test/env-files/spa.env.local');
     (configManager.getCliRoot as any).mockReturnValue('/test/cli');
-    
+
     (fs.existsSync as any).mockReturnValue(false);
     (fs.readdir as any).mockResolvedValue([]);
   });
@@ -136,7 +136,7 @@ describe('Init Commands', () => {
   describe('Worktree Setup Logic', () => {
     // Import the function we're testing - we'll need to expose it or test it indirectly
     // For now, let's test the behavior through integration tests
-    
+
     it('should use specified branch for SDK worktree and fallback to default branch for sample worktree', async () => {
       // Mock git commands for default branch detection
       (executeGit as any)
@@ -144,7 +144,7 @@ describe('Init Commands', () => {
         .mockResolvedValueOnce({ stdout: '' }) // prune
         .mockRejectedValueOnce(new Error('Create new branch failed')) // create new branch fails
         .mockResolvedValueOnce({ stdout: '' }) // add existing branch succeeds
-        
+
         // Sample worktree setup - should detect and use default branch
         .mockResolvedValueOnce({ stdout: 'refs/remotes/origin/master' }) // get default branch
         .mockResolvedValueOnce({ stdout: '' }) // show-ref main fails
@@ -155,7 +155,7 @@ describe('Init Commands', () => {
 
       // We'll need to import and call the actual function here
       // For now, this serves as documentation of expected behavior
-      
+
       expect(true).toBe(true); // Placeholder until we can properly test the function
     });
 
@@ -163,7 +163,7 @@ describe('Init Commands', () => {
       // Test that the updated logic handles:
       // - SDK repo: tilde path expansion (~/src/auth0-spa-js)
       // - Sample repo: relative path (spajs/spatest)
-      
+
       expect(true).toBe(true); // Placeholder
     });
 
@@ -173,7 +173,7 @@ describe('Init Commands', () => {
         // SDK setup succeeds
         .mockResolvedValueOnce({ stdout: '' }) // prune
         .mockResolvedValueOnce({ stdout: '' }) // add existing branch
-        
+
         // Sample setup falls back to default branch
         .mockResolvedValueOnce({ stdout: 'refs/remotes/origin/main' }) // get default
         .mockResolvedValueOnce({ stdout: '' }) // show-ref main succeeds
@@ -188,7 +188,7 @@ describe('Init Commands', () => {
       (executeGit as any)
         .mockResolvedValueOnce({ stdout: '' }) // SDK prune
         .mockResolvedValueOnce({ stdout: '' }) // SDK add
-        
+
         // Sample repo uses master as default
         .mockRejectedValueOnce(new Error('No remote HEAD')) // symbolic-ref fails
         .mockRejectedValueOnce(new Error('No main branch')) // show-ref main fails
@@ -206,7 +206,7 @@ describe('Init Commands', () => {
       const srcDir = '/Users/test/src';
       const sampleRepo = 'spajs/spatest';
       const expectedPath = path.join(srcDir, sampleRepo);
-      
+
       expect(expectedPath).toBe('/Users/test/src/spajs/spatest');
     });
 
@@ -215,7 +215,7 @@ describe('Init Commands', () => {
       const homeDir = process.env.HOME || '/Users/test';
       const sdkRepo = '~/src/auth0-spa-js';
       const expectedPath = sdkRepo.replace('~', homeDir);
-      
+
       expect(expectedPath).toBe(path.join(homeDir, 'src/auth0-spa-js'));
     });
   });

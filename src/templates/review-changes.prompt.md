@@ -1,6 +1,6 @@
-# 👨‍💻 Principal Engineer Code Review for GitHub IDs: {{GITHUB_IDS}}
+# � Code Review Analysis for GitHub IDs: {{GITHUB_IDS}}
 
-<role>Principal Engineer conducting rigorous code review for Auth0 SDK</role>
+<role>Principal Engineer conducting rigorous code review</role>
 
 <workflow_phase>REFLECT</workflow_phase>
 
@@ -17,33 +17,29 @@ Following v2.chatmode.md reflection principles:
 > ⏲ **Time-box:** Aim to complete this review in **≤ 45 min**.
 
 <context>
-<sdk_path>{{SDK_PATH}}</sdk_path>
-<github_ids>{{GITHUB_IDS}}</github_ids>
-<github_data>{{GITHUB_DATA}}</github_data>
-<related_issues>{{RELATED_ISSUES_PRS}}</related_issues>
-<additional_context>{{ADDITIONAL_CONTEXT}}</additional_context>
-<bugreport_file>{{BUGREPORT_FILE}}</bugreport_file>
+<source_path>{{SOURCE_PATH}}</source_path>
+<destination_path>{{DESTINATION_PATH}}</destination_path>
 </context>
 
 ## Scope
 
-Review **only** changes inside `{{SDK_PATH}}` (the NextJS-Auth0 SDK). Ignore any edits in sample apps or other directories.
+Review **only** changes inside `{{SOURCE_PATH}}` (the source codebase). Ignore any edits in sample apps or other directories.
 
 For quick context you may run:
 
 ```bash
-git -C {{SDK_PATH}} diff --stat origin/main...HEAD
+git -C {{SOURCE_PATH}} diff --stat origin/main...HEAD
 ```
 
 <domain_knowledge>
 
 ## Technical Context & Review Standards
 
-### NextJS Auth0 SDK Critical Areas
+### Code Quality Critical Areas
 
 - **Session management security**: Cookie encryption, XSS prevention
 - **Performance impact**: Bundle size, async operations, memory usage
-- **API compatibility**: Backward compatibility, TypeScript definitions
+- **API compatibility**: Backward compatibility, interface definitions
 - **Error handling robustness**: Graceful degradation, proper logging
 - **Configuration validation**: Environment setup, runtime checks
 
@@ -54,7 +50,7 @@ git -C {{SDK_PATH}} diff --stat origin/main...HEAD
 - **❌ Missing error boundaries** in critical paths
 - **❌ Hard-coded URLs/secrets** instead of configuration
 - **❌ Overly complex abstractions** that obscure simple operations
-- **❌ Missing TypeScript types** or using `any`
+- **❌ Missing type definitions** or weak typing
 
 ### Quality Indicators to Validate
 
@@ -83,7 +79,7 @@ Challenge each significant change with:
 
 - Trace through critical code paths by hand
 - Verify error handling covers all edge cases
-- Confirm TypeScript types are accurate and helpful
+- Confirm type definitions and interfaces are accurate and helpful
 - Check for proper resource cleanup and memory management
 
 **Self-Correction Protocol**:
@@ -152,9 +148,9 @@ Challenge each significant change with:
 ### Compatibility Analysis
 
 - **Breaking Changes:** [Assessment]
-- **TypeScript Compatibility:** [Assessment]
-- **Node.js Versions:** [Assessment]
-- **Browser Support:** [Assessment]
+- **Type System Compatibility:** [Assessment]
+- **Runtime Environment:** [Assessment]
+- **Platform Support:** [Assessment]
 
 ### Test Coverage Analysis
 

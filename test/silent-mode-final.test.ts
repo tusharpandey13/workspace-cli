@@ -17,7 +17,7 @@ describe('Silent Mode Integration', () => {
     testDir = path.join(os.tmpdir(), `silent-mode-test-${uniqueId}`);
 
     manager = new DummyRepoManager(testDir);
-    const { sdkPath, samplePath } = await manager.createTestEnvironment();
+    const { sdkPath, samplePath } = await manager.createTestEnvironment('test');
     sdkRepoPath = sdkPath;
     sampleRepoPath = samplePath;
   });
@@ -36,7 +36,7 @@ describe('Silent Mode Integration', () => {
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"
@@ -104,7 +104,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"
@@ -164,7 +164,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"

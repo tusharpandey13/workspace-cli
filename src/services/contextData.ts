@@ -76,14 +76,16 @@ export class ContextDataFetcher {
       const domain = new URL(url).hostname.toLowerCase();
       return (
         domain.includes('github.com') ||
-        domain.includes('stackoverflow.com') ||
         domain.includes('auth0.com') ||
+        domain.includes('stackoverflow.com') ||
         domain.includes('docs.') ||
         domain.includes('developer.') ||
         domain.includes('api.') ||
         domain.includes('npmjs.com') ||
-        domain.includes('reactjs.org') ||
-        domain.includes('nextjs.org')
+        domain.includes('pypi.org') ||
+        domain.includes('maven.org') ||
+        domain.includes('crates.io') ||
+        domain.includes('packagist.org')
       );
     });
   }
@@ -109,11 +111,9 @@ export class ContextDataFetcher {
     }
 
     try {
-      const result = await execa(
-        'gh',
-        ['api', `repos/${githubOrg}/${repoName}/issues/${issueId}`],
-        { stdio: 'pipe' },
-      );
+      const apiUrl = `repos/${githubOrg}/${repoName}/issues/${issueId}`;
+      logger.verbose(`🐛 Making GitHub API call: gh api ${apiUrl}`);
+      const result = await execa('gh', ['api', apiUrl], { stdio: 'pipe' });
       const data = JSON.parse(result.stdout);
 
       this.cache.set(cacheKey, { data, timestamp: Date.now() });
@@ -380,12 +380,12 @@ export class ContextDataFetcher {
         type === 'pull_request'
           ? 'Add new session refresh mechanism'
           : 'Fix authentication middleware token validation error',
-      body: 'Dry run data - this would contain the actual issue/PR body with detailed description and links to https://auth0.com/docs/quickstart/webapp/nextjs',
+      body: 'Dry run data - this would contain the actual issue/PR body with detailed description and links to relevant documentation',
       state: 'open',
-      html_url: `https://github.com/auth0/repo/${type === 'pull_request' ? 'pull' : 'issues'}/${issueId}`,
+      html_url: `https://github.com/example/repo/${type === 'pull_request' ? 'pull' : 'issues'}/${issueId}`,
       created_at: '2025-01-01T00:00:00Z',
       updated_at: '2025-01-01T00:00:00Z',
-      comments_url: `https://api.github.com/repos/auth0/repo/issues/${issueId}/comments`,
+      comments_url: `https://api.github.com/repos/example/repo/issues/${issueId}/comments`,
       labels: [{ name: 'bug' }, { name: 'priority:high' }],
       assignees: [{ login: 'developer' }],
       milestone: { title: 'v2.1.0' },

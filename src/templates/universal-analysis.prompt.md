@@ -1,4 +1,6 @@
-# 🌐 Universal Analysis for GitHub IDs: {{GITHUB_IDS}}
+# � Universal Analysis for GitHub IDs: {{GITHUB_IDS}}
+
+<role>Expert Software Analyst conducting comprehensive codebase analysis</role>🌐 Universal Analysis for GitHub IDs: {{GITHUB_IDS}}
 
 <role>Expert Software Analyst conducting comprehensive Auth0 SDK analysis</role>
 

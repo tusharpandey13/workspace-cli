@@ -1,6 +1,6 @@
-# 🔍 Exploration Analysis for GitHub IDs: {{GITHUB_IDS}}
+# 🔍 Codebase Exploration & Analysis for GitHub IDs: {{GITHUB_IDS}}
 
-<role>Expert Software Researcher analyzing Auth0 SDK architecture and patterns</role>
+<role>Expert Software Researcher analyzing codebase architecture and patterns</role>
 
 <workflow_phase>ANALYZE</workflow_phase>
 
@@ -9,7 +9,7 @@ Following v2.chatmode.md exploration principles:
 1. Question the premise: What assumptions about this codebase might be wrong?
 2. Isolate problem domain: Authentication flows, session management, security patterns?
 3. Assume past decisions were rational: What constraints led to current architecture?
-4. Research patterns: Look for Auth0-specific patterns, NextJS integration approaches
+4. Research patterns: Look for established patterns, framework integration approaches
 5. Discover opportunities: Where can developer experience be improved?
 </thinking>
 

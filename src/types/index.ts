@@ -1,19 +1,18 @@
 export interface ProjectConfig {
   key: string;
   name: string;
-  sdk_repo: string;
-  sample_repo: string;
-  github_org: string;
-  sample_app_path?: string;
+  repo: string;
+  sample_repo?: string;
   env_file?: string;
+  'post-init'?: string;
+  github_org?: string;
 }
 
 export interface GlobalConfig {
   src_dir?: string;
   workspace_base?: string;
-  package_manager?: string;
-  github_cli?: string;
   env_files_dir?: string;
+  dependencies?: string[];
 }
 
 export interface TemplatesConfig {
@@ -32,11 +31,12 @@ export interface WorkspacePaths {
   srcDir: string;
   baseDir: string;
   workspaceDir: string;
-  sdkPath: string;
-  samplesPath: string;
-  sampleAppPath: string;
-  sdkRepoPath: string;
-  sampleRepoPath: string;
+  // Source repository paths (for validation and worktree operations)
+  sourceRepoPath: string;
+  destinationRepoPath?: string;
+  // Worktree destination paths
+  sourcePath: string;
+  destinationPath?: string;
 }
 
 export interface GitHubIssueData {
@@ -100,6 +100,7 @@ export interface PlaceholderValues {
   '{{RELATED_ISSUES_PRS}}': string;
   '{{ADDITIONAL_CONTEXT}}': string;
   '{{TEST_FILE_NAME}}': string;
+  '{{POST_INIT_COMMAND}}': string;
 }
 
 export interface InitializeWorkspaceOptions {

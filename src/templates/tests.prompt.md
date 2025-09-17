@@ -1,6 +1,6 @@
 # 🧪 Test Suite for GitHub IDs: {{GITHUB_IDS}}
 
-<role>Expert Test Engineer focused on behavior-driven testing for Auth0 SDK</role>
+<role>Expert Test Engineer focused on behavior-driven testing</role>
 
 <workflow_phase>VALIDATE</workflow_phase>
 
@@ -17,10 +17,11 @@ Following v2.chatmode.md validation principles:
 > **⚠️ Human Control**: You write and execute tests manually - LLM provides suggestions only.
 
 <context>
-<workspace_path>{{WORKSPACE_PATH}}</workspace_path>
-<sdk_path>{{SDK_PATH}}</sdk_path>
-<bugreport_file>{{BUGREPORT_FILE}}</bugreport_file>
-<test_file_name>{{TEST_FILE_NAME}}</test_file_name>
+<workspace_path>{{workspacePath}}</workspace_path>
+<github_data>{{GITHUB_DATA}}</github_data>
+<branch>{{BRANCH_NAME}}</branch>
+<source_path>{{SOURCE_PATH}}</source_path>
+<destination_path>{{DESTINATION_PATH}}</destination_path>
 </context>
 
 <domain_knowledge>
@@ -46,27 +47,34 @@ Following v2.chatmode.md validation principles:
 
 ## Pre-Configured Testing Infrastructure
 
-✅ **Testing infrastructure already available** at `{{SDK_PATH}}` and `{{SAMPLE_PATH}}`:
+✅ **Testing infrastructure already available** at `{{SOURCE_PATH}}` and `{{DESTINATION_PATH}}`:
 
-### Sample App Testing (Primary Focus)
+### Project Testing (Primary Focus)
 
 ```bash
-cd {{SAMPLE_PATH}}
-npm run test                # Run unit tests with pre-configured vitest
-npm run test:watch          # Development mode testing
-npm run test:e2e            # End-to-end tests with playwright
-npm run test:coverage       # Coverage reports
-npm run test:debug          # Debug test failures
+cd {{DESTINATION_PATH}}
+# Run tests using available testing framework and build system
+# Check project configuration files for available test commands
+{{POST_INIT_COMMAND}}       # Use configured build/test command if available
+# Common patterns by stack:
+# - Node.js: npm/yarn/pnpm test
+# - Python: pytest / python -m pytest / python -m unittest
+# - Java: mvn test / gradle test
+# - Go: go test ./...
+# - Rust: cargo test
+# - C/C++: make test / cmake --build . --target test
+# - Ruby: rake test / bundle exec rspec
+# - PHP: phpunit / composer test
 ```
 
-### Pre-Configured Assets
+### Pre-Configured Testing Assets
 
-- **Vitest config**: `{{SAMPLE_PATH}}/vitest.config.ts` (jsdom, coverage, reporters)
-- **Test scaffolding**: `{{SAMPLE_PATH}}/tests/` (auth.test.ts, setup.ts, utils/)
-- **MSW mocking**: `{{SAMPLE_PATH}}/tests/mocks/` (handlers, server setup)
-- **Reporting**: `{{SAMPLE_PATH}}/test-results/`, `{{SAMPLE_PATH}}/coverage/`
+- **Test configuration**: Check `{{SAMPLE_PATH}}/` for testing config files (e.g., package.json, pytest.ini, Cargo.toml, pom.xml)
+- **Test scaffolding**: `{{SAMPLE_PATH}}/tests/`, `{{SAMPLE_PATH}}/test/`, or `{{SAMPLE_PATH}}/src/test/` directories
+- **Mock infrastructure**: Test mocks and fixtures in appropriate subdirectories
+- **Reporting**: Test output directories as configured in the project
 
-📋 **Detailed workflow guidance**: See `sample-app-testing-workflows.md` for app-type specific patterns
+📋 **Detailed workflow guidance**: Check project documentation for stack-specific testing patterns
 
 ## Background
 
@@ -76,43 +84,49 @@ Consult `{{BUGREPORT_FILE}}` for the analysis summary and proposed fix. **Extend
 
 **DO NOT create new test infrastructure** - extend existing scaffolding:
 
-1. **Examine existing tests**: `{{SAMPLE_PATH}}/tests/auth.test.ts`
-2. **Use existing patterns**: Follow established test structure and MSW handlers
+1. **Examine existing tests**: Look for test directories and existing test files
+2. **Use existing patterns**: Follow established test structure and naming conventions
 3. **Add test cases**: Extend current test suites with new scenarios
-4. **Leverage existing mocks**: Use pre-configured Auth0 API mocking
-5. **Use existing reporters**: Tests output to pre-configured directories
+4. **Leverage existing tooling**: Use pre-configured testing tools and mock setups if available
+5. **Use existing scripts**: Tests output to pre-configured directories
 
 ## Test Requirements
 
-- **Extend existing test files** in `{{SAMPLE_PATH}}/tests/` rather than creating new ones
-- **Use pre-configured MSW handlers** for Auth0 API mocking (check `{{SAMPLE_PATH}}/tests/mocks/`)
+- **Extend existing test files** rather than creating new test infrastructure from scratch
+- **Use pre-configured testing tools** for mocking and fixtures (check project configuration)
 - **Follow existing patterns** - Mirror test structure and naming conventions already in place
 - **Cover success & failure scenarios** - Add both happy paths and error conditions to existing test suites
-- **Use existing test scripts** - Run tests via `npm run test`, `npm run test:e2e`, `npm run test:coverage`
-- **Deterministic execution** - Leverage existing MSW configuration for reliable mocking
+- **Use existing test scripts** - Run tests via available project commands and build systems
+- **Deterministic execution** - Leverage existing configuration for reliable test execution
 
 **⚠️ Manual Verification Required**:
 
-- Verify existing test infrastructure works: `cd {{SAMPLE_PATH}} && npm run test`
+- Verify existing test infrastructure works: `cd {{DESTINATION_PATH}} && {{POST_INIT_COMMAND}}` (or check project build files)
 - Review existing test patterns before adding new test cases
 - Confirm new tests follow established conventions and file organization
 - Ensure tests actually validate the intended behavior
-- Verify mock setups match real-world scenarios using existing MSW handlers
+- - Verify mock setups match real-world scenarios using existing project tooling
 
-## Execution Commands (Use Pre-Configured Scripts)
+## Execution Commands (Use Project Configuration)
 
 ```bash
-# Sample App Testing (Primary)
-cd {{SAMPLE_PATH}}
-npm run test                # Run unit tests (uses vitest --run)
-npm run test:watch          # Development mode
-npm run test:coverage       # Coverage with HTML reports
-npm run test:e2e            # Playwright E2E tests
-npm run test:debug          # Debug test failures
+# Project Testing (Primary)
+cd {{DESTINATION_PATH}}
+# Use configured build/test commands from project setup
+{{POST_INIT_COMMAND}}       # Main build/test command if configured
+# Or check project-specific build files for test commands:
+# - package.json (Node.js): npm/yarn/pnpm test
+# - pom.xml/build.gradle (Java): mvn test / gradle test
+# - pyproject.toml/setup.py (Python): pytest / python -m pytest
+# - Cargo.toml (Rust): cargo test
+# - Makefile (C/C++): make test
+# - Gemfile (Ruby): bundle exec rspec
+# - composer.json (PHP): composer test
 
-# SDK Testing (Secondary)
-cd {{SDK_PATH}}
-pnpm run test:coverage && pnpm run prepack && pnpm run lint
+# Source Testing (Secondary)
+cd {{SOURCE_PATH}}
+# Use same approach - check project configuration for test commands
+{{POST_INIT_COMMAND}}       # Or appropriate test command based on tech stack
 ```
 
 **Human oversight**: Test existing infrastructure first, then extend with new test cases. Review all test output for reliability.

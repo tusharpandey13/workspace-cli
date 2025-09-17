@@ -11,7 +11,7 @@ describe('Worktree Validation Debug', () => {
     const project: ProjectConfig = {
       key: 'test-debug',
       name: 'Test Debug Project',
-      sdk_repo: '/absolutely/nonexistent/path',
+      repo: '/absolutely/nonexistent/path',
       sample_repo: '/another/nonexistent/path',
       github_org: 'test-org',
     };

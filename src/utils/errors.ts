@@ -8,7 +8,11 @@ export class WorkspaceError extends Error {
   public readonly code: string;
   public readonly originalError: Error | null;
 
-  constructor(message: string, code: string = 'WORKSPACE_ERROR', originalError: Error | null = null) {
+  constructor(
+    message: string,
+    code: string = 'WORKSPACE_ERROR',
+    originalError: Error | null = null,
+  ) {
     super(message);
     this.name = 'WorkspaceError';
     this.code = code;
