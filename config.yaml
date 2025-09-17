@@ -1,93 +1,50 @@
 # Workspace CLI Configuration
 
-# Define SDK projects and their repositories
+# Define projects and their repositories
 projects:
   next:
-    name: "NextJS Auth0 SDK"
-    sdk_repo: "nextjs-auth0"
-    sample_repo: "auth0-nextjs-samples"
-    github_org: "auth0"
-    sample_app_path: "Sample-01"  # Path within sample repo to the main sample app
-    env_file: "next.env.local"    # Environment file for this project
-    
-  spa:
-    name: "Auth0 SPA JS SDK"
-    sdk_repo: "~/src/auth0-spa-js"
-    sample_repo: "spajs/spatest"
-    github_org: "auth0"
-    sample_app_path: "/Users/tushar.pandey/src/spajs/spatest"
-    env_file: "spa.env.local"
+    name: "Auth0 Next.js SDK"
+    repo: "https://github.com/auth0/nextjs-auth0.git"
+    sample_repo: "https://github.com/auth0/nextjs-auth0-example.git"
+    env_file: "next.env.local"
+    post-init: "npm install"
 
-# Workflow-based prompt selection configurations
-workflows:
-  issue-fix:
-    prompts: ["orchestrator.prompt.md", "analysis.prompt.md", "fix-and-test.prompt.md", "reproduction.prompt.md", "review-changes.prompt.md"]
-    description: "Bug fixes and hotfixes requiring focused analysis and testing"
-  feature-development:
-    prompts: ["orchestrator.prompt.md", "analysis.prompt.md", "feature-analysis.prompt.md", "tests.prompt.md", "review-changes.prompt.md"]
-    description: "New feature development requiring comprehensive planning and implementation"
-  maintenance:
-    prompts: ["orchestrator.prompt.md", "analysis.prompt.md", "maintenance-analysis.prompt.md", "tests.prompt.md", "review-changes.prompt.md"]
-    description: "Maintenance tasks including dependency updates and code cleanup"
-  exploration:
-    prompts: ["orchestrator.prompt.md", "exploration-analysis.prompt.md", "universal-analysis.prompt.md"]
-    description: "Research and investigation tasks without specific implementation goals"
-  reproduction:
-    prompts: ["reproduction.prompt.md", "tests.prompt.md", "review-changes.prompt.md"]
-    description: "Issue reproduction and testing workflow with pre-configured infrastructure"
+  spa:
+    name: "Auth0 SPA SDK"
+    repo: "https://github.com/auth0/auth0-spa-js.git"
+    sample_repo: "https://github.com/auth0/auth0-spa-js-sample.git"
+    env_file: "spa.env.local"
+    post-init: "npm install"
+
+  node:
+    name: "Auth0 Node.js SDK"
+    repo: "https://github.com/auth0/node-auth0.git"
+    sample_repo: "https://github.com/auth0/auth0-nodejs-samples.git"
+    env_file: "node.env.local"
+    post-init: "npm install"
+
+  java:
+    name: "Auth0 Java SDK"
+    repo: "https://github.com/auth0/auth0-java.git"
+    # env_file: "java.env.local"
+    # post-init: "gradle build"
+
+  example-project:
+    name: "Example Project"
+    repo: "https://github.com/user/example-repo.git"
+    sample_repo: "https://github.com/user/example-samples.git"
+    env_file: "example.env.local"
+    post-init: "echo 'Project initialized successfully'"
 
 # Global configuration
 global:
-  # Base directory for all repositories and workspaces
   src_dir: "~/src"
-  
-  # Workspace directory structure
   workspace_base: "workspaces"
-  
-  # Default package manager commands
-  package_manager: "pnpm"
-  
-  # GitHub CLI wrapper command (if using custom wrapper)
-  github_cli: "gh"
-  
-  # Environment files directory (relative to config file or absolute)
   env_files_dir: "./env-files"
-
-# Repository management configuration
-repository:
-  # Always fetch latest changes before creating worktrees
-  ensure_freshness: true
-  
-  # Update main/master branches if they are behind origin
-  auto_update_default_branches: true
-  
-  # Maximum commits behind origin before warning
-  max_commits_behind_warning: 10
-
-# Testing infrastructure configuration  
-testing:
-  # Automatically set up testing infrastructure for sample apps
-  auto_setup_infrastructure: true
-  
-  # Testing tools to install and configure
-  tools:
-    vitest: true          # Unit testing framework
-    playwright: true      # E2E testing framework  
-    msw: true            # Mock Service Worker for API mocking
-    coverage: true       # Code coverage reporting
-    
-  # Test file patterns and directories
-  patterns:
-    test_dir: "tests"
-    coverage_dir: "coverage"
-    reports_dir: "test-results"
-    
-  # Skip infrastructure setup for these sample app types
-  skip_setup: []  # Empty array means setup for all types
+  dependencies: ["git", "gh"]  # Core dependencies - project-specific tools configured per project
 
 # Template configuration
 templates:
-  # Directory containing prompt templates (relative to CLI installation)
   dir: "./src/templates"
   
   # Which templates to copy for each project type

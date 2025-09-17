@@ -1,15 +1,15 @@
 # 🔍 Issue & PR Analysis for GitHub IDs: {{GITHUB_IDS}}
 
-<role>Expert NextJS-Auth0 SDK Developer following rigorous engineering practices</role>
+<role>Expert Software Developer following rigorous engineering practices</role>
 
 <workflow_phase>ANALYZE</workflow_phase>
 
 <thinking>
 Following v2.chatmode.md principles:
 1. Question the premise: Is this the real problem or a symptom?
-2. Isolate problem domain: Authentication flow, session management, or integration issue?
+2. Isolate problem domain: Application logic, data flow, or integration issue?
 3. Assume past decisions were rational: Why might existing patterns exist?
-4. Research before implementing: Check Auth0 docs, SDK patterns, security implications
+4. Research before implementing: Check documentation, established patterns, security implications
 </thinking>
 
 > ⏲ **Time-box:** Aim to finish this analysis in **≤ 30 min**.
@@ -19,8 +19,8 @@ Following v2.chatmode.md principles:
 <related_issues>{{RELATED_ISSUES_PRS}}</related_issues>
 <additional_context>{{ADDITIONAL_CONTEXT}}</additional_context>
 <workspace>
-<sdk_path>{{SDK_PATH}}</sdk_path>
-<sample_path>{{SAMPLE_PATH}}</sample_path>
+<source_path>{{SOURCE_PATH}}</source_path>
+<destination_path>{{DESTINATION_PATH}}</destination_path>
 <branch>{{BRANCH_NAME}}</branch>
 </workspace>
 </context>
@@ -30,14 +30,14 @@ Following v2.chatmode.md principles:
 <workspace_structure>
 | Area | Path |
 |------|------|
-| SDK Worktree | `{{SDK_PATH}}` (branch `{{BRANCH_NAME}}`) |
-| Sample Apps | `{{SAMPLE_PATH}}` |
+| Source Worktree | `{{SOURCE_PATH}}` (branch `{{BRANCH_NAME}}`) |
+| Project Files | `{{DESTINATION_PATH}}` |
 
-### Key SDK files
+### Key source files
 
-{{SDK_KEY_FILES}}
+{{SOURCE_KEY_FILES}}
 
-### Key Sample files
+### Key project files
 
 {{SAMPLE_KEY_FILES}}
 </workspace_structure>
@@ -51,7 +51,7 @@ Following v2.chatmode.md principles:
 - **Defensive programming** - Validate all inputs and auth states
 - **Immutable updates** - Avoid mutating objects directly
 - **Proper error propagation** - Use structured error handling
-- **TypeScript strict mode** - Leverage type safety throughout
+- **Code quality** - Leverage best practices throughout
   </domain_knowledge>
 
 <reproduction_strategy>
@@ -64,14 +64,15 @@ Following v2.chatmode.md principles:
 - Test scaffolding: `{{SAMPLE_PATH}}/tests/`
 - MSW mocking setup: `{{SAMPLE_PATH}}/tests/mocks/`
 - Reporting: `{{SAMPLE_PATH}}/test-results/`, `{{SAMPLE_PATH}}/coverage/`
-- Package scripts: `npm run test`, `npm run test:e2e`, `npm run test:coverage`
+- Package scripts: Check `package.json` for available test scripts
 
 ## First Step: Verify Testing Infrastructure
 
 ```bash
 cd {{SAMPLE_PATH}}
-npm run test                # Verify existing tests pass
-npm run test:coverage       # Check current coverage baseline
+# Run available tests for the project
+./run-tests                 # Verify existing tests pass
+# Or check project configuration for appropriate test scripts
 ```
 
 ## Issue Reproduction Strategy
@@ -81,7 +82,7 @@ npm run test:coverage       # Check current coverage baseline
 1. Navigate to `{{SAMPLE_PATH}}/tests/` directory
 2. Examine existing test files and patterns
 3. Add new test cases to reproduce the specific issue
-4. Use pre-configured MSW handlers for Auth0 API mocking
+4. Use pre-configured MSW handlers for API mocking if available
 5. Run tests with `--run` flag to avoid interactive mode
 6. Capture failures in existing reporting infrastructure
 
@@ -89,7 +90,7 @@ npm run test:coverage       # Check current coverage baseline
 
 **HUMAN OVERSIGHT REQUIRED**:
 
-- Verify pre-configured infrastructure is working (`npm run test`)
+- Verify pre-configured infrastructure is working (check available test scripts)
 - Review generated test code before execution
 - Confirm test logic matches issue description
 - Use existing test patterns and file organization
@@ -105,11 +106,11 @@ npm run test:coverage       # Check current coverage baseline
 
 ## Checklist (tick as you proceed)
 
-- [ ] **Verify testing infrastructure works** (`cd {{SAMPLE_PATH}} && npm run test`)
+- [ ] **Verify testing infrastructure works** (`cd {{DESTINATION_PATH}} && ./run-tests` or check available test scripts)
 - [ ] **Extend existing test files** to reproduce the issue
 - [ ] Confirm issue reproduced through test failures
-- [ ] Validate Auth0 configuration (.env.local, middleware usage)
-- [ ] Locate offending code in SDK based on test failures
+- [ ] Validate application configuration (.env, config files)
+- [ ] Locate problematic code in source based on test failures
 - [ ] Draft fix approach using established patterns
 - [ ] Assess backward compatibility impact
 - [ ] Identify additional test coverage needs
@@ -121,7 +122,7 @@ npm run test:coverage       # Check current coverage baseline
 2. Analyse the issue / PR details provided above
 3. **Use existing test scaffolding** to reproduce the issue
 4. Identify **root cause** based on test failures and affected components
-5. Propose a **preliminary fix strategy** following established SDK patterns
+5. Propose a **preliminary fix strategy** following established patterns
    </analysis_workflow>
 
 <deliverable>

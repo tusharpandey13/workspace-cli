@@ -87,10 +87,10 @@ Examples:
     Show all workspaces across all projects
 
   $ workspace list next
-    Show only Next.js workspaces
+    Show only Next.js Auth0 workspaces
 
   $ workspace list node
-    Show only Node.js workspaces
+    Show only Node.js Auth0 workspaces
 
 Description:
   This command displays all currently active workspaces. Each workspace

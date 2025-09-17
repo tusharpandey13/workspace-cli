@@ -57,18 +57,17 @@ Related commands:
 
         logger.info(`Project: ${projectConfig.name} (${validatedProject})`);
         logger.info(`Workspace: ${paths.workspaceDir}`);
-        logger.info(`SDK Path: ${paths.sdkPath}`);
-        logger.info(`Samples Path: ${paths.samplesPath}`);
-        logger.info(`Sample App Path: ${paths.sampleAppPath}`);
+        logger.info(`Source Path: ${paths.sourcePath}`);
+        logger.info(`Destination Path: ${paths.destinationPath || 'N/A'}`);
 
         // Show status of worktrees
-        const sdkExists = fs.existsSync(paths.sdkPath);
-        const samplesExists = fs.existsSync(paths.samplesPath);
+        const sourceExists = fs.existsSync(paths.sourcePath);
+        const destinationExists = fs.existsSync(paths.destinationPath || '');
 
         console.log('');
         logger.info('Worktree Status:');
-        console.log(`  SDK: ${sdkExists ? '✅ Ready' : '❌ Missing'}`);
-        console.log(`  Samples: ${samplesExists ? '✅ Ready' : '❌ Missing'}`);
+        console.log(`  Source: ${sourceExists ? '✅ Ready' : '❌ Missing'}`);
+        console.log(`  Destination: ${destinationExists ? '✅ Ready' : '❌ Missing'}`);
 
         // Show environment file status
         const envFilePath = configManager.getEnvFilePath(validatedProject);

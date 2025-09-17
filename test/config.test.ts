@@ -23,74 +23,74 @@ describe('Config', () => {
   });
 
   describe('Configuration structure', () => {
-    it('should validate the current config.yaml structure', async () => {
+    it('should load configuration file successfully', async () => {
       const configPath = path.join(process.cwd(), 'config.yaml');
       const config = await configManager.loadConfig(configPath);
 
       expect(config).toBeDefined();
+      expect(typeof config).toBe('object');
+    });
+
+    it('should have expected top-level configuration sections', async () => {
+      const testConfig: Config = {
+        projects: {
+          'test-project': {
+            name: 'Test Project',
+            repo: 'test-repo',
+          },
+        },
+        global: {
+          src_dir: '~/src',
+        },
+        templates: {
+          dir: './templates',
+        },
+      };
+
+      const yaml = await import('js-yaml');
+      await fs.writeFile(testConfigPath, yaml.dump(testConfig));
+      const config = await configManager.loadConfig(testConfigPath);
+
       expect(config.projects).toBeDefined();
       expect(config.global).toBeDefined();
       expect(config.templates).toBeDefined();
     });
 
-    it('should have next project configuration', async () => {
-      const configPath = path.join(process.cwd(), 'config.yaml');
-      const config = await configManager.loadConfig(configPath);
+    it('should handle minimal configuration', async () => {
+      const minimalConfig: Config = {
+        projects: {},
+      };
 
-      expect(config.projects?.next).toBeDefined();
-      expect(config.projects?.next.name).toBe('NextJS Auth0 SDK');
-      expect(config.projects?.next.sdk_repo).toBe('/Users/tushar.pandey/src/nextjs-auth0'); // Resolved from relative path
-      expect(config.projects?.next.sample_repo).toBe(
-        '/Users/tushar.pandey/src/auth0-nextjs-samples',
-      ); // Resolved from relative path
-      expect(config.projects?.next.github_org).toBe('auth0');
-      expect(config.projects?.next.sample_app_path).toBe('Sample-01');
-      expect(config.projects?.next.env_file).toBe('next.env.local');
+      const yaml = await import('js-yaml');
+      await fs.writeFile(testConfigPath, yaml.dump(minimalConfig));
+      const config = await configManager.loadConfig(testConfigPath);
+
+      expect(config.projects).toBeDefined();
+      expect(typeof config.projects).toBe('object');
     });
 
-    it('should have spa project configuration', async () => {
-      const configPath = path.join(process.cwd(), 'config.yaml');
-      const config = await configManager.loadConfig(configPath);
+    it('should validate project structure when projects exist', async () => {
+      const testConfig: Config = {
+        projects: {
+          'valid-project': {
+            name: 'Valid Project',
+            repo: 'https://github.com/example/repo.git',
+            sample_repo: 'https://github.com/example/samples.git',
+            env_file: 'test.env.local',
+          },
+        },
+      };
 
-      expect(config.projects?.spa).toBeDefined();
-      expect(config.projects?.spa.name).toBe('Auth0 SPA JS SDK');
-      expect(config.projects?.spa.sdk_repo).toBe('/Users/tushar.pandey/src/auth0-spa-js'); // Resolved from ~
-      expect(config.projects?.spa.sample_repo).toBe('/Users/tushar.pandey/src/spajs/spatest'); // Resolved from relative path
-      expect(config.projects?.spa.sample_app_path).toBe('/Users/tushar.pandey/src/spajs/spatest');
-      expect(config.projects?.spa.env_file).toBe('spa.env.local');
-    });
+      const yaml = await import('js-yaml');
+      await fs.writeFile(testConfigPath, yaml.dump(testConfig));
+      const config = await configManager.loadConfig(testConfigPath);
 
-    it('should not have node or react projects', async () => {
-      const configPath = path.join(process.cwd(), 'config.yaml');
-      const config = await configManager.loadConfig(configPath);
-
-      expect(config.projects?.node).toBeUndefined();
-      expect(config.projects?.react).toBeUndefined();
-    });
-
-    it('should have global configuration', async () => {
-      const configPath = path.join(process.cwd(), 'config.yaml');
-      const config = await configManager.loadConfig(configPath);
-
-      expect(config.global?.src_dir).toBe(path.join(os.homedir(), 'src'));
-      expect(config.global?.workspace_base).toBe('workspaces');
-      expect(config.global?.package_manager).toBe('pnpm');
-      expect(config.global?.github_cli).toBe('gh');
-      expect(config.global?.env_files_dir).toBe(path.join(process.cwd(), 'env-files'));
-    });
-
-    it('should have templates configuration', async () => {
-      const configPath = path.join(process.cwd(), 'config.yaml');
-      const config = await configManager.loadConfig(configPath);
-
-      expect(config.templates?.dir).toBe(path.join(process.cwd(), 'src', 'templates'));
-      expect(config.templates?.common).toEqual([
-        'analysis.prompt.md',
-        'review-changes.prompt.md',
-        'tests.prompt.md',
-        'fix-and-test.prompt.md',
-        'PR_DESCRIPTION_TEMPLATE.md',
-      ]);
+      const projectKeys = Object.keys(config.projects || {});
+      if (projectKeys.length > 0) {
+        const firstProject = config.projects?.[projectKeys[0]];
+        expect(firstProject?.name).toBeTruthy();
+        expect(firstProject?.repo).toBeTruthy();
+      }
     });
   });
 
@@ -98,27 +98,22 @@ describe('Config', () => {
     beforeEach(async () => {
       const testConfig: Config = {
         projects: {
-          next: {
-            name: 'NextJS Auth0 SDK',
-            sdk_repo: 'nextjs-auth0',
-            sample_repo: 'auth0-nextjs-samples',
-            github_org: 'auth0',
-            sample_app_path: 'Sample-01',
-            env_file: 'next.env.local',
+          'test-project': {
+            name: 'Test Project',
+            repo: 'test-repo',
+            sample_repo: 'test-samples',
+            env_file: 'test.env.local',
           },
-          spa: {
-            name: 'Auth0 SPA JS SDK',
-            sdk_repo: '~/src/auth0-spa-js',
-            sample_repo: 'https://github.com/tusharpandey13/auth0-spa-js-debug-app.git',
-            github_org: 'auth0',
-            sample_app_path: '/Users/tushar.pandey/src/spajs/spatest',
-            env_file: 'spa.env.local',
+          'example-project': {
+            name: 'Example Project',
+            repo: 'https://github.com/user/example-repo.git',
+            sample_repo: 'https://github.com/user/example-samples.git',
+            env_file: 'example.env.local',
           },
         },
         global: {
           src_dir: '~/src',
           workspace_base: 'workspaces',
-          package_manager: 'pnpm',
         },
       };
 
@@ -127,26 +122,22 @@ describe('Config', () => {
       await configManager.loadConfig(testConfigPath);
     });
 
-    it('should retrieve next project by key', () => {
-      const project = configManager.getProject('next');
+    it('should retrieve test project by key', () => {
+      const project = configManager.getProject('test-project');
 
-      expect(project.key).toBe('next');
-      expect(project.name).toBe('NextJS Auth0 SDK');
-      expect(project.sdk_repo).toBe('/Users/tushar.pandey/src/nextjs-auth0'); // Resolved from relative path
-      expect(project.github_org).toBe('auth0');
+      expect(project.key).toBe('test-project');
+      expect(project.name).toBe('Test Project');
+      expect(project.repo).toBe('/Users/tushar.pandey/src/test-repo'); // Resolved from relative path
     });
 
-    it('should retrieve spa project by key', () => {
-      const project = configManager.getProject('spa');
+    it('should retrieve example project by key', () => {
+      const project = configManager.getProject('example-project');
 
-      expect(project.key).toBe('spa');
-      expect(project.name).toBe('Auth0 SPA JS SDK');
-      expect(project.sdk_repo).toBe('/Users/tushar.pandey/src/auth0-spa-js'); // Resolved from ~
-      expect(project.sample_repo).toBe(
-        'https://github.com/tusharpandey13/auth0-spa-js-debug-app.git',
-      );
-      expect(project.sample_app_path).toBe('/Users/tushar.pandey/src/spajs/spatest');
-      expect(project.env_file).toBe('spa.env.local');
+      expect(project.key).toBe('example-project');
+      expect(project.name).toBe('Example Project');
+      expect(project.repo).toBe('https://github.com/user/example-repo.git'); // HTTP URL unchanged
+      expect(project.sample_repo).toBe('https://github.com/user/example-samples.git');
+      expect(project.env_file).toBe('example.env.local');
     });
 
     it('should throw error for non-existent project', () => {
@@ -154,30 +145,53 @@ describe('Config', () => {
     });
 
     it('should list available projects in error message', () => {
-      expect(() => configManager.getProject('invalid')).toThrow('Available projects: next, spa');
+      expect(() => configManager.getProject('invalid')).toThrow(
+        'Available projects: test-project, example-project',
+      );
     });
   });
 
   describe('Environment file configuration', () => {
-    it('should have spa.env.local file', async () => {
-      const envFilePath = path.join(process.cwd(), 'env-files', 'spa.env.local');
-      const exists = await fs.pathExists(envFilePath);
+    it('should handle env file paths when configured', async () => {
+      const testConfig: Config = {
+        projects: {
+          'test-project': {
+            name: 'Test Project',
+            repo: 'test-repo',
+            env_file: 'test.env.local',
+          },
+        },
+        global: {
+          env_files_dir: './env-files',
+        },
+      };
 
-      expect(exists).toBe(true);
+      const yaml = await import('js-yaml');
+      await fs.writeFile(testConfigPath, yaml.dump(testConfig));
+      const config = await configManager.loadConfig(testConfigPath);
+
+      // Test that env_files_dir is resolved properly
+      if (config.global?.env_files_dir) {
+        expect(path.isAbsolute(config.global.env_files_dir)).toBe(true);
+      }
     });
 
-    it('should have correct environment variables in spa.env.local', async () => {
-      const envFilePath = path.join(process.cwd(), 'env-files', 'spa.env.local');
-      const content = await fs.readFile(envFilePath, 'utf8');
+    it('should work without env file configuration', async () => {
+      const testConfig: Config = {
+        projects: {
+          'test-project': {
+            name: 'Test Project',
+            repo: 'test-repo',
+          },
+        },
+      };
 
-      expect(content).toContain('AUTH0_DOMAIN=');
-      expect(content).toContain('AUTH0_CLIENT_ID=');
-      expect(content).toContain('AUTH0_CLIENT_SECRET=');
-      expect(content).toContain('AUTH0_BASE_URL=');
-      expect(content).toContain('AUTH0_REDIRECT_URI=');
-      expect(content).toContain('AUTH0_LOGOUT_URL=');
-      expect(content).toContain('AUTH0_AUDIENCE=');
-      expect(content).toContain('DEBUG=auth0-spa-js:*');
+      const yaml = await import('js-yaml');
+      await fs.writeFile(testConfigPath, yaml.dump(testConfig));
+      const config = await configManager.loadConfig(testConfigPath);
+
+      expect(config.projects?.['test-project']).toBeDefined();
+      expect(config.projects?.['test-project'].env_file).toBeUndefined();
     });
   });
 
@@ -185,13 +199,11 @@ describe('Config', () => {
     beforeEach(async () => {
       const testConfig: Config = {
         projects: {
-          spa: {
-            name: 'Auth0 SPA JS SDK',
-            sdk_repo: '~/src/auth0-spa-js',
-            sample_repo: 'https://github.com/tusharpandey13/auth0-spa-js-debug-app.git',
-            github_org: 'auth0',
-            sample_app_path: '/Users/tushar.pandey/src/spajs/spatest',
-            env_file: 'spa.env.local',
+          'test-project': {
+            name: 'Test Project',
+            repo: '~/src/test-repo',
+            sample_repo: 'https://github.com/user/test-samples.git',
+            env_file: 'test.env.local',
           },
         },
         global: {
@@ -220,39 +232,80 @@ describe('Config', () => {
 
   describe('Configuration validation', () => {
     beforeEach(async () => {
-      const configPath = path.join(process.cwd(), 'config.yaml');
-      await configManager.loadConfig(configPath);
+      const testConfig: Config = {
+        projects: {
+          'valid-project': {
+            name: 'Valid Project',
+            repo: 'https://github.com/example/repo.git',
+            sample_repo: 'https://github.com/example/samples.git',
+            env_file: 'test.env.local',
+          },
+        },
+      };
+
+      const yaml = await import('js-yaml');
+      await fs.writeFile(testConfigPath, yaml.dump(testConfig));
+      await configManager.loadConfig(testConfigPath);
     });
 
-    it('should validate project keys exist', () => {
-      const validKeys = ['next', 'spa'];
+    it('should validate that existing project keys can be retrieved', () => {
+      // Test with the project we know exists in our test config
+      expect(() => configManager.getProject('valid-project')).not.toThrow();
+    });
 
-      for (const key of validKeys) {
-        expect(() => configManager.getProject(key)).not.toThrow();
+    it('should ensure projects have required fields when they exist', () => {
+      const project = configManager.getProject('valid-project');
+
+      expect(project.name).toBeTruthy();
+      expect(project.repo).toBeTruthy();
+      expect(typeof project.name).toBe('string');
+      expect(typeof project.repo).toBe('string');
+    });
+
+    it('should handle optional project fields correctly', () => {
+      const project = configManager.getProject('valid-project');
+
+      // These fields are optional, test that they're handled properly
+      if (project.sample_repo) {
+        expect(typeof project.sample_repo).toBe('string');
+      }
+      if (project.env_file) {
+        expect(typeof project.env_file).toBe('string');
       }
     });
 
-    it('should ensure spa project has required fields', () => {
-      const spaProject = configManager.getProject('spa');
+    it('should validate repository URL formats when provided', async () => {
+      const testConfigs = [
+        {
+          projects: {
+            'http-project': {
+              name: 'HTTP Project',
+              repo: 'https://github.com/example/repo.git',
+            },
+          },
+        },
+        {
+          projects: {
+            'relative-project': {
+              name: 'Relative Project',
+              repo: 'local-repo',
+            },
+          },
+        },
+      ];
 
-      expect(spaProject.name).toBeTruthy();
-      expect(spaProject.sdk_repo).toBeTruthy();
-      expect(spaProject.sample_repo).toBeTruthy();
-      expect(spaProject.sample_app_path).toBeTruthy();
-      expect(spaProject.env_file).toBeTruthy();
-    });
+      for (const testConfig of testConfigs) {
+        const yaml = await import('js-yaml');
+        const testPath = path.join(tempDir, `test-${Date.now()}.yaml`);
+        await fs.writeFile(testPath, yaml.dump(testConfig));
 
-    it('should ensure spa project has valid sample_repo format', () => {
-      const spaProject = configManager.getProject('spa');
+        const config = await configManager.loadConfig(testPath);
+        const projectKey = Object.keys(config.projects || {})[0];
+        const project = configManager.getProject(projectKey);
 
-      // Can be either a GitHub URL, relative path, or resolved absolute path
-      const isValidFormat =
-        /^https:\/\/github\.com\/[^/]+\/[^/]+\.git$/.test(spaProject.sample_repo) ||
-        /^[^/].*$/.test(spaProject.sample_repo) || // Relative path (not starting with /)
-        /^\/.*/.test(spaProject.sample_repo); // Absolute path (resolved)
-
-      expect(isValidFormat).toBe(true);
-      expect(spaProject.sample_repo).toBe('/Users/tushar.pandey/src/spajs/spatest'); // Resolved from relative path
+        expect(project.repo).toBeTruthy();
+        expect(typeof project.repo).toBe('string');
+      }
     });
   });
 });

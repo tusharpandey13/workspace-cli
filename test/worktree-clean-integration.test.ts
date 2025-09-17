@@ -10,8 +10,8 @@ import type { ProjectConfig, WorkspacePaths } from '../src/types/index.js';
 describe('Worktree and Clean Operations Integration', () => {
   let manager: DummyRepoManager;
   let testDir: string;
-  let sdkRepoPath: string;
-  let sampleRepoPath: string;
+  let sourceRepoPath: string;
+  let destinationRepoPath: string;
   let workspaceDir: string;
 
   beforeEach(async () => {
@@ -21,14 +21,14 @@ describe('Worktree and Clean Operations Integration', () => {
     manager = new DummyRepoManager(testDir);
 
     // Create dummy SDK and sample repositories
-    sdkRepoPath = await manager.createDummyRepo({
+    sourceRepoPath = await manager.createDummyRepo({
       name: 'test-sdk',
       type: 'sdk',
       branches: ['main', 'develop'],
       hasRemote: true,
     });
 
-    sampleRepoPath = await manager.createDummyRepo({
+    destinationRepoPath = await manager.createDummyRepo({
       name: 'test-samples',
       type: 'sample',
       branches: ['main'],
@@ -49,21 +49,18 @@ describe('Worktree and Clean Operations Integration', () => {
   const createMockProjectConfig = (): ProjectConfig => ({
     key: 'test',
     name: 'Test Project',
-    sdk_repo: sdkRepoPath,
-    sample_repo: sampleRepoPath,
-    github_org: 'test-org',
-    sample_app_path: 'sample-app',
+    repo: sourceRepoPath,
+    sample_repo: destinationRepoPath,
   });
 
   const createMockWorkspacePaths = (workspaceName: string): WorkspacePaths => ({
     srcDir: testDir,
     baseDir: workspaceDir,
     workspaceDir: path.join(workspaceDir, workspaceName),
-    sdkPath: path.join(workspaceDir, workspaceName, 'sdk'),
-    samplesPath: path.join(workspaceDir, workspaceName, 'samples'),
-    sampleAppPath: path.join(workspaceDir, workspaceName, 'samples', 'sample-app'),
-    sdkRepoPath,
-    sampleRepoPath,
+    sourcePath: path.join(workspaceDir, workspaceName, 'sdk'),
+    destinationPath: path.join(workspaceDir, workspaceName, 'samples'),
+    sourceRepoPath,
+    destinationRepoPath,
   });
 
   test('should successfully set up worktrees with valid repositories', async () => {
@@ -74,15 +71,15 @@ describe('Worktree and Clean Operations Integration', () => {
     await setupWorktrees(project, paths, branchName, false);
 
     // Verify SDK worktree was created
-    expect(fs.existsSync(paths.sdkPath)).toBe(true);
-    expect(fs.existsSync(path.join(paths.sdkPath, '.git'))).toBe(true);
+    expect(fs.existsSync(paths.sourcePath)).toBe(true);
+    expect(fs.existsSync(path.join(paths.sourcePath, '.git'))).toBe(true);
 
     // Verify samples worktree was created
-    expect(fs.existsSync(paths.samplesPath)).toBe(true);
-    expect(fs.existsSync(path.join(paths.samplesPath, '.git'))).toBe(true);
+    expect(fs.existsSync(paths.destinationPath!)).toBe(true);
+    expect(fs.existsSync(path.join(paths.destinationPath!, '.git'))).toBe(true);
 
     // Verify branch was created in SDK worktree
-    const { stdout: branchOutput } = await execa('git', ['branch'], { cwd: paths.sdkPath });
+    const { stdout: branchOutput } = await execa('git', ['branch'], { cwd: paths.sourcePath });
     expect(branchOutput).toContain(branchName);
   });
 
@@ -92,16 +89,16 @@ describe('Worktree and Clean Operations Integration', () => {
     const branchName = 'feature/existing-test';
 
     // Create pre-existing directories
-    await fs.ensureDir(paths.sdkPath);
-    await fs.ensureDir(paths.samplesPath);
-    await fs.writeFile(path.join(paths.sdkPath, 'dummy.txt'), 'existing content');
+    await fs.ensureDir(paths.sourcePath);
+    await fs.ensureDir(paths.destinationPath!);
+    await fs.writeFile(path.join(paths.sourcePath, 'dummy.txt'), 'existing content');
 
     // Should not fail due to existing directories
     await setupWorktrees(project, paths, branchName, false);
 
     // Verify worktrees were set up despite existing directories
-    expect(fs.existsSync(path.join(paths.sdkPath, '.git'))).toBe(true);
-    expect(fs.existsSync(path.join(paths.samplesPath, '.git'))).toBe(true);
+    expect(fs.existsSync(path.join(paths.sourcePath, '.git'))).toBe(true);
+    expect(fs.existsSync(path.join(paths.destinationPath!, '.git'))).toBe(true);
   });
 
   test('should handle repository without remote origin', async () => {
@@ -115,9 +112,8 @@ describe('Worktree and Clean Operations Integration', () => {
     const project: ProjectConfig = {
       key: 'test-local',
       name: 'Test Local Project',
-      sdk_repo: localRepoPath,
-      sample_repo: sampleRepoPath,
-      github_org: 'test-org',
+      repo: localRepoPath,
+      sample_repo: destinationRepoPath,
     };
 
     const paths = createMockWorkspacePaths('test-local');
@@ -126,17 +122,16 @@ describe('Worktree and Clean Operations Integration', () => {
     // Should handle the lack of remote gracefully
     await setupWorktrees(project, paths, branchName, false);
 
-    expect(fs.existsSync(paths.sdkPath)).toBe(true);
-    expect(fs.existsSync(path.join(paths.sdkPath, '.git'))).toBe(true);
+    expect(fs.existsSync(paths.sourcePath)).toBe(true);
+    expect(fs.existsSync(path.join(paths.sourcePath, '.git'))).toBe(true);
   });
 
   test('should fail gracefully with invalid repository paths', async () => {
     const project: ProjectConfig = {
       key: 'test-invalid',
       name: 'Test Invalid Project',
-      sdk_repo: '/nonexistent/path',
+      repo: '/nonexistent/path',
       sample_repo: '/another/nonexistent/path',
-      github_org: 'test-org',
     };
 
     // Use invalid paths in the WorkspacePaths as well
@@ -144,11 +139,10 @@ describe('Worktree and Clean Operations Integration', () => {
       srcDir: testDir,
       baseDir: workspaceDir,
       workspaceDir: path.join(workspaceDir, 'test-invalid'),
-      sdkPath: path.join(workspaceDir, 'test-invalid', 'sdk'),
-      samplesPath: path.join(workspaceDir, 'test-invalid', 'samples'),
-      sampleAppPath: path.join(workspaceDir, 'test-invalid', 'samples', 'app'),
-      sdkRepoPath: '/nonexistent/path', // This is what gets validated
-      sampleRepoPath: '/another/nonexistent/path', // This is what gets validated
+      sourcePath: path.join(workspaceDir, 'test-invalid', 'sdk'),
+      destinationPath: path.join(workspaceDir, 'test-invalid', 'samples'),
+      sourceRepoPath: '/nonexistent/path', // This is what gets validated
+      destinationRepoPath: '/another/nonexistent/path', // This is what gets validated
     };
 
     const branchName = 'feature/invalid-test';
@@ -167,20 +161,22 @@ describe('Worktree and Clean Operations Integration', () => {
     await setupWorktrees(project, paths, branchName, false);
 
     // Verify they exist
-    expect(fs.existsSync(paths.sdkPath)).toBe(true);
-    expect(fs.existsSync(paths.samplesPath)).toBe(true);
+    expect(fs.existsSync(paths.sourcePath)).toBe(true);
+    expect(fs.existsSync(paths.destinationPath!)).toBe(true);
 
     // Simulate clean command behavior
     try {
-      await execa('git', ['worktree', 'remove', paths.sdkPath, '--force'], { cwd: sdkRepoPath });
+      await execa('git', ['worktree', 'remove', paths.sourcePath, '--force'], {
+        cwd: sourceRepoPath,
+      });
     } catch (error) {
       // This should succeed, but if it fails, log the error for debugging
       console.error('SDK worktree removal failed:', error);
     }
 
     try {
-      await execa('git', ['worktree', 'remove', paths.samplesPath, '--force'], {
-        cwd: sampleRepoPath,
+      await execa('git', ['worktree', 'remove', paths.destinationPath!, '--force'], {
+        cwd: destinationRepoPath,
       });
     } catch (error) {
       // This should succeed, but if it fails, log the error for debugging
@@ -201,11 +197,11 @@ describe('Worktree and Clean Operations Integration', () => {
 
     await setupWorktrees(project, paths, branchName, false);
 
-    expect(fs.existsSync(paths.sdkPath)).toBe(true);
-    expect(fs.existsSync(paths.samplesPath)).toBe(true);
+    expect(fs.existsSync(paths.sourcePath)).toBe(true);
+    expect(fs.existsSync(paths.destinationPath!)).toBe(true);
 
     // Verify branch name is correctly created
-    const { stdout: branchOutput } = await execa('git', ['branch'], { cwd: paths.sdkPath });
+    const { stdout: branchOutput } = await execa('git', ['branch'], { cwd: paths.sourcePath });
     expect(branchOutput).toContain(branchName);
   });
 
@@ -223,20 +219,18 @@ describe('Worktree and Clean Operations Integration', () => {
     const project: ProjectConfig = {
       key: 'test-corrupted',
       name: 'Test Corrupted Project',
-      sdk_repo: corruptedRepoPath,
-      sample_repo: sampleRepoPath,
-      github_org: 'test-org',
+      repo: corruptedRepoPath,
+      sample_repo: destinationRepoPath,
     };
 
     const paths: WorkspacePaths = {
       srcDir: testDir,
       baseDir: workspaceDir,
       workspaceDir: path.join(workspaceDir, 'test-corrupted'),
-      sdkPath: path.join(workspaceDir, 'test-corrupted', 'sdk'),
-      samplesPath: path.join(workspaceDir, 'test-corrupted', 'samples'),
-      sampleAppPath: path.join(workspaceDir, 'test-corrupted', 'samples', 'app'),
-      sdkRepoPath: corruptedRepoPath, // Point to the corrupted repo
-      sampleRepoPath,
+      sourcePath: path.join(workspaceDir, 'test-corrupted', 'sdk'),
+      destinationPath: path.join(workspaceDir, 'test-corrupted', 'samples'),
+      sourceRepoPath: corruptedRepoPath, // Point to the corrupted repo
+      destinationRepoPath,
     };
 
     const branchName = 'feature/corrupted-test';
@@ -254,13 +248,13 @@ describe('Worktree and Clean Operations Integration', () => {
     await setupWorktrees(project, paths, branchName, false);
 
     // Create a stale worktree by removing the directory but not the git worktree entry
-    await fs.remove(paths.sdkPath);
+    await fs.remove(paths.sourcePath);
 
     // Should handle stale worktree gracefully when setting up again
     const newPaths = createMockWorkspacePaths('test-prune-new');
     await setupWorktrees(project, newPaths, 'feature/prune-test-2', false);
 
-    expect(fs.existsSync(newPaths.sdkPath)).toBe(true);
-    expect(fs.existsSync(newPaths.samplesPath)).toBe(true);
+    expect(fs.existsSync(newPaths.sourcePath)).toBe(true);
+    expect(fs.existsSync(newPaths.destinationPath)).toBe(true);
   });
 });

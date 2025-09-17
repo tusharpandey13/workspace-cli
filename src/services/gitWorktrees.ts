@@ -3,7 +3,6 @@ import path from 'path';
 import { logger } from '../utils/logger.js';
 import { executeCommand, fileOps } from '../utils/init-helpers.js';
 import type { ProjectConfig, WorkspacePaths } from '../types/index.js';
-import { SampleAppInfrastructureManager } from './sampleAppInfra.js';
 import { ConfigManager } from '../utils/config.js';
 
 /**
@@ -209,18 +208,27 @@ export async function setupWorktrees(
 
   // Task 6.5: Validate repository state before proceeding
   logger.verbose('🔍 Validating repository state...');
-  const sdkValid = await validateRepository(paths.sdkRepoPath, 'SDK', isDryRun);
-  const sampleValid = await validateRepository(paths.sampleRepoPath, 'Sample', isDryRun);
+  const repoValid = await validateRepository(paths.sourceRepoPath, 'Main Repository', isDryRun);
+  let sampleValid = true;
+  if (paths.destinationRepoPath) {
+    sampleValid = await validateRepository(
+      paths.destinationRepoPath,
+      'Sample Repository',
+      isDryRun,
+    );
+  }
 
-  if (!sdkValid || !sampleValid) {
+  if (!repoValid || (paths.destinationRepoPath && !sampleValid)) {
     throw new Error('Repository validation failed - cannot proceed with worktree setup');
   }
 
   // Task 6.1 & 6.2: Ensure repositories are fresh before creating worktrees (configurable)
   if (config.repository?.ensure_freshness !== false) {
     logger.verbose('🔄 Ensuring repository freshness...');
-    await ensureRepositoryFreshness(paths.sdkRepoPath, isDryRun);
-    await ensureRepositoryFreshness(paths.sampleRepoPath, isDryRun);
+    await ensureRepositoryFreshness(paths.sourceRepoPath, isDryRun);
+    if (paths.destinationRepoPath) {
+      await ensureRepositoryFreshness(paths.destinationRepoPath, isDryRun);
+    }
   } else {
     logger.verbose('⏭️  Skipping repository freshness check (disabled in config)');
   }
@@ -277,33 +285,23 @@ export async function setupWorktrees(
     }
   };
 
-  logger.verbose('🔀 Setting up SDK worktree...');
-  await addWorktree(paths.sdkRepoPath, paths.sdkPath, branchName, 'main');
+  logger.verbose('🔀 Setting up source worktree...');
+  const defaultBranch = await getDefaultBranch(paths.sourceRepoPath, isDryRun);
+  await addWorktree(paths.sourceRepoPath, paths.sourcePath, branchName, defaultBranch);
 
-  logger.verbose('🔀 Setting up samples worktree...');
-  const defaultBranch = await getDefaultBranch(paths.sampleRepoPath, isDryRun);
-  await addWorktree(paths.sampleRepoPath, paths.samplesPath, defaultBranch, defaultBranch);
-
-  // Task 6.4: Set up testing infrastructure for sample apps (enhanced integration)
-  if (project.sample_app_path && config.testing?.auto_setup_infrastructure !== false) {
-    logger.verbose('🧪 Setting up testing infrastructure for sample app...');
-    try {
-      const sampleFullPath = paths.samplesPath + '/' + project.sample_app_path;
-      const infraManager = new SampleAppInfrastructureManager(sampleFullPath, isDryRun);
-
-      await infraManager.setupTestingInfrastructure();
-      await infraManager.setupReportingInfrastructure();
-
-      logger.success(`Testing infrastructure configured for ${project.key} sample app`);
-    } catch (error) {
-      logger.warn(`Could not set up testing infrastructure: ${error}`);
-      // Don't fail the entire operation if infrastructure setup fails
-    }
-  } else if (project.sample_app_path) {
-    logger.verbose('⏭️  Skipping testing infrastructure setup (disabled in config)');
-  } else {
-    logger.verbose('ℹ️  No sample app path configured - skipping testing infrastructure setup');
+  if (paths.destinationRepoPath && paths.destinationPath) {
+    logger.verbose('🔀 Setting up destination worktree...');
+    const defaultBranch = await getDefaultBranch(paths.destinationRepoPath, isDryRun);
+    await addWorktree(
+      paths.destinationRepoPath,
+      paths.destinationPath,
+      defaultBranch,
+      defaultBranch,
+    );
   }
 
-  logger.success('Git worktrees ready with fresh repositories and testing infrastructure');
+  // Task 6.4: Remove testing infrastructure setup (no longer JS/TS specific)
+  logger.verbose('⏭️  Testing infrastructure setup not needed for stack-agnostic CLI');
+
+  logger.success('Git worktrees ready with fresh repositories');
 }

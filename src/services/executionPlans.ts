@@ -253,7 +253,7 @@ export class ExecutionPlanService {
       {
         id: 'run-unit-tests',
         name: 'Run Unit Tests',
-        description: 'Execute unit tests with vitest --run',
+        description: 'Execute unit tests with configured test runner',
         phase: 'VALIDATE',
         dependencies: ['implement-core-changes'],
         artifacts: ['test-results.json', 'coverage-report.html'],
@@ -453,7 +453,7 @@ export class ExecutionPlanService {
         name: 'Build Success',
         description: 'Project builds without errors',
         type: 'command-success',
-        target: 'npm run build',
+        target: 'build', // Use configured post-init or project-specific build command
         isRequired: true,
       },
       {
@@ -461,7 +461,7 @@ export class ExecutionPlanService {
         name: 'All Tests Pass',
         description: 'All unit and integration tests pass',
         type: 'command-success',
-        target: 'npm run test',
+        target: 'test', // Use configured test command based on project type
         isRequired: true,
       },
       {

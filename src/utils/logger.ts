@@ -8,10 +8,10 @@ export const LogLevel = {
   WARN: 1,
   INFO: 2,
   DEBUG: 3,
-  VERBOSE: 4
+  VERBOSE: 4,
 } as const;
 
-export type LogLevelType = typeof LogLevel[keyof typeof LogLevel];
+export type LogLevelType = (typeof LogLevel)[keyof typeof LogLevel];
 
 /**
  * Enhanced logger with structured output

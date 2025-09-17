@@ -1,15 +1,15 @@
 # 🚀 Feature Development Analysis for GitHub IDs: {{GITHUB_IDS}}
 
-<role>Expert NextJS-Auth0 SDK Architect analyzing feature requirements</role>
+<role>Expert Software Architect analyzing feature requirements</role>
 
 <workflow_phase>ANALYZE</workflow_phase>
 
 <thinking>
 Following v2.chatmode.md analysis principles:
 1. Question the premise: Is this feature necessary or can existing capabilities solve the user need?
-2. Isolate problem domain: Authentication, user management, security, or developer experience?
+2. Isolate problem domain: Business logic, data management, security, or developer experience?
 3. Assume past decisions were rational: Why might current patterns exist?
-4. Research before designing: Check Auth0 APIs, NextJS patterns, security implications
+4. Research before designing: Check documentation, established patterns, security implications
 </thinking>
 
 <context>
@@ -18,8 +18,8 @@ Following v2.chatmode.md analysis principles:
 <target_components>{{targetComponents}}</target_components>
 <git_branch>{{gitBranch}}</git_branch>
 <project_type>{{projectType}}</project_type>
-<sample_path>{{SAMPLE_PATH}}</sample_path>
-<sdk_path>{{SDK_PATH}}</sdk_path>
+<destination_path>{{DESTINATION_PATH}}</destination_path>
+<source_path>{{SOURCE_PATH}}</source_path>
 </context>
 
 ## Infrastructure Validation
@@ -27,15 +27,16 @@ Following v2.chatmode.md analysis principles:
 **Before analyzing feature requirements, verify testing infrastructure:**
 
 ```bash
-# Verify sample app testing infrastructure works
-cd {{SAMPLE_PATH}}
-npm run test                # Should pass baseline tests
-npm run test:coverage       # Verify coverage reporting
+# Verify project testing infrastructure works
+cd {{DESTINATION_PATH}}
+./run-tests                 # Should pass baseline tests
+# Check project configuration for available test scripts
 
-# Verify SDK build and test infrastructure
-cd {{SDK_PATH}}
-pnpm run test              # Should pass existing tests
-pnpm run build             # Should build successfully
+# Verify source build and test infrastructure
+cd {{SOURCE_PATH}}
+# Check project configuration for test and build scripts
+./run-tests                # Should pass existing tests
+./build                    # Should build successfully (if available)
 ```
 
 **If infrastructure issues exist, note them for resolution before feature implementation.**

@@ -1,13 +1,11 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { validateBranchName, validateGitHubIds, validateProjectKey } from '../utils/validation.js';
+import { validateBranchName, validateGitHubIds } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
 import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { executeCommand, fileOps, createTestFileName } from '../utils/init-helpers.js';
 import { ContextDataFetcher } from '../services/contextData.js';
-import { PromptSelector } from '../services/promptSelector.js';
-import { ExecutionPlanService } from '../services/executionPlans.js';
 import readline from 'node:readline/promises';
 import { setupWorktrees } from '../services/gitWorktrees.js';
 import { stdin as input, stdout as output } from 'node:process';
@@ -38,19 +36,19 @@ interface AnalysisOnlyOptions {
 }
 
 /**
- * Parse command arguments for new project-based structure
+ * Parse command arguments for simplified repo-name based structure
+ * New signature: workspace init <repo_name> <...github_ids> prefix/branch_name
  */
-function parseProjectInitArguments(args: string[]): { issueIds: number[]; branchName: string } {
-  let issueIds: string[] = [];
-  let branchName: string;
-
-  if (args.length === 1) {
-    issueIds = [];
-    branchName = args[0];
-  } else {
-    issueIds = args.slice(0, -1);
-    branchName = args[args.length - 1];
+function parseRepoInitArguments(args: string[]): { issueIds: number[]; branchName: string } {
+  if (args.length < 1) {
+    throw new Error('Branch name is required as the last argument');
   }
+
+  // Last argument is always the branch name
+  const branchName = args[args.length - 1];
+
+  // Everything in between (if any) are GitHub IDs
+  const issueIds = args.slice(0, -1);
 
   const validatedBranchName = validateBranchName(branchName);
   const validatedIssueIds = validateGitHubIds(issueIds);
@@ -86,18 +84,24 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   // Fetch GitHub data
   logger.step(4, 6, 'Fetching GitHub data...');
   const contextFetcher = new ContextDataFetcher();
-  // Extract just the repo name from the SDK repo path, similar to pr.ts
-  const sdkRepoName = path.basename(project.sdk_repo);
-  const githubData = await contextFetcher.fetchGitHubData(
-    issueIds,
-    project.github_org,
-    sdkRepoName,
-    isDryRun,
-  );
 
-  // Setup environment and dependencies
-  logger.step(5, 6, 'Setting up environment and dependencies...');
-  await setupEnvironmentAndDependencies(project, projectKey, paths, isDryRun);
+  // Try to extract GitHub org and repo from repo URL if it's a GitHub URL
+  let githubOrg = 'unknown';
+  let repoName = path.basename(project.repo).replace(/\.git$/, ''); // Remove .git suffix
+
+  if (project.repo.includes('github.com')) {
+    const match = project.repo.match(/github\.com[/:]([^/]+)\/([^/.]+)\.git/);
+    if (match) {
+      githubOrg = match[1];
+      repoName = match[2];
+    }
+  }
+
+  const githubData = await contextFetcher.fetchGitHubData(issueIds, githubOrg, repoName, isDryRun);
+
+  // Execute optional post-init command
+  logger.step(5, 6, 'Running post-init setup...');
+  await executePostInitCommand(project, paths, isDryRun);
 
   // Generate templates and documentation
   logger.step(6, 6, 'Generating templates and documentation...');
@@ -149,14 +153,20 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
   // Fetch GitHub data
   logger.step(3, 4, 'Fetching GitHub data...');
   const contextFetcher = new ContextDataFetcher();
-  // Extract just the repo name from the SDK repo path, similar to the main initialization
-  const sdkRepoName = path.basename(project.sdk_repo);
-  const githubData = await contextFetcher.fetchGitHubData(
-    issueIds,
-    project.github_org,
-    sdkRepoName,
-    isDryRun,
-  );
+
+  // Try to extract GitHub org and repo from repo URL if it's a GitHub URL
+  let githubOrg = 'unknown';
+  let repoName = path.basename(project.repo).replace(/\.git$/, ''); // Remove .git suffix
+
+  if (project.repo.includes('github.com')) {
+    const match = project.repo.match(/github\.com[/:]([^/]+)\/([^/.]+)\.git/);
+    if (match) {
+      githubOrg = match[1];
+      repoName = match[2];
+    }
+  }
+
+  const githubData = await contextFetcher.fetchGitHubData(issueIds, githubOrg, repoName, isDryRun);
 
   // Generate templates and documentation (using mock paths for key files)
   logger.step(4, 4, 'Generating analysis templates...');
@@ -255,83 +265,56 @@ async function collectAdditionalContext(isSilent: boolean = false): Promise<stri
 }
 
 /**
- * Setup environment and install dependencies
+ * Execute optional post-init command if configured
  */
-async function setupEnvironmentAndDependencies(
+async function executePostInitCommand(
   project: ProjectConfig,
-  projectKey: string,
   paths: WorkspacePaths,
   isDryRun: boolean,
 ): Promise<void> {
-  // Copy environment file
-  const envFilePath = configManager.getEnvFilePath(projectKey);
-  if (!isDryRun && envFilePath && fs.existsSync(envFilePath)) {
-    logger.verbose(`🔑 Copying environment variables from ${envFilePath}...`);
-    await fileOps.copyFile(
-      envFilePath,
-      path.join(paths.sampleAppPath, '.env.local'),
-      `environment file from ${envFilePath} to sample app`,
-      isDryRun,
-    );
+  if (!project['post-init']) {
+    logger.verbose('No post-init command configured, skipping...');
+    return;
   }
 
-  const global = configManager.getGlobal();
-  const packageManager = global.package_manager || 'pnpm';
+  // Copy environment file if configured
+  if (project.env_file) {
+    const envFilePath = configManager.getEnvFilePath(project.key);
+    const targetPath = paths.destinationPath
+      ? path.join(paths.destinationPath, '.env.local')
+      : null;
 
-  // Install SDK dependencies
-  logger.verbose(`📦 Installing SDK dependencies (${packageManager})...`);
-  await executeCommand(
-    packageManager,
-    ['install', '--prefer-offline', '--silent'],
-    { cwd: paths.sdkPath, stdio: 'pipe' },
-    'install SDK dependencies',
-    isDryRun,
-  );
-
-  // Try to publish SDK to yalc (optional step - don't fail if it doesn't work)
-  logger.verbose('📤 Publishing SDK to yalc...');
-  try {
-    await executeCommand(
-      packageManager,
-      ['yalc', 'publish', '--silent'],
-      { cwd: paths.sdkPath, stdio: 'pipe' },
-      'publish SDK to yalc',
-      isDryRun,
-    );
-  } catch (error) {
-    logger.warn(`⚠️  Failed to publish SDK to yalc: ${(error as Error).message}`);
-    logger.warn(
-      '   This is optional - you can manually build and publish the SDK later if needed.',
-    );
+    if (!isDryRun && envFilePath && fs.existsSync(envFilePath) && targetPath) {
+      logger.verbose(`🔑 Copying environment variables from ${envFilePath}...`);
+      await fileOps.copyFile(
+        envFilePath,
+        targetPath,
+        `environment file from ${envFilePath} to ${targetPath}`,
+        isDryRun,
+      );
+    }
   }
 
-  // Install sample app dependencies
-  logger.verbose(`📦 Installing sample app dependencies (${packageManager})...`);
-  await executeCommand(
-    packageManager,
-    ['install', '--prefer-offline', '--silent'],
-    { cwd: paths.sampleAppPath, stdio: 'pipe' },
-    'install sample app dependencies',
-    isDryRun,
-  );
+  logger.verbose(`🚀 Running post-init command: ${project['post-init']}`);
 
-  // Try to link SDK into sample app via yalc (optional step - only works if publish succeeded)
-  logger.verbose('🔗 Linking SDK into sample app via yalc...');
-  const packageName = `@auth0/${path.basename(project.sdk_repo)}`;
   try {
     await executeCommand(
-      packageManager,
-      ['yalc', 'add', packageName, '--silent'],
-      { cwd: paths.sampleAppPath, stdio: 'pipe' },
-      'link SDK into sample app',
+      'sh',
+      ['-c', project['post-init']],
+      { cwd: paths.sourcePath, stdio: 'pipe' },
+      'post-init command',
       isDryRun,
     );
+    logger.success('Post-init command completed successfully');
   } catch (error) {
-    logger.warn(`⚠️  Failed to link SDK into sample app: ${(error as Error).message}`);
+    logger.warn(`⚠️  Post-init command failed: ${(error as Error).message}`);
     logger.warn('   This is optional - the workspace is still ready for development.');
   }
 }
 
+/**
+ * Setup environment and install dependencies
+ */
 /**
  * Generate templates and documentation
  */
@@ -347,51 +330,30 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
     isDryRun,
   } = options;
 
-  // Initialize PromptSelector with workflows from config
-  const workflowConfigs = configManager.getWorkflows();
-  const promptSelector = new PromptSelector(workflowConfigs);
-
-  // Select appropriate prompts based on context
-  const promptSelection = promptSelector.selectPrompts(githubData, branchName, projectKey);
-
-  logger.info(`🎯 Workflow detected: ${promptSelection.workflowType}`);
-  logger.info(`📋 Selected prompts: ${promptSelection.selectedPrompts.join(', ')}`);
-  logger.debug(`🔍 ${promptSelection.detectionReason}`);
-
-  // Copy only the selected prompt templates
+  // Simplified template copying - use only common templates from config
   const templates = configManager.getTemplates();
   const templatesDir = templates.dir || path.join(configManager.getCliRoot(), 'src/templates');
+  const commonTemplates = templates.common || [
+    'analysis.prompt.md',
+    'review-changes.prompt.md',
+    'tests.prompt.md',
+    'fix-and-test.prompt.md',
+    'PR_DESCRIPTION_TEMPLATE.md',
+  ];
 
-  logger.verbose(`📄 Copying selected templates from ${templatesDir}...`);
+  logger.info(`📋 Copying common templates: ${commonTemplates.join(', ')}`);
+  logger.verbose(`📄 Copying templates from ${templatesDir}...`);
 
-  // Copy each selected prompt individually
-  for (const promptFile of promptSelection.selectedPrompts) {
-    const sourcePath = path.join(templatesDir, promptFile);
-    const destPath = path.join(paths.workspaceDir, promptFile);
+  // Copy each common template
+  for (const templateFile of commonTemplates) {
+    const sourcePath = path.join(templatesDir, templateFile);
+    const destPath = path.join(paths.workspaceDir, templateFile);
 
     if (await fs.pathExists(sourcePath)) {
-      await fileOps.copyFile(
-        sourcePath,
-        destPath,
-        `selected prompt template ${promptFile}`,
-        isDryRun,
-      );
+      await fileOps.copyFile(sourcePath, destPath, `template ${templateFile}`, isDryRun);
     } else {
-      logger.warn(`⚠️  Selected prompt template not found: ${promptFile}`);
+      logger.warn(`⚠️  Template not found: ${templateFile}`);
     }
-  }
-
-  // Also copy common non-prompt templates (like PR description template)
-  const allFiles = await fs.readdir(templatesDir);
-  const nonPromptFiles = allFiles.filter(
-    (file) => !file.endsWith('.prompt.md') && file.endsWith('.md') && !file.startsWith('.'),
-  );
-
-  for (const file of nonPromptFiles) {
-    const sourcePath = path.join(templatesDir, file);
-    const destPath = path.join(paths.workspaceDir, file);
-
-    await fileOps.copyFile(sourcePath, destPath, `common template ${file}`, isDryRun);
   }
 
   // Generate placeholder values and update templates
@@ -424,25 +386,6 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
         isDryRun,
       );
     }
-  }
-
-  // Generate execution plan for workflow orchestration
-  logger.verbose('📋 Generating execution plan for workflow orchestration...');
-  if (!isDryRun) {
-    const executionPlan = ExecutionPlanService.generateExecutionPlan(
-      promptSelection.workflowType,
-      paths.workspaceDir,
-      branchName,
-      issueIds,
-      projectKey,
-      githubData,
-      promptSelection.selectedPrompts,
-    );
-
-    await ExecutionPlanService.saveExecutionState(paths.workspaceDir, executionPlan);
-    logger.info(
-      `🎯 Execution plan created with ${executionPlan.phases.length} phases and ${executionPlan.phases.reduce((total, phase) => total + phase.steps.length, 0)} steps`,
-    );
   }
 
   // Generate bug report or workspace info file
@@ -576,27 +519,30 @@ function createPlaceholderValues({
       : 'No additional context provided.';
 
   // Generate key files lists
-  const sdkKeyFiles = generateSdkKeyFiles(paths.sdkPath, paths.workspaceDir);
-  const sampleKeyFiles = generateSampleKeyFiles(paths.samplesPath, paths.workspaceDir);
+  const repoKeyFiles = generateRepoKeyFiles(paths.sourcePath, paths.workspaceDir);
+  const sampleKeyFiles = paths.destinationPath
+    ? generateSampleKeyFiles(paths.destinationPath, paths.workspaceDir)
+    : '';
 
   const bugReportPath = primaryIssueId
     ? path.join(paths.workspaceDir, `BUGREPORT_${primaryIssueId}.md`)
     : path.join(paths.workspaceDir, 'WORKSPACE_INFO.md');
 
   return {
-    '{{PROJECT_NAME}}': project.name || project.sdk_repo,
+    '{{PROJECT_NAME}}': project.name || project.repo,
     '{{PROJECT_KEY}}': projectKey,
     '{{BRANCH_NAME}}': branchName,
     '{{WORKSPACE_DIR}}': paths.workspaceDir,
-    '{{SDK_PATH}}': paths.sdkPath,
-    '{{SAMPLE_PATH}}': paths.samplesPath,
+    '{{SDK_PATH}}': paths.sourcePath,
+    '{{SAMPLE_PATH}}': paths.destinationPath || '',
     '{{GITHUB_DATA}}': githubDataFormatted,
-    '{{SDK_KEY_FILES}}': sdkKeyFiles,
+    '{{SDK_KEY_FILES}}': repoKeyFiles,
     '{{SAMPLE_KEY_FILES}}': sampleKeyFiles,
     '{{BUGREPORT_FILE}}': path.basename(bugReportPath),
     '{{RELATED_ISSUES_PRS}}': 'No additional related issues or PRs provided via user input.',
     '{{ADDITIONAL_CONTEXT}}': additionalContextFormatted,
     '{{TEST_FILE_NAME}}': testFileName,
+    '{{POST_INIT_COMMAND}}': project['post-init'] || 'echo "No post-init command configured"',
   };
 }
 
@@ -633,7 +579,7 @@ function createAnalysisPlaceholderValues({
       : 'No additional context provided.';
 
   // Generate mock key files lists for analysis mode
-  const sdkKeyFiles = generateMockSdkKeyFiles(project);
+  const repoKeyFiles = generateMockRepoKeyFiles(project);
   const sampleKeyFiles = generateMockSampleKeyFiles(project);
 
   const bugReportPath = primaryIssueId
@@ -641,19 +587,20 @@ function createAnalysisPlaceholderValues({
     : path.join(paths.workspaceDir, 'WORKSPACE_INFO.md');
 
   return {
-    '{{PROJECT_NAME}}': project.name || project.sdk_repo,
+    '{{PROJECT_NAME}}': project.name || project.repo,
     '{{PROJECT_KEY}}': projectKey,
     '{{BRANCH_NAME}}': branchName,
     '{{WORKSPACE_DIR}}': paths.workspaceDir,
-    '{{SDK_PATH}}': `${paths.sdkPath} (not created in analysis mode)`,
-    '{{SAMPLE_PATH}}': `${paths.samplesPath} (not created in analysis mode)`,
+    '{{SDK_PATH}}': `${paths.sourcePath} (not created in analysis mode)`,
+    '{{SAMPLE_PATH}}': `${paths.destinationPath || 'N/A'} (not created in analysis mode)`,
     '{{GITHUB_DATA}}': githubDataFormatted,
-    '{{SDK_KEY_FILES}}': sdkKeyFiles,
+    '{{SDK_KEY_FILES}}': repoKeyFiles,
     '{{SAMPLE_KEY_FILES}}': sampleKeyFiles,
     '{{BUGREPORT_FILE}}': path.basename(bugReportPath),
     '{{RELATED_ISSUES_PRS}}': 'No additional related issues or PRs provided via user input.',
     '{{ADDITIONAL_CONTEXT}}': additionalContextFormatted,
     '{{TEST_FILE_NAME}}': testFileName,
+    '{{POST_INIT_COMMAND}}': project['post-init'] || 'echo "No post-init command configured"',
   };
 }
 
@@ -699,43 +646,76 @@ function formatGitHubData(githubData: GitHubIssueData[]): string {
 }
 
 /**
- * Generate SDK key files list
+ * Generate repo key files list (stack-agnostic)
  */
-function generateSdkKeyFiles(sdkPath: string, _workspaceDir: string): string {
+function generateRepoKeyFiles(repoPath: string, _workspaceDir: string): string {
   const commonFiles = [
-    'src/server/auth-client.ts',
-    'src/server/client.ts',
-    'src/server/cookies.ts',
-    'src/index.ts',
+    'README.md',
+    'src/index.*',
+    'lib/index.*',
+    'package.json',
+    'Cargo.toml',
+    'pom.xml',
+    'build.gradle',
+    'CMakeLists.txt',
   ];
-  return (
-    commonFiles
-      .filter((rel) => fs.existsSync(path.join(sdkPath, rel)))
-      .map((rel) => `- ${path.basename(sdkPath)}/${rel}`)
-      .join('\n') || '- No key files found'
-  );
+
+  const foundFiles: string[] = [];
+
+  for (const pattern of commonFiles) {
+    if (pattern.includes('*')) {
+      // Handle simple wildcard patterns
+      const basePattern = pattern.replace('*', '');
+      try {
+        const dirPath = path.join(repoPath, path.dirname(pattern));
+        if (fs.existsSync(dirPath)) {
+          const files = fs.readdirSync(dirPath);
+          for (const file of files) {
+            if (file.startsWith(path.basename(basePattern))) {
+              foundFiles.push(path.join(path.dirname(pattern), file));
+            }
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+    } else if (fs.existsSync(path.join(repoPath, pattern))) {
+      foundFiles.push(pattern);
+    }
+  }
+
+  return foundFiles.length > 0
+    ? foundFiles.map((rel) => `- ${path.basename(repoPath)}/${rel}`).join('\n')
+    : '- Repository files (inspect manually)';
 }
 
 /**
- * Generate sample key files list
+ * Generate sample key files list (stack-agnostic)
  */
-function generateSampleKeyFiles(samplesPath: string, workspaceDir: string): string {
-  const targetFiles = ['auth.js', 'middleware.js', 'pages/api/auth/[...auth0].js'];
+function generateSampleKeyFiles(destinationPath: string, workspaceDir: string): string {
+  const commonPatterns = ['README.md', 'src/', 'examples/', 'demo/', 'samples/'];
   const matches: string[] = [];
 
   const walk = (dir: string, depth: number = 0): void => {
-    if (depth > 3) return; // Limit recursion depth
+    if (depth > 2) return; // Limit recursion depth
 
     try {
       for (const entry of fs.readdirSync(dir)) {
-        if (['node_modules', '.next', '.yalc'].includes(entry)) continue;
+        if (['node_modules', '.git', 'dist', 'build', 'target'].includes(entry)) continue;
 
         const fp = path.join(dir, entry);
         const stat = fs.statSync(fp);
 
         if (stat.isDirectory()) {
+          if (commonPatterns.some((pattern) => entry.includes(pattern.replace('/', '')))) {
+            matches.push(path.relative(workspaceDir, fp));
+          }
           walk(fp, depth + 1);
-        } else if (targetFiles.some((target) => entry === target || fp.endsWith(target))) {
+        } else if (
+          entry === 'README.md' ||
+          entry.startsWith('example') ||
+          entry.startsWith('demo')
+        ) {
           matches.push(path.relative(workspaceDir, fp));
         }
       }
@@ -744,80 +724,42 @@ function generateSampleKeyFiles(samplesPath: string, workspaceDir: string): stri
     }
   };
 
-  walk(samplesPath);
-  return matches.map((rel) => `- ${rel}`).join('\n') || '- No key files found';
+  walk(destinationPath);
+  return matches.length > 0
+    ? matches
+        .slice(0, 10)
+        .map((rel) => `- ${rel}`)
+        .join('\n')
+    : '- Sample files (inspect manually)';
 }
 
 /**
- * Generate mock SDK key files list for analysis mode
+ * Generate generic mock repo key files list for analysis mode
  */
-function generateMockSdkKeyFiles(project: ProjectConfig): string {
-  const projectTypeFiles: Record<string, string[]> = {
-    next: [
-      'src/server/auth-client.ts',
-      'src/server/client.ts',
-      'src/server/cookies.ts',
-      'src/index.ts',
-      'src/client/index.ts',
-      'src/client/use-user.ts',
-    ],
-    spa: [
-      'src/index.ts',
-      'src/auth0-client.ts',
-      'src/auth0-spa-js.ts',
-      'src/cache/index.ts',
-      'src/token.worker.ts',
-    ],
-    node: [
-      'src/index.ts',
-      'src/auth/base-auth-api.ts',
-      'src/auth/oauth-api.ts',
-      'src/management/index.ts',
-    ],
-    react: [
-      'src/index.tsx',
-      'src/auth0-provider.tsx',
-      'src/use-auth0.tsx',
-      'src/auth0-context.tsx',
-    ],
-  };
-
-  const projectKey = project.key || 'generic';
-  const files = projectTypeFiles[projectKey] || projectTypeFiles['next']; // Default to next.js files
-
-  return files
-    .map((rel) => `- ${path.basename(project.sdk_repo)}/${rel} (mock - analysis mode)`)
-    .join('\n');
+function generateMockRepoKeyFiles(project: ProjectConfig): string {
+  const repoName = path.basename(project.repo, '.git');
+  return [
+    `- ${repoName}/README.md (analysis mode - no worktree)`,
+    `- ${repoName}/src/main-entry-point (analysis mode - no worktree)`,
+    `- ${repoName}/src/core-functionality (analysis mode - no worktree)`,
+    `- ${repoName}/tests/* (analysis mode - no worktree)`,
+  ].join('\n');
 }
 
 /**
- * Generate mock sample key files list for analysis mode
+ * Generate generic mock sample key files list for analysis mode
  */
 function generateMockSampleKeyFiles(project: ProjectConfig): string {
-  const projectTypeFiles: Record<string, string[]> = {
-    next: [
-      'pages/api/auth/[...auth0].js',
-      'pages/_app.js',
-      'pages/index.js',
-      'pages/profile.js',
-      'middleware.js',
-      'auth.js',
-    ],
-    spa: ['src/index.js', 'src/app.js', 'public/index.html', 'webpack.config.js'],
-    node: ['server.js', 'routes/auth.js', 'routes/protected.js', 'app.js'],
-    react: [
-      'src/index.js',
-      'src/App.js',
-      'src/components/Profile.js',
-      'src/components/LoginButton.js',
-    ],
-  };
+  if (!project.sample_repo) {
+    return '- No sample repository configured';
+  }
 
-  const projectKey = project.key || 'generic';
-  const files = projectTypeFiles[projectKey] || projectTypeFiles['next']; // Default to next.js files
-  const sampleAppPath = project.sample_app_path || 'Sample-01';
-
-  return files.map((rel) => `- ${sampleAppPath}/${rel} (mock - analysis mode)`).join('\n');
+  const sampleRepoName = path.basename(project.sample_repo, '.git');
+  return [
+    `- ${sampleRepoName}/README.md (analysis mode - no worktree)`,
+    `- ${sampleRepoName}/src/example-usage (analysis mode - no worktree)`,
+    `- ${sampleRepoName}/src/demo-files (analysis mode - no worktree)`,
+  ].join('\n');
 }
 
 /**
@@ -897,62 +839,17 @@ ${additionalContextFormatted}
  * Handle PR initialization when --pr option is used
  */
 async function handlePRInitialization(
-  projectKey: string,
-  prIdStr: string,
-  options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean },
+  _projectKey: string,
+  _prIdStr: string,
+  _options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean },
 ): Promise<void> {
-  // Import PR functionality
-  const { initializePRWorkspace, fetchPRData } = await import('./pr.js');
-
-  // Validate project key
-  const validatedProjectKey = validateProjectKey(projectKey);
-  const project = configManager.validateProject(validatedProjectKey);
-
-  // Parse PR ID
-  const prId = parseInt(prIdStr, 10);
-  if (isNaN(prId) || prId <= 0) {
-    throw new Error(`Invalid PR ID: ${prIdStr}. Must be a positive integer.`);
-  }
-
-  const isDryRun = options.dryRun || false;
-  const isAnalyseMode = options.analyse || false;
-
-  if (isAnalyseMode) {
-    throw new Error(
-      'Analysis mode (--analyse) is not yet supported with PR initialization. Use regular init with --analyse instead.',
-    );
-  }
-
-  if (isDryRun) {
-    logger.info('🧪 DRY-RUN MODE: No actual changes will be made');
-  }
-
-  logger.info(`🚀 Initializing ${project.name} workspace for PR #${prId}`);
-
-  // Fetch PR data to get branch name
-  const { data: prData, branchName } = await fetchPRData(prId, project, isDryRun);
-
-  // Get workspace paths for this project
-  const workspaceName = `pr-${prId}-${branchName.replace(/\//g, '_')}`;
-  const paths = configManager.getWorkspacePaths(validatedProjectKey, workspaceName);
-
-  logger.verbose(`📍 Project: ${project.name} (${validatedProjectKey})`);
-  logger.verbose(`📍 PR: #${prId} (${prData.title})`);
-  logger.verbose(`📍 Branch: ${branchName}`);
-  logger.verbose(`📍 Workspace directory: ${paths.workspaceDir}`);
-  logger.verbose(`📍 SDK path: ${paths.sdkPath}`);
-  logger.verbose(`📍 Samples path: ${paths.samplesPath}`);
-
-  // Initialize workspace for PR
-  await initializePRWorkspace({
-    project,
-    projectKey: validatedProjectKey,
-    prId,
-    branchName,
-    workspaceName,
-    paths,
-    isDryRun,
-  });
+  // PR functionality is temporarily disabled while making the CLI stack-agnostic
+  logger.error(
+    'The PR initialization feature is temporarily disabled while making the CLI stack-agnostic.',
+  );
+  logger.info('This feature will be restored in a future version with generic project support.');
+  logger.info('For now, please use the regular init command without PR arguments.');
+  process.exit(1);
 }
 
 export function initCommand(program: Command): void {
@@ -960,12 +857,12 @@ export function initCommand(program: Command): void {
     .command('init')
     .description('Initialize a new workspace with git worktrees for development')
     .argument(
-      '<project>',
-      'Project key (e.g., next, node, react) - use "workspace projects" to see available projects',
+      '<project_identifier>',
+      'Project key or repo name (e.g., java/auth0-java, next/nextjs-auth0)',
     )
     .argument(
       '[args...]',
-      'GitHub issue IDs followed by branch name, or just branch name (optional when using --pr)',
+      'GitHub issue IDs followed by branch name. Format: init <project> <...github_ids> <branch_name>',
     )
     .option('-v, --verbose', 'Enable verbose logging output')
     .option('--dry-run', 'Show what would be done without executing (implies verbose)')
@@ -982,25 +879,33 @@ export function initCommand(program: Command): void {
       `
 Examples:
   $ workspace init next feature/my-new-feature
-    Initialize a Next.js workspace with branch "feature/my_new_feature"
+    Initialize workspace for 'next' project using project key
 
-  $ workspace init node 123 456 bugfix/issue-123
-    Initialize a Node.js workspace for GitHub issues 123 & 456 with branch "bugfix/issue-123"
+  $ workspace init auth0-java feature/my-new-feature  
+    Initialize workspace for 'java' project using repository name
 
-  $ workspace init react --pr 789
-    Initialize a React workspace for pull request #789 (uses global --pr option)
+  $ workspace init java 123 456 bugfix/issue-123
+    Initialize workspace for java project for GitHub issues 123 & 456
 
-  $ workspace init next feature/test --dry-run
+  $ workspace init nextjs-auth0 --pr 789
+    Initialize workspace using repo name for pull request #789 (uses global --pr option)
+
+  $ workspace init spa feature/test --dry-run
     Preview what would be done without making changes
 
-  $ workspace init next 123 feature/fix-bug --analyse
+  $ workspace init node 123 feature/fix-bug --analyse
     Create analysis workspace for issue 123 without setting up git worktrees
 
 Description:
   This command creates a new development workspace with git worktrees for both
-  the SDK and samples repositories. It sets up the necessary directory structure,
-  creates or switches to the specified branch, and generates template files for
-  development workflows.
+  the main repository and optional sample repository. It sets up the necessary 
+  directory structure, creates or switches to the specified branch, and generates 
+  template files for development workflows.
+
+  The command signature is: init <project_identifier> <...github_ids> <branch_name>
+  where project_identifier can be either:
+  - A project key from config.yaml (e.g., next, spa, node, java)
+  - A repository name extracted from the repo URL (e.g., nextjs-auth0, auth0-spa-js)
 
   Use --analyse to create an analysis-only workspace that populates prompt files
   with GitHub data and project context without setting up git worktrees. This is
@@ -1017,7 +922,7 @@ Related commands:
     )
     .action(
       async (
-        projectKey: string,
+        projectIdentifier: string,
         args: string[],
         options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean; silent?: boolean },
       ) => {
@@ -1025,24 +930,23 @@ Related commands:
           // Check if --pr option was used globally
           const globalOpts = program.opts();
           if (globalOpts.pr) {
-            // Handle PR initialization
+            // Handle PR initialization - use new findProject method for better resolution
+            const { projectKey } = configManager.findProject(projectIdentifier);
             return await handlePRInitialization(projectKey, globalOpts.pr, options);
           }
 
           // Ensure args are provided for normal init
           if (!args || args.length === 0) {
             throw new Error(
-              'Branch name is required when not using --pr option. Usage: init <project> <branch-name> OR init <project> --pr <pr-id>',
+              'Branch name is required. Usage: init <project_identifier> <...github_ids> <branch_name>',
             );
           }
 
-          // Normal init flow
-          // Validate project key
-          const validatedProjectKey = validateProjectKey(projectKey);
-          const project = configManager.validateProject(validatedProjectKey);
+          // Find project by repo name or project key using improved resolution
+          const { projectKey, project } = configManager.findProject(projectIdentifier);
 
-          // Parse arguments
-          const { issueIds, branchName } = parseProjectInitArguments(args);
+          // Parse arguments using new signature
+          const { issueIds, branchName } = parseRepoInitArguments(args);
 
           const isVerbose = options.verbose || options.dryRun;
           const isDryRun = options.dryRun || false;
@@ -1069,18 +973,18 @@ Related commands:
 
           // Get workspace paths for this project
           const workspaceName = branchName.replace(/\//g, '_');
-          const paths = configManager.getWorkspacePaths(validatedProjectKey, workspaceName);
+          const paths = configManager.getWorkspacePaths(projectKey, workspaceName);
 
-          logger.verbose(`📍 Project: ${project.name} (${validatedProjectKey})`);
+          logger.verbose(`📍 Project: ${project.name} (${projectKey})`);
           logger.verbose(`📍 Workspace directory: ${paths.workspaceDir}`);
-          logger.verbose(`📍 SDK path: ${paths.sdkPath}`);
-          logger.verbose(`📍 Samples path: ${paths.samplesPath}`);
+          logger.verbose(`📍 Repository path: ${paths.sourcePath}`);
+          logger.verbose(`📍 Sample repository path: ${paths.destinationPath || 'N/A'}`);
 
           // Initialize workspace (choose analysis or full mode)
           if (isAnalyseMode) {
             await initializeAnalysisOnlyWorkspace({
               project,
-              projectKey: validatedProjectKey,
+              projectKey,
               issueIds,
               branchName,
               workspaceName,
@@ -1092,7 +996,7 @@ Related commands:
           } else {
             await initializeWorkspace({
               project,
-              projectKey: validatedProjectKey,
+              projectKey,
               issueIds,
               branchName,
               workspaceName,

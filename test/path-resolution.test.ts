@@ -21,10 +21,10 @@ describe('Path Resolution', () => {
   });
 
   describe('Relative path resolution', () => {
-    it('should resolve relative sdk_repo paths relative to src_dir', async () => {
+    it('should resolve relative repo paths relative to src_dir', async () => {
       const srcDir = path.join(tempDir, 'src');
-      const sdkRepo = 'nextjs-auth0';
-      const expectedPath = path.join(srcDir, sdkRepo);
+      const repo = 'test-repo';
+      const expectedPath = path.join(srcDir, repo);
 
       // Create directories
       await fs.ensureDir(expectedPath);
@@ -37,15 +37,14 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepo}"
-    sample_repo: "auth0-samples"
-    github_org: "auth0"
+    repo: "${repo}"
+    sample_repo: "test-samples"
 `;
 
       await fs.writeFile(tempConfigPath, configContent);
       const config = await configManager.loadConfig(tempConfigPath);
 
-      expect(config.projects?.test.sdk_repo).toBe(expectedPath);
+      expect(config.projects?.test.repo).toBe(expectedPath);
     });
 
     it('should resolve relative sample_repo paths relative to src_dir', async () => {
@@ -60,7 +59,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "~/src/test-sdk"
+    repo: "~/src/test-sdk"
     sample_repo: "${sampleRepo}"
     github_org: "auth0"
 `;
@@ -79,22 +78,21 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "test-repo"
+    repo: "test-repo"
     sample_repo: "test-samples"
-    github_org: "auth0"
 `;
 
       await fs.writeFile(tempConfigPath, configContent);
       const config = await configManager.loadConfig(tempConfigPath);
 
       const expectedSrcDir = path.join(os.homedir(), 'src');
-      expect(config.projects?.test.sdk_repo).toBe(path.join(expectedSrcDir, 'test-repo'));
+      expect(config.projects?.test.repo).toBe(path.join(expectedSrcDir, 'test-repo'));
       expect(config.projects?.test.sample_repo).toBe(path.join(expectedSrcDir, 'test-samples'));
     });
 
     it('should leave absolute paths unchanged', async () => {
       const srcDir = path.join(tempDir, 'src');
-      const absoluteSdkPath = '/absolute/path/to/sdk';
+      const absoluteRepoPath = '/absolute/path/to/repo';
       const absoluteSamplePath = '/absolute/path/to/sample';
 
       const configContent = `
@@ -104,21 +102,20 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${absoluteSdkPath}"
+    repo: "${absoluteRepoPath}"
     sample_repo: "${absoluteSamplePath}"
-    github_org: "auth0"
 `;
 
       await fs.writeFile(tempConfigPath, configContent);
       const config = await configManager.loadConfig(tempConfigPath);
 
-      expect(config.projects?.test.sdk_repo).toBe(absoluteSdkPath);
+      expect(config.projects?.test.repo).toBe(absoluteRepoPath);
       expect(config.projects?.test.sample_repo).toBe(absoluteSamplePath);
     });
 
     it('should leave HTTP URLs unchanged', async () => {
       const srcDir = path.join(tempDir, 'src');
-      const httpRepo = 'https://github.com/auth0/nextjs-auth0.git';
+      const httpRepo = 'https://github.com/user/example-repo.git';
 
       const configContent = `
 global:
@@ -127,9 +124,8 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "local-sdk"
+    repo: "local-repo"
     sample_repo: "${httpRepo}"
-    github_org: "auth0"
 `;
 
       await fs.writeFile(tempConfigPath, configContent);
@@ -157,7 +153,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepo}"
+    repo: "${sdkRepo}"
     sample_repo: "${sampleRepo}"
     github_org: "auth0"
 `;
@@ -168,15 +164,17 @@ projects:
       const workspacePaths = configManager.getWorkspacePaths('test', 'feature-test');
 
       // Should use resolved absolute paths, not double-resolve them
-      expect(workspacePaths.sdkRepoPath).toBe(path.join(srcDir, sdkRepo));
-      expect(workspacePaths.sampleRepoPath).toBe(path.join(srcDir, sampleRepo));
+      expect(workspacePaths.sourceRepoPath).toBe(path.join(srcDir, sdkRepo));
+      expect(workspacePaths.destinationRepoPath).toBe(path.join(srcDir, sampleRepo));
 
       // Workspace paths should be relative to workspace directory
       expect(workspacePaths.workspaceDir).toBe(
         path.join(srcDir, 'workspaces', 'test', 'feature-test'),
       );
-      expect(workspacePaths.sdkPath).toBe(path.join(workspacePaths.workspaceDir, sdkRepo));
-      expect(workspacePaths.samplesPath).toBe(path.join(workspacePaths.workspaceDir, sampleRepo));
+      expect(workspacePaths.sourcePath).toBe(path.join(workspacePaths.workspaceDir, sdkRepo));
+      expect(workspacePaths.destinationPath).toBe(
+        path.join(workspacePaths.workspaceDir, sampleRepo),
+      );
     });
   });
 
@@ -192,7 +190,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepo}"
+    repo: "${sdkRepo}"
     sample_repo: "test-samples"
     github_org: "auth0"
 `;
@@ -207,10 +205,10 @@ projects:
       } catch (error) {
         expect(error).toBeInstanceOf(ValidationError);
         const message = (error as ValidationError).message;
-        expect(message).toContain('SDK repository does not exist');
+        expect(message).toContain('Repository does not exist');
         expect(message).toContain(path.join(srcDir, sdkRepo));
-        expect(message).toContain('git clone');
-        expect(message).toContain('sdk_repo:');
+        expect(message).toContain('Clone the repository to the specified path');
+        expect(message).toContain('repo:');
       }
     });
 
@@ -225,7 +223,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${httpRepo}"
+    repo: "${httpRepo}"
     sample_repo: "https://github.com/auth0/samples.git"
     github_org: "auth0"
 `;
@@ -252,7 +250,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepo}"
+    repo: "${sdkRepo}"
     sample_repo: "${sampleRepo}"
     github_org: "auth0"
 `;
@@ -271,7 +269,7 @@ projects:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "test-sdk"
+    repo: "test-sdk"
     sample_repo: "test-samples"
     github_org: "auth0"
 `;
@@ -281,7 +279,7 @@ projects:
 
       // Should default to ~/src when src_dir is not specified
       const defaultSrcDir = path.join(os.homedir(), 'src');
-      expect(config.projects?.test.sdk_repo).toBe(path.join(defaultSrcDir, 'test-sdk'));
+      expect(config.projects?.test.repo).toBe(path.join(defaultSrcDir, 'test-sdk'));
     });
 
     it('should handle missing projects section', async () => {

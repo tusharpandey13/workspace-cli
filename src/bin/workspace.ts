@@ -19,7 +19,7 @@ const pkg = require('../../package.json');
 const program = new Command();
 program
   .name('workspace')
-  .description('Multi-SDK workspace CLI tool for automated development workflows')
+  .description('Stack-agnostic workspace CLI tool')
   .version(pkg.version)
   .addHelpText(
     'after',

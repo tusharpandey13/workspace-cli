@@ -31,7 +31,7 @@ describe('DummyRepoManager', () => {
     expect(await fs.pathExists(path.join(repoPath, 'src/index.ts'))).toBe(true);
 
     const packageJson = await fs.readJson(path.join(repoPath, 'package.json'));
-    expect(packageJson.name).toBe('@auth0/test-sdk');
+    expect(packageJson.name).toBe('@example/test-sdk');
   });
 
   test('should create a basic sample repository', async () => {

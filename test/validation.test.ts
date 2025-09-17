@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { validateBranchName, validateGitHubIds, validateWorkspaceName } from '../src/utils/validation.js';
+import {
+  validateBranchName,
+  validateGitHubIds,
+  validateWorkspaceName,
+} from '../src/utils/validation.js';
 
 describe('validation utilities', () => {
   describe('validateBranchName', () => {

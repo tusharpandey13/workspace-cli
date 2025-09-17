@@ -18,19 +18,9 @@ describe('Silent Mode Integration', () => {
     manager = new DummyRepoManager(testDir);
 
     // Create dummy SDK and sample repositories
-    sdkRepoPath = await manager.createDummyRepo({
-      name: 'test-sdk',
-      type: 'sdk',
-      branches: ['main'],
-      hasRemote: true,
-    });
-
-    sampleRepoPath = await manager.createDummyRepo({
-      name: 'test-samples',
-      type: 'sample',
-      branches: ['main'],
-      hasRemote: true,
-    });
+    const { sdkPath, samplePath } = await manager.createTestEnvironment('test');
+    sdkRepoPath = sdkPath;
+    sampleRepoPath = samplePath;
   });
 
   afterEach(async () => {
@@ -50,7 +40,7 @@ describe('Silent Mode Integration', () => {
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"
@@ -105,7 +95,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"
@@ -161,7 +151,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"
@@ -211,7 +201,7 @@ global:
 projects:
   test:
     name: "Test Project"
-    sdk_repo: "${sdkRepoPath}"
+    repo: "${sdkRepoPath}"
     sample_repo: "${sampleRepoPath}"
     github_org: "test-org"
     sample_app_path: "sample-app"

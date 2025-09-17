@@ -141,7 +141,7 @@ Each prompt should emit structured XML for the next phase:
 
 - Test behaviors, not implementation details
 - Cover failure modes and edge cases
-- Run vitest with --run parameter
+- Run tests with configured test commands
 - Validate security/performance impacts
 
 ### REFLECT Phase

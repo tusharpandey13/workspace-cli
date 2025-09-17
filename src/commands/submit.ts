@@ -71,8 +71,8 @@ Related commands:
           const projectConfig = configManager.validateProject(validatedProject);
           const paths = configManager.getWorkspacePaths(validatedProject, validatedWorkspace);
 
-          if (!fs.existsSync(paths.sdkPath)) {
-            throw new FileSystemError(`SDK worktree not found at ${paths.sdkPath}`);
+          if (!fs.existsSync(paths.sourcePath)) {
+            throw new FileSystemError(`Source worktree not found at ${paths.sourcePath}`);
           }
 
           if (isSilent) {
@@ -88,9 +88,9 @@ Related commands:
           // Step 1: Show diff for human review (unless silent)
           logger.step(1, 5, 'Showing workspace changes for your review...');
           try {
-            await runGit(['diff', '--stat'], { cwd: paths.sdkPath });
+            await runGit(['diff', '--stat'], { cwd: paths.sourcePath });
             if (!isSilent) {
-              await runGit(['diff'], { cwd: paths.sdkPath });
+              await runGit(['diff'], { cwd: paths.sourcePath });
             }
           } catch (err) {
             logger.warn(`No changes to display or git diff failed: ${(err as Error).message}`);
@@ -125,12 +125,12 @@ Related commands:
           if (shouldStage) {
             try {
               logger.verbose('Staging changes...');
-              await runGit(['add', '.'], { cwd: paths.sdkPath });
+              await runGit(['add', '.'], { cwd: paths.sourcePath });
               logger.success('Changes staged');
 
               // Step 3: Show staged changes
               logger.step(3, 5, 'Staged changes:');
-              await runGit(['diff', '--cached', '--stat'], { cwd: paths.sdkPath });
+              await runGit(['diff', '--cached', '--stat'], { cwd: paths.sourcePath });
 
               // Step 4: Handle commit message based on mode
               logger.step(4, 5, 'Creating commit...');
@@ -155,20 +155,19 @@ Related commands:
                 logger.info(`📝 Using default commit message: "${commitMessage}"`);
               }
 
-              await runGit(['commit', '-m', commitMessage], { cwd: paths.sdkPath });
+              await runGit(['commit', '-m', commitMessage], { cwd: paths.sourcePath });
               logger.success('Commit created');
 
               // Step 5: Provide manual commands for push and PR
               logger.step(5, 5, 'Next steps (execute manually):');
               logger.info('');
               logger.info('📤 Push changes:');
-              logger.info(`   cd ${paths.sdkPath}`);
+              logger.info(`   cd ${paths.sourcePath}`);
               logger.info('   git push -u origin HEAD');
               logger.info('');
               logger.info('🔗 Create pull request:');
-              const global = configManager.getGlobal();
-              const githubCli = global.github_cli || 'gh';
-              logger.info(`   cd ${paths.sdkPath}`);
+              const githubCli = 'gh'; // GitHub CLI tool
+              logger.info(`   cd ${paths.sourcePath}`);
               logger.info(`   ${githubCli} pr create --fill`);
               logger.info('');
               logger.success(

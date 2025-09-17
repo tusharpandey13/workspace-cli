@@ -102,13 +102,13 @@ export class ConfigManager {
       for (const projectKey in this.config.projects) {
         const project = this.config.projects[projectKey];
 
-        // Resolve sdk_repo path
-        if (project.sdk_repo) {
-          if (project.sdk_repo.startsWith('~')) {
-            project.sdk_repo = project.sdk_repo.replace('~', os.homedir());
-          } else if (!path.isAbsolute(project.sdk_repo) && !project.sdk_repo.startsWith('http')) {
+        // Resolve repo path
+        if (project.repo) {
+          if (project.repo.startsWith('~')) {
+            project.repo = project.repo.replace('~', os.homedir());
+          } else if (!path.isAbsolute(project.repo) && !project.repo.startsWith('http')) {
             // Resolve relative paths relative to src_dir
-            project.sdk_repo = path.resolve(srcDir, project.sdk_repo);
+            project.repo = path.resolve(srcDir, project.repo);
           }
         }
 
@@ -120,11 +120,6 @@ export class ConfigManager {
             // Resolve relative paths relative to src_dir
             project.sample_repo = path.resolve(srcDir, project.sample_repo);
           }
-        }
-
-        // Resolve sample_app_path if it's an absolute path override
-        if (project.sample_app_path?.startsWith('~')) {
-          project.sample_app_path = project.sample_app_path.replace('~', os.homedir());
         }
       }
     }
@@ -159,35 +154,32 @@ export class ConfigManager {
     const project = this.getProject(projectKey);
 
     // Validate required fields
-    if (!project.name || !project.sdk_repo || !project.sample_repo || !project.github_org) {
-      throw new ValidationError(`Project '${projectKey}' has incomplete configuration`);
+    if (!project.name || !project.repo) {
+      throw new ValidationError(
+        `Project '${projectKey}' has incomplete configuration - name and repo are required`,
+      );
     }
 
-    // Validate SDK repository exists (only for local paths, skip HTTP URLs)
-    if (project.sdk_repo && !project.sdk_repo.startsWith('http')) {
-      if (!fs.existsSync(project.sdk_repo)) {
+    // Validate main repository exists (only for local paths, skip HTTP URLs)
+    if (project.repo && !project.repo.startsWith('http')) {
+      if (!fs.existsSync(project.repo)) {
         throw new ValidationError(
-          `SDK repository does not exist: ${project.sdk_repo}\n` +
-            `Please ensure the repository exists or update the 'sdk_repo' path in config.yaml.\n` +
-            `Current configuration: projects.${projectKey}.sdk_repo = "${project.sdk_repo}"\n` +
+          `Repository does not exist: ${project.repo}\n` +
+            `Please ensure the repository exists or update the 'repo' path in config.yaml.\n` +
+            `Current configuration: projects.${projectKey}.repo = "${project.repo}"\n` +
             `Suggestions:\n` +
-            `  1. Clone the repository: git clone https://github.com/${project.github_org}/${path.basename(project.sdk_repo)} ${project.sdk_repo}\n` +
-            `  2. Update config with correct path: sdk_repo: "~/src/${path.basename(project.sdk_repo)}"\n` +
-            `  3. Use absolute path: sdk_repo: "/full/path/to/${path.basename(project.sdk_repo)}"`,
+            `  1. Clone the repository to the specified path\n` +
+            `  2. Update config with correct path: repo: "~/src/${path.basename(project.repo)}"\n` +
+            `  3. Use absolute path: repo: "/full/path/to/${path.basename(project.repo)}"`,
         );
       }
     }
 
-    // Validate sample repository exists (only for local paths, skip HTTP URLs)
+    // Validate sample repository exists if configured (only for local paths, skip HTTP URLs)
     if (project.sample_repo && !project.sample_repo.startsWith('http')) {
-      const samplePath =
-        project.sample_app_path && path.isAbsolute(project.sample_app_path)
-          ? project.sample_app_path
-          : project.sample_repo;
-
-      if (!fs.existsSync(samplePath)) {
+      if (!fs.existsSync(project.sample_repo)) {
         logger.warn(
-          `Sample repository does not exist: ${samplePath}\n` +
+          `Sample repository does not exist: ${project.sample_repo}\n` +
             `This may cause sample app setup to fail. Consider cloning the repository first.`,
         );
       }
@@ -241,6 +233,17 @@ export class ConfigManager {
   }
 
   /**
+   * Get all projects as an object
+   */
+  getAllProjectsData(): Record<string, any> {
+    if (!this.config) {
+      throw new ValidationError('Configuration not loaded');
+    }
+
+    return this.config.projects || {};
+  }
+
+  /**
    * Get environment file path for a project
    */
   getEnvFilePath(projectKey: string): string | null {
@@ -268,55 +271,105 @@ export class ConfigManager {
     const baseDir = path.join(srcDir, workspaceBase, project.key);
     const workspaceDir = path.join(baseDir, workspaceName);
 
-    // Extract just the repo name from the SDK repo path for the worktree directory
-    const sdkRepoName = path.basename(project.sdk_repo);
-
-    // Handle sample repo - if it's a URL, extract repo name; if it's a path, use basename
-    let sampleRepoName: string;
-    let sampleRepoPath: string;
-
-    if (project.sample_repo.startsWith('http')) {
-      // It's a Git URL - extract repo name without .git extension
-      sampleRepoName = path.basename(project.sample_repo, '.git');
-      // For spa project, use the absolute sample_app_path as the repo path
-      sampleRepoPath = project.sample_app_path || path.join(srcDir, sampleRepoName);
+    // Determine source repository path
+    let sourceRepoPath: string;
+    if (project.repo.startsWith('http')) {
+      // It's a Git URL - extract repo name and assume it's in srcDir
+      const repoName = path.basename(project.repo, '.git');
+      sourceRepoPath = path.join(srcDir, repoName);
+    } else if (path.isAbsolute(project.repo)) {
+      // Already absolute path
+      sourceRepoPath = project.repo;
     } else {
-      // It's a directory path - check if already resolved to absolute path
-      sampleRepoName = path.basename(project.sample_repo);
-      if (path.isAbsolute(project.sample_repo)) {
+      // Relative path, resolve relative to srcDir
+      sourceRepoPath = path.join(srcDir, project.repo);
+    }
+
+    // Extract repo name for workspace directory
+    const repoName = path.basename(sourceRepoPath);
+    const sourcePath = path.join(workspaceDir, repoName);
+
+    // Handle sample repo if configured
+    let destinationRepoPath: string | undefined;
+    let destinationPath: string | undefined;
+
+    if (project.sample_repo) {
+      if (project.sample_repo.startsWith('http')) {
+        // It's a Git URL - extract repo name without .git extension
+        const sampleRepoName = path.basename(project.sample_repo, '.git');
+        destinationRepoPath = path.join(srcDir, sampleRepoName);
+        destinationPath = path.join(workspaceDir, sampleRepoName);
+      } else if (path.isAbsolute(project.sample_repo)) {
         // Already resolved to absolute path
-        sampleRepoPath = project.sample_repo;
+        destinationRepoPath = project.sample_repo;
+        destinationPath = path.join(workspaceDir, path.basename(project.sample_repo));
       } else {
         // Still relative, resolve it
-        sampleRepoPath = path.join(srcDir, project.sample_repo);
+        destinationRepoPath = path.join(srcDir, project.sample_repo);
+        destinationPath = path.join(workspaceDir, path.basename(project.sample_repo));
       }
     }
 
-    const sdkPath = path.join(workspaceDir, sdkRepoName);
-    const samplesPath = path.join(workspaceDir, sampleRepoName);
-
-    // Handle sample app path - for HTTP repos, use the samplesPath directly
-    let sampleAppPath: string;
-    if (project.sample_app_path) {
-      if (project.sample_repo.startsWith('http')) {
-        sampleAppPath = samplesPath;
-      } else {
-        sampleAppPath = path.join(samplesPath, project.sample_app_path);
-      }
-    } else {
-      sampleAppPath = samplesPath;
-    }
-
-    return {
+    const result: WorkspacePaths = {
       srcDir,
       baseDir,
       workspaceDir,
-      sdkPath,
-      samplesPath,
-      sampleAppPath,
-      sdkRepoPath: project.sdk_repo, // Use the full resolved path for the source repo
-      sampleRepoPath,
+      sourceRepoPath,
+      sourcePath,
     };
+
+    if (destinationRepoPath && destinationPath) {
+      result.destinationRepoPath = destinationRepoPath;
+      result.destinationPath = destinationPath;
+    }
+
+    return result;
+  }
+
+  /**
+   * Find project by project key or repository name
+   * Supports both config.yaml project keys (e.g., 'java', 'next') and
+   * extracted repository names (e.g., 'auth0-java', 'nextjs-auth0')
+   */
+  findProject(identifier: string): { projectKey: string; project: ProjectConfig } {
+    if (!this.config || !this.config.projects) {
+      throw new ValidationError('Configuration not loaded');
+    }
+
+    // First, try to find by project key (exact match, then case-insensitive)
+    if (this.config.projects[identifier]) {
+      const project = { key: identifier, ...this.config.projects[identifier] };
+      return { projectKey: identifier, project };
+    }
+
+    // Case-insensitive project key search
+    for (const [projectKey, projectData] of Object.entries(this.config.projects)) {
+      if (projectKey.toLowerCase() === identifier.toLowerCase()) {
+        const project = { key: projectKey, ...projectData };
+        return { projectKey, project };
+      }
+    }
+
+    // Second, try to find by repository name (extracted from repo URL/path)
+    for (const [projectKey, projectData] of Object.entries(this.config.projects)) {
+      const projectRepoName = path.basename(projectData.repo, '.git');
+      if (projectRepoName.toLowerCase() === identifier.toLowerCase()) {
+        const project = { key: projectKey, ...projectData };
+        return { projectKey, project };
+      }
+    }
+
+    // Generate helpful error message with both project keys and repo names
+    const projectKeys = Object.keys(this.config.projects);
+    const repoNames = Object.values(this.config.projects).map((proj) =>
+      path.basename(proj.repo, '.git'),
+    );
+
+    throw new ValidationError(
+      `No project found with identifier: ${identifier}. ` +
+        `Available project keys: ${projectKeys.join(', ')}. ` +
+        `Available repo names: ${repoNames.join(', ')}`,
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "workspace-cli",
   "version": "0.1.0",
-  "description": "CLI tool to automate multi-worktree development for NextJS-Auth0 SDK engineers.",
+  "description": "Stack-agnostic CLI tool to automate multi-worktree development workflows for any codebase.",
   "preferGlobal": true,
   "bin": {
     "workspace": "dist/bin/workspace.js"
@@ -26,7 +26,9 @@
     "cli",
     "workspace",
     "worktree",
-    "nextjs-auth0"
+    "development",
+    "git",
+    "stack-agnostic"
   ],
   "author": "",
   "license": "MIT",

@@ -7,7 +7,9 @@ export function projectsCommand(program: Command): void {
   program
     .command('projects')
     .description('List all available projects with their configuration details')
-    .addHelpText('after', `
+    .addHelpText(
+      'after',
+      `
 Examples:
   $ workspace projects
     Show all configured projects with their repository details
@@ -29,27 +31,30 @@ Description:
 
 Related commands:
   workspace init        Create a workspace for a project
-  workspace list        List workspaces by project`)
+  workspace list        List workspaces by project`,
+    )
     .action(() => {
       try {
         const projects = configManager.listProjects();
-        
+
         if (projects.length === 0) {
           logger.info('No projects configured.');
           return;
         }
-        
+
         console.log('\nAvailable projects:');
-        
+
         for (const projectKey of projects) {
           const project = configManager.getProject(projectKey);
           console.log(`  ${projectKey}: ${project.name}`);
-          console.log(`    SDK: ${project.sdk_repo}`);
-          console.log(`    Samples: ${project.sample_repo}`);
-          console.log(`    GitHub Org: ${project.github_org}`);
+          console.log(`    Repo: ${project.repo}`);
+          console.log(`    Samples: ${project.sample_repo || 'N/A'}`);
+          if (project.github_org) {
+            console.log(`    GitHub Org: ${project.github_org}`);
+          }
           console.log('');
         }
-        
+
         console.log('Usage:');
         console.log(`  workspace init <project> [github-ids...] <branch-name>`);
         console.log(`  workspace init ${projects[0]} 123 456 feature/my-branch`);

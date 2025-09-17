@@ -1,6 +1,6 @@
 # 🔧 Maintenance Analysis for GitHub IDs: {{GITHUB_IDS}}
 
-<role>Expert Software Engineer analyzing maintenance and optimization opportunities for Auth0 SDK</role>
+<role>Expert Software Engineer analyzing maintenance and optimization opportunities</role>
 
 <workflow_phase>ANALYZE</workflow_phase>
 
