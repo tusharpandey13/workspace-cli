@@ -107,7 +107,7 @@ export class ExecutionPlanService {
           description: 'Reproduce the reported issue in sample app with failing tests',
           phase: 'ANALYZE',
           dependencies: ['analyze-requirements'],
-          artifacts: ['BUGREPORT.md', 'reproduction-tests.js'],
+          artifacts: ['reproduction-tests.js'],
           validations: ['issue-reproduced', 'failing-tests-exist'],
           estimatedDuration: '30-60 minutes',
           isRequired: true,
@@ -428,12 +428,7 @@ export class ExecutionPlanService {
     ];
 
     if (workflowType === 'issue-fix') {
-      return [
-        ...baseArtifacts,
-        'BUGREPORT.md',
-        'reproduction-tests.js',
-        'fix-validation-results.md',
-      ];
+      return [...baseArtifacts, 'reproduction-tests.js', 'fix-validation-results.md'];
     }
 
     if (workflowType === 'feature-development') {
@@ -475,25 +470,15 @@ export class ExecutionPlanService {
     ];
 
     if (workflowType === 'issue-fix') {
-      baseRules.push(
-        {
-          id: 'issue-reproduced',
-          name: 'Issue Reproduced',
-          description: 'BUGREPORT.md contains reproduction evidence',
-          type: 'file-exists',
-          target: 'BUGREPORT.md',
-          isRequired: true,
-        },
-        {
-          id: 'reproduction-tests-pass',
-          name: 'Reproduction Tests Pass',
-          description: 'Reproduction tests validate the fix',
-          type: 'content-contains',
-          target: 'fix-validation-results.md',
-          expectedValue: 'REPRODUCTION_TESTS_PASS',
-          isRequired: true,
-        },
-      );
+      baseRules.push({
+        id: 'reproduction-tests-pass',
+        name: 'Reproduction Tests Pass',
+        description: 'Reproduction tests validate the fix',
+        type: 'content-contains',
+        target: 'fix-validation-results.md',
+        expectedValue: 'REPRODUCTION_TESTS_PASS',
+        isRequired: true,
+      });
     }
 
     return baseRules;

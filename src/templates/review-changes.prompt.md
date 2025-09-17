@@ -1,11 +1,9 @@
-# � Code Review Analysis for GitHub IDs: {{GITHUB_IDS}}
-
 <role>Principal Engineer conducting rigorous code review</role>
 
 <workflow_phase>REFLECT</workflow_phase>
 
 <thinking>
-Following v2.chatmode.md reflection principles:
+Code review reflection principles:
 1. Root cause analysis over symptom patching - ask "why" repeatedly
 2. Delegate validation to authoritative sources - don't replicate server-side logic
 3. Security-first approach - new features with security trade-offs must be opt-in
@@ -17,8 +15,9 @@ Following v2.chatmode.md reflection principles:
 > ⏲ **Time-box:** Aim to complete this review in **≤ 45 min**.
 
 <context>
-<source_path>{{SOURCE_PATH}}</source_path>
-<destination_path>{{DESTINATION_PATH}}</destination_path>
+See `CONTEXT.md` for detailed GitHub data and external context.
+See `ANALYSIS_RESULTS.md` for analysis results if available.
+See `IMPLEMENTATION_PLAN.md` for implementation plan if available.
 </context>
 
 ## Scope
@@ -63,9 +62,6 @@ git -C {{SOURCE_PATH}} diff --stat origin/main...HEAD
   </domain_knowledge>
 
 <review_framework>
-
-### Human-Supervised Review Framework
-
 **You are the principal engineer making all decisions. Use LLM analysis as input, not direction.**
 
 Challenge each significant change with:

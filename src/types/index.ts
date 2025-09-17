@@ -93,10 +93,13 @@ export interface PlaceholderValues {
   '{{WORKSPACE_DIR}}': string;
   '{{SDK_PATH}}': string;
   '{{SAMPLE_PATH}}': string;
+  '{{SOURCE_PATH}}': string;
+  '{{DESTINATION_PATH}}': string;
   '{{GITHUB_DATA}}': string;
+  '{{GITHUB_IDS}}': string;
   '{{SDK_KEY_FILES}}': string;
   '{{SAMPLE_KEY_FILES}}': string;
-  '{{BUGREPORT_FILE}}': string;
+  '{{SOURCE_KEY_FILES}}': string;
   '{{RELATED_ISSUES_PRS}}': string;
   '{{ADDITIONAL_CONTEXT}}': string;
   '{{TEST_FILE_NAME}}': string;
@@ -113,6 +116,7 @@ export interface InitializeWorkspaceOptions {
   isDryRun: boolean;
   isVerbose: boolean;
   isSilent: boolean;
+  withContext: boolean;
 }
 
 export interface SetupEnvironmentOptions {

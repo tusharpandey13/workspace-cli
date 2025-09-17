@@ -6,6 +6,7 @@ import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { executeCommand, fileOps, createTestFileName } from '../utils/init-helpers.js';
 import { ContextDataFetcher } from '../services/contextData.js';
+import { getWorkflowTemplates } from '../utils/workflow.js';
 import readline from 'node:readline/promises';
 import { setupWorktrees } from '../services/gitWorktrees.js';
 import { stdin as input, stdout as output } from 'node:process';
@@ -33,6 +34,7 @@ interface AnalysisOnlyOptions {
   isDryRun: boolean;
   isVerbose: boolean;
   isSilent: boolean;
+  withContext: boolean;
 }
 
 /**
@@ -60,7 +62,8 @@ function parseRepoInitArguments(args: string[]): { issueIds: number[]; branchNam
  * Initialize workspace for a specific project
  */
 async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise<void> {
-  const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent } = options;
+  const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent, withContext } =
+    options;
 
   // Check if workspace already exists
   await handleExistingWorkspace(paths.workspaceDir, isDryRun, isSilent);
@@ -79,7 +82,7 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
 
   // Collect additional context
   logger.step(3, 6, 'Collecting additional context...');
-  const additionalContext = await collectAdditionalContext(isSilent);
+  const additionalContext = await collectAdditionalContext(!withContext);
 
   // Fetch GitHub data
   logger.step(4, 6, 'Fetching GitHub data...');
@@ -133,7 +136,8 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
  * Initialize workspace for analysis only - skips worktree creation
  */
 async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Promise<void> {
-  const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent } = options;
+  const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent, withContext } =
+    options;
 
   // Check if workspace already exists
   await handleExistingWorkspace(paths.workspaceDir, isDryRun, isSilent);
@@ -148,7 +152,7 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 
   // Collect additional context
   logger.step(2, 4, 'Collecting additional context...');
-  const additionalContext = await collectAdditionalContext(isSilent);
+  const additionalContext = await collectAdditionalContext(!withContext);
 
   // Fetch GitHub data
   logger.step(3, 4, 'Fetching GitHub data...');
@@ -239,9 +243,9 @@ async function handleExistingWorkspace(
 /**
  * Collect additional context from user
  */
-async function collectAdditionalContext(isSilent: boolean = false): Promise<string[]> {
-  if (isSilent) {
-    logger.verbose('🔕 Silent mode: Skipping additional context collection');
+async function collectAdditionalContext(skipContextCollection: boolean = true): Promise<string[]> {
+  if (skipContextCollection) {
+    logger.verbose('⏭️  Skipping additional context collection');
     return [];
   }
 
@@ -330,22 +334,20 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
     isDryRun,
   } = options;
 
-  // Simplified template copying - use only common templates from config
+  // Use universal templates for all workflows
+  const workflowTemplates = getWorkflowTemplates();
+
+  logger.verbose(`📋 Selected templates: ${workflowTemplates.join(', ')}`);
+
+  // Copy selected workflow templates
   const templates = configManager.getTemplates();
   const templatesDir = templates.dir || path.join(configManager.getCliRoot(), 'src/templates');
-  const commonTemplates = templates.common || [
-    'analysis.prompt.md',
-    'review-changes.prompt.md',
-    'tests.prompt.md',
-    'fix-and-test.prompt.md',
-    'PR_DESCRIPTION_TEMPLATE.md',
-  ];
 
-  logger.info(`📋 Copying common templates: ${commonTemplates.join(', ')}`);
+  logger.info(`� Copying workflow-specific templates: ${workflowTemplates.join(', ')}`);
   logger.verbose(`📄 Copying templates from ${templatesDir}...`);
 
-  // Copy each common template
-  for (const templateFile of commonTemplates) {
+  // Copy each workflow template
+  for (const templateFile of workflowTemplates) {
     const sourcePath = path.join(templatesDir, templateFile);
     const destPath = path.join(paths.workspaceDir, templateFile);
 
@@ -415,31 +417,25 @@ async function generateAnalysisTemplatesAndDocs(options: GenerateTemplatesOption
     isDryRun,
   } = options;
 
-  // Copy templates
+  // Detect workflow type and select templates
+  const workflowTemplates = getWorkflowTemplates();
+
+  logger.verbose(`� Selected templates: ${workflowTemplates.join(', ')}`);
+
+  // Copy selected templates
   const templates = configManager.getTemplates();
   const templatesDir = templates.dir || path.join(configManager.getCliRoot(), 'src/templates');
 
-  logger.verbose(`📄 Copying templates from ${templatesDir}...`);
-  await fileOps.copyFile(
-    templatesDir,
-    paths.workspaceDir,
-    `templates from ${templatesDir} to workspace`,
-    isDryRun,
-  );
+  logger.verbose(`📄 Copying workflow-specific templates from ${templatesDir}...`);
 
-  // Remove unnecessary templates if no GitHub IDs
-  if (issueIds.length === 0) {
-    logger.verbose('⚠️  No GitHub IDs provided - removing analysis and fix-and-test prompts');
-    const analysisPrompt = path.join(paths.workspaceDir, 'analysis.prompt.md');
-    const fixPrompt = path.join(paths.workspaceDir, 'fix-and-test.prompt.md');
+  for (const templateName of workflowTemplates) {
+    const sourcePath = path.join(templatesDir, templateName);
+    const destPath = path.join(paths.workspaceDir, templateName);
 
-    if (!isDryRun) {
-      if (fs.existsSync(analysisPrompt)) {
-        await fileOps.removeFile(analysisPrompt, 'analysis.prompt.md (no GitHub IDs)', isDryRun);
-      }
-      if (fs.existsSync(fixPrompt)) {
-        await fileOps.removeFile(fixPrompt, 'fix-and-test.prompt.md (no GitHub IDs)', isDryRun);
-      }
+    if (fs.existsSync(sourcePath)) {
+      await fileOps.copyFile(sourcePath, destPath, `template ${templateName}`, isDryRun);
+    } else {
+      logger.verbose(`⚠️  Template ${templateName} not found, skipping`);
     }
   }
 
@@ -496,7 +492,7 @@ function createPlaceholderValues({
   branchName,
   paths,
   githubData,
-  additionalContext,
+  additionalContext: _additionalContext,
 }: {
   project: ProjectConfig;
   projectKey: string;
@@ -506,27 +502,16 @@ function createPlaceholderValues({
   githubData: GitHubIssueData[];
   additionalContext: string[];
 }): PlaceholderValues {
-  const primaryIssueId = issueIds.length > 0 ? issueIds[0] : null;
   const testFileName = createTestFileName(githubData);
 
-  // Format GitHub data
-  const githubDataFormatted =
-    githubData.length > 0 ? formatGitHubData(githubData) : 'No GitHub issues or PRs provided.';
-
-  const additionalContextFormatted =
-    additionalContext.length > 0
-      ? additionalContext.map((ctx, i) => `${i + 1}. ${ctx}`).join('\n')
-      : 'No additional context provided.';
+  // Reference CONTEXT.md instead of embedding data for regular mode too
+  const contextReference = 'See CONTEXT.md for detailed GitHub data and external context.';
 
   // Generate key files lists
   const repoKeyFiles = generateRepoKeyFiles(paths.sourcePath, paths.workspaceDir);
   const sampleKeyFiles = paths.destinationPath
     ? generateSampleKeyFiles(paths.destinationPath, paths.workspaceDir)
     : '';
-
-  const bugReportPath = primaryIssueId
-    ? path.join(paths.workspaceDir, `BUGREPORT_${primaryIssueId}.md`)
-    : path.join(paths.workspaceDir, 'WORKSPACE_INFO.md');
 
   return {
     '{{PROJECT_NAME}}': project.name || project.repo,
@@ -535,12 +520,15 @@ function createPlaceholderValues({
     '{{WORKSPACE_DIR}}': paths.workspaceDir,
     '{{SDK_PATH}}': paths.sourcePath,
     '{{SAMPLE_PATH}}': paths.destinationPath || '',
-    '{{GITHUB_DATA}}': githubDataFormatted,
+    '{{SOURCE_PATH}}': paths.sourcePath,
+    '{{DESTINATION_PATH}}': paths.destinationPath || '',
+    '{{GITHUB_DATA}}': contextReference,
+    '{{GITHUB_IDS}}': issueIds.join(', ') || 'None',
     '{{SDK_KEY_FILES}}': repoKeyFiles,
     '{{SAMPLE_KEY_FILES}}': sampleKeyFiles,
-    '{{BUGREPORT_FILE}}': path.basename(bugReportPath),
-    '{{RELATED_ISSUES_PRS}}': 'No additional related issues or PRs provided via user input.',
-    '{{ADDITIONAL_CONTEXT}}': additionalContextFormatted,
+    '{{SOURCE_KEY_FILES}}': repoKeyFiles,
+    '{{RELATED_ISSUES_PRS}}': contextReference,
+    '{{ADDITIONAL_CONTEXT}}': contextReference,
     '{{TEST_FILE_NAME}}': testFileName,
     '{{POST_INIT_COMMAND}}': project['post-init'] || 'echo "No post-init command configured"',
   };
@@ -556,7 +544,7 @@ function createAnalysisPlaceholderValues({
   branchName,
   paths,
   githubData,
-  additionalContext,
+  additionalContext: _additionalContext,
 }: {
   project: ProjectConfig;
   projectKey: string;
@@ -566,39 +554,31 @@ function createAnalysisPlaceholderValues({
   githubData: GitHubIssueData[];
   additionalContext: string[];
 }): PlaceholderValues {
-  const primaryIssueId = issueIds.length > 0 ? issueIds[0] : null;
   const testFileName = createTestFileName(githubData);
 
-  // Format GitHub data
-  const githubDataFormatted =
-    githubData.length > 0 ? formatGitHubData(githubData) : 'No GitHub issues or PRs provided.';
-
-  const additionalContextFormatted =
-    additionalContext.length > 0
-      ? additionalContext.map((ctx, i) => `${i + 1}. ${ctx}`).join('\n')
-      : 'No additional context provided.';
+  // Reference CONTEXT.md instead of embedding data
+  const contextReference = 'See CONTEXT.md for detailed GitHub data and external context.';
 
   // Generate mock key files lists for analysis mode
   const repoKeyFiles = generateMockRepoKeyFiles(project);
   const sampleKeyFiles = generateMockSampleKeyFiles(project);
-
-  const bugReportPath = primaryIssueId
-    ? path.join(paths.workspaceDir, `BUGREPORT_${primaryIssueId}.md`)
-    : path.join(paths.workspaceDir, 'WORKSPACE_INFO.md');
 
   return {
     '{{PROJECT_NAME}}': project.name || project.repo,
     '{{PROJECT_KEY}}': projectKey,
     '{{BRANCH_NAME}}': branchName,
     '{{WORKSPACE_DIR}}': paths.workspaceDir,
+    '{{SOURCE_PATH}}': `${paths.sourcePath} (not created in analysis mode)`,
+    '{{DESTINATION_PATH}}': `${paths.destinationPath || 'N/A'} (not created in analysis mode)`,
     '{{SDK_PATH}}': `${paths.sourcePath} (not created in analysis mode)`,
     '{{SAMPLE_PATH}}': `${paths.destinationPath || 'N/A'} (not created in analysis mode)`,
-    '{{GITHUB_DATA}}': githubDataFormatted,
-    '{{SDK_KEY_FILES}}': repoKeyFiles,
+    '{{GITHUB_DATA}}': contextReference,
+    '{{GITHUB_IDS}}': issueIds.join(', ') || 'None',
+    '{{SOURCE_KEY_FILES}}': repoKeyFiles,
     '{{SAMPLE_KEY_FILES}}': sampleKeyFiles,
-    '{{BUGREPORT_FILE}}': path.basename(bugReportPath),
-    '{{RELATED_ISSUES_PRS}}': 'No additional related issues or PRs provided via user input.',
-    '{{ADDITIONAL_CONTEXT}}': additionalContextFormatted,
+    '{{SDK_KEY_FILES}}': repoKeyFiles,
+    '{{RELATED_ISSUES_PRS}}': contextReference,
+    '{{ADDITIONAL_CONTEXT}}': contextReference,
     '{{TEST_FILE_NAME}}': testFileName,
     '{{POST_INIT_COMMAND}}': project['post-init'] || 'echo "No post-init command configured"',
   };
@@ -768,70 +748,39 @@ function generateMockSampleKeyFiles(project: ProjectConfig): string {
 async function generateWorkspaceInfoFile(options: GenerateWorkspaceInfoOptions): Promise<void> {
   const { issueIds, branchName, paths, githubData, additionalContext, isDryRun } = options;
 
-  const primaryIssueId = issueIds.length > 0 ? issueIds[0] : null;
-  const bugReportPath = primaryIssueId
-    ? path.join(paths.workspaceDir, `BUGREPORT_${primaryIssueId}.md`)
-    : path.join(paths.workspaceDir, 'WORKSPACE_INFO.md');
+  // Always create CONTEXT.md with GitHub data and external context
+  const contextPath = path.join(paths.workspaceDir, 'CONTEXT.md');
 
-  if (!isDryRun && !fs.existsSync(bugReportPath)) {
+  if (!isDryRun) {
     const githubDataFormatted = formatGitHubData(githubData);
     const additionalContextFormatted =
       additionalContext.length > 0
         ? additionalContext.map((ctx, i) => `${i + 1}. ${ctx}`).join('\n')
         : 'No additional context provided.';
 
-    const fileContent = primaryIssueId
-      ? `# Bug Report for #${primaryIssueId}
+    const contextContent = `# Context Data for ${branchName}
 
-*Fill this out while completing the analysis prompt.*
-
-## Summary
-
-## Root Cause
-
-## Reproduction Steps
-
-## Proposed Fix
-
-## GitHub Issues/PRs Context
+## GitHub Issues/PRs
 
 ${githubDataFormatted}
-
-## Related Issues/PRs (User Input)
-
-No additional related issues or PRs provided via user input.
-
-## Additional Context
-
-${additionalContextFormatted}
-`
-      : `# Workspace Info for ${branchName}
-
-*This workspace was created without specific GitHub IDs.*
-
-## Branch Purpose
-
-## GitHub Issues/PRs Context
-
-${githubDataFormatted}
-
-## Related Issues/PRs (User Input)
-
-No additional related issues or PRs provided via user input.
 
 ## Additional Context
 
 ${additionalContextFormatted}
 
-## Notes
+## Repository Information
 
+- **Branch**: ${branchName}
+- **GitHub IDs**: ${issueIds.length > 0 ? issueIds.join(', ') : 'None'}
+- **Workspace**: ${paths.workspaceDir}
+
+---
+
+*This file contains all external context data. Reference this file from prompts instead of embedding data directly.*
 `;
-    await fileOps.writeFile(
-      bugReportPath,
-      fileContent,
-      primaryIssueId ? `bug report for #${primaryIssueId}` : `workspace info for ${branchName}`,
-      isDryRun,
-    );
+
+    await fileOps.writeFile(contextPath, contextContent, 'CONTEXT.md with GitHub data', isDryRun);
+    logger.verbose(`📋 Created CONTEXT.md with GitHub data and external context`);
   }
 }
 
@@ -873,6 +822,10 @@ export function initCommand(program: Command): void {
     .option(
       '--silent',
       'Silent mode: skip all user input prompts with sensible defaults (fire-and-forget mode)',
+    )
+    .option(
+      '--with-context',
+      'Enable interactive context collection prompt (optional additional context)',
     )
     .addHelpText(
       'after',
@@ -924,7 +877,13 @@ Related commands:
       async (
         projectIdentifier: string,
         args: string[],
-        options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean; silent?: boolean },
+        options: {
+          verbose?: boolean;
+          dryRun?: boolean;
+          analyse?: boolean;
+          silent?: boolean;
+          withContext?: boolean;
+        },
       ) => {
         try {
           // Check if --pr option was used globally
@@ -952,6 +911,7 @@ Related commands:
           const isDryRun = options.dryRun || false;
           const isAnalyseMode = options.analyse || false;
           const isSilent = options.silent || false;
+          const withContext = options.withContext || false;
 
           if (isSilent) {
             logger.info('🔕 SILENT MODE: Skipping all user input prompts');
@@ -992,6 +952,7 @@ Related commands:
               isDryRun,
               isVerbose: isVerbose || false,
               isSilent,
+              withContext,
             });
           } else {
             await initializeWorkspace({
@@ -1004,6 +965,7 @@ Related commands:
               isDryRun,
               isVerbose: isVerbose || false,
               isSilent,
+              withContext,
             });
           }
         } catch (error) {

@@ -95,7 +95,6 @@ describe('ExecutionPlanService', () => {
         [],
       );
 
-      expect(plan.metadata.requiredArtifacts).toContain('BUGREPORT.md');
       expect(plan.metadata.requiredArtifacts).toContain('reproduction-tests.js');
       expect(plan.metadata.requiredArtifacts).toContain('CHANGES_PR_DESCRIPTION.md');
       expect(plan.metadata.requiredArtifacts).toContain('FINAL_REPORT.md');
@@ -113,7 +112,6 @@ describe('ExecutionPlanService', () => {
       );
 
       const rules = plan.metadata.validationRules;
-      expect(rules.some((r) => r.id === 'issue-reproduced')).toBe(true);
       expect(rules.some((r) => r.id === 'reproduction-tests-pass')).toBe(true);
       expect(rules.some((r) => r.id === 'build-success')).toBe(true);
       expect(rules.some((r) => r.id === 'all-tests-pass')).toBe(true);
@@ -145,10 +143,6 @@ describe('ExecutionPlanService', () => {
         );
 
         // Create required artifacts for reproduce-issue step
-        await fs.writeFile(
-          path.join(mockWorkspacePath, 'BUGREPORT.md'),
-          'Bug reproduced successfully',
-        );
         await fs.writeFile(
           path.join(mockWorkspacePath, 'reproduction-tests.js'),
           'test("reproduction", () => {});',
@@ -430,7 +424,7 @@ describe('ExecutionPlanService', () => {
       expect(summary).toContain('Branch: bugfix/test');
       expect(summary).toContain('MANDATORY STEPS REMAINING');
       expect(summary).toContain('Required Artifacts');
-      expect(summary).toContain('BUGREPORT.md');
+      expect(summary).toContain('reproduction-tests.js');
     });
 
     it('should create checkpoints with proper structure', () => {
@@ -438,20 +432,20 @@ describe('ExecutionPlanService', () => {
         'ANALYZE',
         'reproduce-issue',
         'Issue reproduced successfully',
-        ['BUGREPORT.md', 'reproduction-tests.js'],
+        ['reproduction-tests.js'],
       );
 
       expect(checkpoint.id).toMatch(/^checkpoint-\d+$/);
       expect(checkpoint.phase).toBe('ANALYZE');
       expect(checkpoint.step).toBe('reproduce-issue');
       expect(checkpoint.message).toBe('Issue reproduced successfully');
-      expect(checkpoint.artifacts).toEqual(['BUGREPORT.md', 'reproduction-tests.js']);
+      expect(checkpoint.artifacts).toEqual(['reproduction-tests.js']);
       expect(checkpoint.timestamp).toBeDefined();
     });
   });
 
   describe('mandatory behavior enforcement', () => {
-    it('should enforce BUGREPORT.md creation for issue-fix workflows', async () => {
+    it('should enforce test file creation for issue-fix workflows', async () => {
       const plan = ExecutionPlanService.generateExecutionPlan(
         'issue-fix',
         mockWorkspacePath,
@@ -468,12 +462,7 @@ describe('ExecutionPlanService', () => {
         .find((s) => s.id === 'reproduce-issue')!;
 
       expect(reproduceStep.isRequired).toBe(true);
-      expect(reproduceStep.artifacts).toContain('BUGREPORT.md');
-
-      const bugReportRule = plan.metadata.validationRules.find((r) => r.id === 'issue-reproduced');
-      expect(bugReportRule).toBeDefined();
-      expect(bugReportRule!.isRequired).toBe(true);
-      expect(bugReportRule!.target).toBe('BUGREPORT.md');
+      expect(reproduceStep.artifacts).toContain('reproduction-tests.js');
     });
 
     it('should enforce PR description generation', () => {
