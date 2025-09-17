@@ -51,54 +51,6 @@ workspace init myproject feature/user-authentication
 
 That's it! Your multi-repo development environment is ready.
 
-## 💡 How It Works
-
-```
-Traditional Multi-Repository Development
-┌──────────────────────────────────────────────────────────────┐
-│ For each repository (SDK, Samples, Demos):                   │
-│                                                              │
-│ 1. Commit WIP changes                                        │
-│ 2. Switch to main branch                                     │
-│ 3. Pull latest changes                                       │
-│ 4. Create feature branch                                     │
-│ 5. Configure development environment                         │
-│                                                              │
-│ Then manually link dependencies between repos...             │
-└──────────────────────────────────────────────────────────────┘
-                    (20+ commands, 5-10 minutes)
-
-Workspace CLI Automation
-┌──────────────────────────────────────────────────────────────┐
-│ Unified Workspace: feature/auth-fix                          │
-│                                                              │
-│ ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
-│ │ SDK         │◄──►│ Samples     │◄──►│ Demos       │        │
-│ │ worktree    │    │ worktree    │    │ worktree    │        │
-│ │ (linked)    │    │ (configured)│    │ (ready)     │        │
-│ └─────────────┘    └─────────────┘    └─────────────┘        │
-│                                                              │
-│ Dependencies linked • Environments configured                │
-└──────────────────────────────────────────────────────────────┘
-                    (1 command, 15 seconds)
-```
-
-## 📖 Usage
-
-```bash
-# Create workspace for new feature
-workspace init next feature/oauth-improvements
-
-# Work on existing GitHub PR
-workspace init react --pr 123
-
-# List all your workspaces
-workspace list
-
-# Submit your changes as PR
-workspace submit next feature/oauth-improvements
-```
-
 ## ⚙️ Configuration
 
 First, ensure you're authenticated with GitHub CLI:
@@ -125,6 +77,22 @@ projects:
 ```
 
 [📚 **Full Configuration Guide →**](./DOCS.md)
+
+## 📖 Usage
+
+```bash
+# Create workspace for new feature
+workspace init next feature/oauth-improvements
+
+# Work on existing GitHub PR
+workspace init react --pr 123
+
+# List all your workspaces
+workspace list
+
+# Submit your changes as PR
+workspace submit next feature/oauth-improvements
+```
 
 ## 🌟 Why Workspace CLI?
 
