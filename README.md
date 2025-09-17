@@ -9,7 +9,7 @@ workspace init next-sdk feature/auth-fix
 is roughly equivanent to doing:
 
 ```bash
-# save current work!
+# save current work
 git add .
 git commit -m "WIP: current work"
 
