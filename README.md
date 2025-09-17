@@ -35,7 +35,7 @@ git worktree add ../sdk-feature-branch -b feature/auth-fix
 - **GitHub CLI** (`gh`) - [Install guide](https://cli.github.com/)
 - **Git** (v2.25+ for worktree support)
 
-## �🚀 Quick Start
+## 🚀 Quick Start
 
 Clone and install globally
 
