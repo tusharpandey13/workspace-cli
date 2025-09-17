@@ -69,11 +69,9 @@ projects:
     sample_repo: 'auth0-nextjs-samples'
     github_org: 'auth0'
 
-  react:
-    name: 'React SDK'
-    sdk_repo: 'auth0-react'
-    sample_repo: 'auth0-react-samples'
-    github_org: 'auth0'
+  java:
+    name: 'Auth0 Java SDK'
+    repo: 'https://github.com/auth0/auth0-java.git'
 ```
 
 [📚 **Full Configuration Guide →**](./DOCS.md)
