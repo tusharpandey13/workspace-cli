@@ -18,8 +18,8 @@
     "format": "prettier --write \"**/*.{ts,js,md,json}\"",
     "prepare": "husky install",
     "clean": "rm -rf dist",
-    "install-global": "pnpm run build && pnpm link --global",
-    "uninstall-global": "pnpm unlink --global",
+    "install-global": "npm run build && npm link --global",
+    "uninstall-global": "npm unlink --global",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

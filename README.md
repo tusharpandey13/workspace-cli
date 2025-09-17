@@ -1,40 +1,52 @@
-# Workspace CLI ⚡
+# Workspace CLI : Automated workflow coordination ⚡
 
-[![npm version](https://badge.fury.io/js/workspace-cli.svg)](https://badge.fury.io/js/workspace-cli)
-[![CI](https://github.com/tusharpandey13/workspace-cli/workflows/CI/badge.svg)](https://github.com/tusharpandey13/workspace-cli/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/workspace-cli.svg)](https://nodejs.org/en/)
-
-**Stop wrestling with multiple git repositories—manage complex multi-repo workflows effortlessly with one command.**
+**Effortlessly handle context switching and context retention**
 
 ```bash
-# Before: 15 manual steps, 5 minutes of setup
-cd ~/project-sdk && git checkout -b feature/auth-fix
-cd ~/project-samples && git checkout main && git pull
-cd ~/project-demos && git checkout main && git pull
-# ... copy files, link dependencies, setup environments ...
-
-# After: 1 command, 10 seconds
-workspace init myproject feature/auth-fix
+workspace init next-sdk feature/auth-fix
 ```
 
-![CLI Demo](https://raw.githubusercontent.com/tusharpandey13/workspace-cli/main/demo.gif)
+is roughly equivanent to doing:
+
+```bash
+# save current work!
+git add .
+git commit -m "WIP: current work"
+
+# get latest commits!
+git checkout main
+git pull origin main
+
+# create new branch and worktree 🤯
+git worktree add ../sdk-feature-branch -b feature/auth-fix
+```
 
 ## ✨ Features
 
-- 🚀 **One-Command Setup** - Transform hours of manual git worktree management into seconds
-- 🔗 **Multi-Repo Sync** - Automatically links SDKs, samples, and demos across repositories
-- 📋 **GitHub Integration** - Create workspaces directly from pull requests and issues
-- ⚙️ **Stack Agnostic** - Works with any technology stack via YAML configuration
-- 🛡️ **Safe & Isolated** - Each workspace is completely independent using git worktrees
-- 📦 **Smart Dependencies** - Auto-links packages with yalc for seamless development
+- 🚀 Single command workspace setup!
+- 🔗 Multi-Repo isolated dev environment setup (repo + sample)
+- 📋 AI forward
+- ⚙️ Stack Agnostic
 
-## 🚀 Quick Start
+## ✅ Prerequisites
+
+- **Node.js** (v18 or higher)
+- **npm** (for package management)
+- **GitHub CLI** (`gh`) - [Install guide](https://cli.github.com/)
+- **Git** (v2.25+ for worktree support)
+
+## �🚀 Quick Start
+
+Clone and install globally
 
 ```bash
-npm install -g workspace-cli
-workspace init myproject feature/awesome-feature
-cd workspaces/myproject/feature-awesome-feature && code .
+git clone https://github.com/tusharpandey13/workspace-cli.git && cd workspace-cli && npm install && npm run install-global
+```
+
+Create your first workspace
+
+```bash
+workspace init myproject feature/user-authentication
 ```
 
 That's it! Your multi-repo development environment is ready.
@@ -42,25 +54,33 @@ That's it! Your multi-repo development environment is ready.
 ## 💡 How It Works
 
 ```
-Traditional Multi-Repo Development 😫
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ SDK Repo    │  │ Sample Repo │  │ Demo Repo   │
-│ Different   │  │ Different   │  │ Different   │
-│ Branches    │  │ Branches    │  │ Branches    │
-└─────────────┘  └─────────────┘  └─────────────┘
-      │                │                │
-      └──── Manual Linking & Setup ─────┘
-                    (15+ steps)
+Traditional Multi-Repository Development
+┌──────────────────────────────────────────────────────────────┐
+│ For each repository (SDK, Samples, Demos):                   │
+│                                                              │
+│ 1. Commit WIP changes                                        │
+│ 2. Switch to main branch                                     │
+│ 3. Pull latest changes                                       │
+│ 4. Create feature branch                                     │
+│ 5. Configure development environment                         │
+│                                                              │
+│ Then manually link dependencies between repos...             │
+└──────────────────────────────────────────────────────────────┘
+                    (20+ commands, 5-10 minutes)
 
-Workspace CLI Magic ✨
-┌─────────────────────────────────────────────────┐
-│ Unified Workspace                               │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │ SDK     │──│ Sample  │──│ Demo    │        │
-│  │ (linked)│  │ (synced)│  │ (ready) │        │
-│  └─────────┘  └─────────┘  └─────────┘        │
-└─────────────────────────────────────────────────┘
-                  (1 command)
+Workspace CLI Automation
+┌──────────────────────────────────────────────────────────────┐
+│ Unified Workspace: feature/auth-fix                          │
+│                                                              │
+│ ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
+│ │ SDK         │◄──►│ Samples     │◄──►│ Demos       │        │
+│ │ worktree    │    │ worktree    │    │ worktree    │        │
+│ │ (linked)    │    │ (configured)│    │ (ready)     │        │
+│ └─────────────┘    └─────────────┘    └─────────────┘        │
+│                                                              │
+│ Dependencies linked • Environments configured                │
+└──────────────────────────────────────────────────────────────┘
+                    (1 command, 15 seconds)
 ```
 
 ## 📖 Usage
@@ -81,7 +101,13 @@ workspace submit next feature/oauth-improvements
 
 ## ⚙️ Configuration
 
-Create a simple `config.yaml`:
+First, ensure you're authenticated with GitHub CLI:
+
+```bash
+gh auth login
+```
+
+Then create a simple `config.yaml` in your home directory or project root:
 
 ```yaml
 projects:
@@ -104,15 +130,15 @@ projects:
 
 **For SDK Teams:**
 
-- Reduce onboarding time from hours to minutes
-- Eliminate "it works on my machine" issues
-- Streamline testing across multiple sample applications
+- Reduce developer onboarding from hours to minutes
+- Eliminate "it works on my machine" issues across environments
+- Streamline testing workflows across multiple sample applications
 
 **For Individual Developers:**
 
-- Stop context switching between 5+ terminal tabs
-- Never forget to sync changes across repositories again
-- Focus on coding, not repository management
+- Stop managing complex worktree setups across multiple repositories
+- Never manually coordinate branch states across repos again
+- Focus on coding, not repository coordination
 
 ## 🤝 Community & Support
 
