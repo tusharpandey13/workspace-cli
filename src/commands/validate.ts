@@ -42,12 +42,7 @@ class WorkspaceValidator {
 
   validateMandatoryArtifacts(): ValidationResult[] {
     const results: ValidationResult[] = [];
-    const requiredArtifacts = [
-      'BUGREPORT.md',
-      'CHANGES_PR_DESCRIPTION.md',
-      'CHANGES_REVIEW.md',
-      'FINAL_REPORT.md',
-    ];
+    const requiredArtifacts = ['CHANGES_PR_DESCRIPTION.md', 'CHANGES_REVIEW.md', 'FINAL_REPORT.md'];
 
     for (const artifact of requiredArtifacts) {
       const artifactPath = path.join(this.workspacePath, artifact);

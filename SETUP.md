@@ -3,6 +3,7 @@
 ## Quick Setup
 
 1. **Clone and install dependencies:**
+
    ```bash
    git clone <repository>
    cd workspace-cli
@@ -10,12 +11,14 @@
    ```
 
 2. **One-time pnpm setup (if not done before):**
+
    ```bash
    pnpm setup
    source ~/.zshrc  # or restart your terminal
    ```
 
 3. **Install CLI globally:**
+
    ```bash
    pnpm run install-global
    ```

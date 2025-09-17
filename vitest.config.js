@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    watch: false,
     environment: 'node',
     testTimeout: 30000, // 30 seconds for integration tests with git operations
     coverage: {
