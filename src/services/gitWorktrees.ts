@@ -6,6 +6,52 @@ import type { ProjectConfig, WorkspacePaths } from '../types/index.js';
 import { ConfigManager } from '../utils/config.js';
 
 /**
+ * Ensure repository exists locally by cloning if necessary
+ */
+async function ensureRepositoryExists(
+  repoPath: string,
+  repoUrl: string,
+  repoName: string,
+  isDryRun: boolean,
+): Promise<void> {
+  if (isDryRun) {
+    logger.verbose(`[DRY RUN] Would ensure repository exists at ${repoPath}`);
+    return;
+  }
+
+  // If repository already exists, we're good
+  if (fs.existsSync(repoPath)) {
+    const gitDir = path.join(repoPath, '.git');
+    if (fs.existsSync(gitDir)) {
+      logger.verbose(`✅ Repository ${repoName} already exists at ${repoPath}`);
+      return;
+    }
+  }
+
+  // Repository doesn't exist, clone it
+  logger.info(`📥 Repository ${repoName} not found locally, cloning from ${repoUrl}...`);
+
+  // Ensure parent directory exists
+  const parentDir = path.dirname(repoPath);
+  await fileOps.ensureDir(parentDir, `parent directory for ${repoName}`, isDryRun);
+
+  try {
+    await executeCommand(
+      'git',
+      ['clone', repoUrl, repoPath],
+      {},
+      `clone ${repoName} repository`,
+      isDryRun,
+    );
+    logger.success(`✅ Successfully cloned ${repoName} to ${repoPath}`);
+  } catch (error) {
+    throw new Error(
+      `Failed to clone repository ${repoName} from ${repoUrl}: ${(error as Error).message}`,
+    );
+  }
+}
+
+/**
  * Validate that repository exists and is in a good state for worktree creation
  */
 async function validateRepository(
@@ -167,6 +213,18 @@ export async function setupWorktrees(
       repository: { ensure_freshness: true, auto_update_default_branches: true },
       testing: { auto_setup_infrastructure: true },
     };
+  }
+
+  // Ensure repositories exist locally (clone if necessary)
+  logger.verbose('📥 Ensuring repositories exist locally...');
+  await ensureRepositoryExists(paths.sourceRepoPath, project.repo, 'Main Repository', isDryRun);
+  if (paths.destinationRepoPath && project.sample_repo) {
+    await ensureRepositoryExists(
+      paths.destinationRepoPath,
+      project.sample_repo,
+      'Sample Repository',
+      isDryRun,
+    );
   }
 
   // Task 6.5: Validate repository state before proceeding
