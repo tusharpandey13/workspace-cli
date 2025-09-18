@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:dev": "tsc -p tsconfig.dev.json",
     "dev": "tsx src/bin/workspace.ts --help",
     "start": "node dist/bin/workspace.js --help",
     "test": "vitest --run",
@@ -19,6 +20,7 @@
     "prepare": "husky install",
     "clean": "rm -rf dist",
     "install-global": "npm run build && npm link",
+    "install-global:dev": "npm run build:dev && npm link",
     "uninstall-global": "npm unlink",
     "prepublishOnly": "npm run clean && npm run build"
   },
