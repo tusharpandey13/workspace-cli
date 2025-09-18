@@ -69,6 +69,7 @@ async function validateRepository(
 
 /**
  * Ensure repository is fresh by fetching latest changes from origin
+ * Note: Local branch state doesn't matter since worktrees are created from origin refs
  */
 async function ensureRepositoryFreshness(repoPath: string, isDryRun: boolean): Promise<void> {
   if (isDryRun) {
@@ -77,59 +78,21 @@ async function ensureRepositoryFreshness(repoPath: string, isDryRun: boolean): P
   }
 
   try {
-    // Fetch latest changes from origin
+    // Always fetch latest changes from origin to ensure fresh worktree creation
     await executeCommand(
       'git',
-      ['fetch', 'origin'],
+      ['fetch', 'origin', '--prune'],
       { cwd: repoPath },
       `fetch latest changes from origin for ${repoPath}`,
       isDryRun,
     );
 
-    // Get current branch and check if it's behind origin
-    const currentBranch = await executeCommand(
-      'git',
-      ['branch', '--show-current'],
-      { cwd: repoPath },
-      'get current branch',
-      false,
+    logger.verbose(
+      `✅ Fetched latest changes for ${repoPath} (worktrees will use fresh origin refs)`,
     );
 
-    const branch = currentBranch.stdout.trim();
-    if (branch) {
-      try {
-        // Check if local branch is behind origin
-        const behindCount = await executeCommand(
-          'git',
-          ['rev-list', '--count', `${branch}..origin/${branch}`],
-          { cwd: repoPath },
-          'check if branch is behind origin',
-          false,
-        );
-
-        const commitsBehind = parseInt(behindCount.stdout.trim(), 10);
-        if (commitsBehind > 0) {
-          logger.warn(`Repository ${repoPath} is ${commitsBehind} commits behind origin/${branch}`);
-
-          // Only update if we're on main/master to avoid conflicts
-          if (branch === 'main' || branch === 'master') {
-            await executeCommand(
-              'git',
-              ['pull', 'origin', branch],
-              { cwd: repoPath },
-              `update ${branch} branch`,
-              isDryRun,
-            );
-            logger.success(`Updated ${branch} branch in ${repoPath}`);
-          }
-        } else {
-          logger.verbose(`✅ Repository ${repoPath} is up to date`);
-        }
-      } catch {
-        // If we can't check, just log and continue
-        logger.verbose(`Could not check if ${repoPath} is behind origin`);
-      }
-    }
+    // Note: We don't update local branches since worktrees are created directly from origin refs
+    // This avoids merge conflicts and ensures worktrees always have the latest code
   } catch (error) {
     logger.warn(`Could not fetch latest changes for ${repoPath}: ${error}`);
   }
@@ -224,7 +187,6 @@ export async function setupWorktrees(
 
   // Task 6.1 & 6.2: Ensure repositories are fresh before creating worktrees (configurable)
   if (config.repository?.ensure_freshness !== false) {
-    logger.verbose('🔄 Ensuring repository freshness...');
     await ensureRepositoryFreshness(paths.sourceRepoPath, isDryRun);
     if (paths.destinationRepoPath) {
       await ensureRepositoryFreshness(paths.destinationRepoPath, isDryRun);
@@ -302,6 +264,4 @@ export async function setupWorktrees(
 
   // Task 6.4: Remove testing infrastructure setup (no longer JS/TS specific)
   logger.verbose('⏭️  Testing infrastructure setup not needed for stack-agnostic CLI');
-
-  logger.success('Git worktrees ready with fresh repositories');
 }

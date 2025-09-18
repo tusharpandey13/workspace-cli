@@ -12,6 +12,7 @@ import { infoCommand } from '../commands/info.js';
 import { cleanCommand } from '../commands/clean.js';
 import { submitCommand } from '../commands/submit.js';
 import { projectsCommand } from '../commands/projects.js';
+import { registerDoctorCommand } from '../commands/doctor.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
@@ -82,6 +83,7 @@ infoCommand(program);
 cleanCommand(program);
 submitCommand(program);
 projectsCommand(program);
+registerDoctorCommand(program);
 
 program.hook('preAction', async (thisCommand) => {
   try {

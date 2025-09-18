@@ -79,6 +79,19 @@ export class Logger {
       console.log(chalk.magenta(`[${step}/${total}] ${message}`));
     }
   }
+
+  // Level checking methods
+  isVerbose(): boolean {
+    return this.level >= LogLevel.VERBOSE;
+  }
+
+  isDebug(): boolean {
+    return this.level >= LogLevel.DEBUG;
+  }
+
+  getLevel(): LogLevelType {
+    return this.level;
+  }
 }
 
 // Global logger instance

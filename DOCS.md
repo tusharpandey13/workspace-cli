@@ -41,7 +41,31 @@ workspace --version
 workspace --help
 ```
 
+### System Diagnostics
+
+```bash
+workspace doctor
+```
+
+Checks system dependencies, validates configuration, and helps setup the CLI environment. Use this command to:
+
+- Verify all required tools are installed (git, GitHub CLI)
+- Check Node.js and npm versions
+- Validate configuration file structure
+- Setup user configuration if missing
+- Troubleshoot common setup issues
+
 ## Detailed Usage
+
+### System Check First
+
+Before using the CLI, run the diagnostic tool:
+
+```bash
+workspace doctor --setup
+```
+
+This will guide you through any missing dependencies or configuration issues.
 
 ### View Available Projects
 
