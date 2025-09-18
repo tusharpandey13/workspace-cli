@@ -1,12 +1,12 @@
-# Workspace CLI : Automated workflow coordination ⚡
+# Workspace CLI: Automated workflow coordination ⚡
 
 **Effortlessly handle context switching and context retention**
 
 ```bash
-workspace init next-sdk feature/auth-fix
+workspace init next feature/auth-fix
 ```
 
-is roughly equivanent to doing:
+is roughly equivalent to doing:
 
 ```bash
 # save current work
@@ -18,15 +18,16 @@ git checkout main
 git pull origin main
 
 # create new branch and worktree 🤯
-git worktree add ../sdk-feature-branch -b feature/auth-fix
+git worktree add ../next-feature-auth-fix -b feature/auth-fix
 ```
 
 ## ✨ Features
 
 - 🚀 Single command workspace setup!
 - 🔗 Multi-Repo isolated dev environment setup (repo + sample)
-- 📋 AI forward
-- ⚙️ Stack Agnostic
+- 📋 AI forward prompt templates
+- ⚙️ Stack Agnostic configuration
+- 🔧 Built-in system diagnostics with `doctor` command
 
 ## ✅ Prerequisites
 
@@ -37,16 +38,31 @@ git worktree add ../sdk-feature-branch -b feature/auth-fix
 
 ## 🚀 Quick Start
 
-Clone and install globally
+### Option 1: Install from npm (Recommended)
 
 ```bash
-git clone https://github.com/tusharpandey13/workspace-cli.git && cd workspace-cli && npm install && npm run install-global
+npm install -g workspace-cli
 ```
 
-Create your first workspace
+### Option 2: Development Installation
 
 ```bash
-workspace init myproject feature/user-authentication
+git clone https://github.com/tusharpandey13/workspace-cli.git
+cd workspace-cli
+npm install
+npm run install-global
+```
+
+### System Check
+
+```bash
+workspace doctor
+```
+
+### Create your first workspace
+
+```bash
+workspace init next feature/user-authentication
 ```
 
 That's it! Your multi-repo development environment is ready.
@@ -59,19 +75,31 @@ First, ensure you're authenticated with GitHub CLI:
 gh auth login
 ```
 
-Then create a simple `config.yaml` in your home directory or project root:
+The CLI comes with example configurations. Check available projects:
+
+```bash
+workspace projects
+```
+
+Or create a custom `config.yaml` in your home directory (`~/.workspace-config.yaml`):
 
 ```yaml
 projects:
   next:
-    name: 'Next.js SDK'
-    sdk_repo: 'nextjs-auth0'
-    sample_repo: 'auth0-nextjs-samples'
-    github_org: 'auth0'
+    name: 'Auth0 Next.js SDK'
+    repo: 'https://github.com/auth0/nextjs-auth0.git'
+    sample_repo: 'https://github.com/auth0/nextjs-auth0-example.git'
+    env_file: 'next.env.local'
+    post-init: 'npm install'
 
-  java:
-    name: 'Auth0 Java SDK'
-    repo: 'https://github.com/auth0/auth0-java.git'
+  my-project:
+    name: 'My Custom Project'
+    repo: 'https://github.com/user/my-repo.git'
+    post-init: 'npm install'
+
+global:
+  src_dir: '~/src'
+  workspace_base: 'workspaces'
 ```
 
 [📚 **Full Configuration Guide →**](./DOCS.md)
@@ -79,17 +107,29 @@ projects:
 ## 📖 Usage
 
 ```bash
+# Check system setup
+workspace doctor
+
+# View available projects
+workspace projects
+
 # Create workspace for new feature
 workspace init next feature/oauth-improvements
 
 # Work on existing GitHub PR
-workspace init react --pr 123
+workspace --pr 123 init next
 
 # List all your workspaces
 workspace list
 
+# Get workspace details
+workspace info next feature_oauth-improvements
+
 # Submit your changes as PR
-workspace submit next feature/oauth-improvements
+workspace submit next feature_oauth-improvements
+
+# Clean up when done
+workspace clean next feature_oauth-improvements
 ```
 
 ## 🌟 Why Workspace CLI?
