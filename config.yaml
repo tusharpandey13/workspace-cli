@@ -19,8 +19,8 @@ projects:
   node:
     name: "Auth0 Node.js SDK"
     repo: "https://github.com/auth0/node-auth0.git"
-    sample_repo: "https://github.com/auth0/auth0-nodejs-samples.git"
-    env_file: "node.env.local"
+    # sample_repo: "https://github.com/auth0/auth0-nodejs-samples.git"
+    # env_file: "node.env.local"
     post-init: "npm install"
 
   java:
