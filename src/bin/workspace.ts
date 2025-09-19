@@ -19,7 +19,7 @@ const pkg = require('../../package.json');
 
 const program = new Command();
 program
-  .name('workspace')
+  .name('space')
   .description('Stack-agnostic workspace CLI tool')
   .version(pkg.version)
   .addHelpText(
@@ -36,36 +36,36 @@ Global Options:
   --non-interactive      Skip all user input prompts for automated usage
 
 Examples:
-  $ workspace init next feature/my-branch
+  $ space init next feature/my-branch
     Create a new Next.js workspace
 
-  $ workspace --pr 123 init react
+  $ space --pr 123 init react
     Create a React workspace for pull request #123
 
-  $ workspace list
+  $ space list
     Show all existing workspaces
 
-  $ workspace projects
+  $ space projects
     Show available projects
 
-  $ workspace info next feature_my-branch
+  $ space info next feature_my-branch
     Show details for a specific workspace
 
-  $ workspace submit next feature_my-branch
+  $ space submit next feature_my-branch
     Submit workspace changes as a pull request
 
-  $ workspace clean next feature_my-branch
+  $ space clean next feature_my-branch
     Remove a workspace completely
 
 Getting Started:
-  1. Run "workspace projects" to see available projects
-  2. Run "workspace init <project> <branch-name>" to create a workspace
+  1. Run "space projects" to see available projects
+  2. Run "space init <project> <branch-name>" to create a workspace
   3. Develop in the created workspace directories
-  4. Run "workspace submit <project> <workspace>" when ready to submit
-  5. Run "workspace clean <project> <workspace>" when done
+  4. Run "space submit <project> <workspace>" when ready to submit
+  5. Run "space clean <project> <workspace>" when done
 
 For detailed help on any command, use:
-  workspace <command> --help`,
+  space <command> --help`,
   );
 
 // Global options

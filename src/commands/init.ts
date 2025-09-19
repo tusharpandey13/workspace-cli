@@ -41,7 +41,7 @@ interface AnalysisOnlyOptions {
 
 /**
  * Parse command arguments for simplified repo-name based structure
- * New signature: workspace init <repo_name> <...github_ids> prefix/branch_name
+ * New signature: space init <repo_name> <...github_ids> prefix/branch_name
  */
 function parseRepoInitArguments(args: string[]): { issueIds: number[]; branchName: string } {
   if (args.length < 1) {
@@ -1019,22 +1019,22 @@ export function initCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace init next feature/my-new-feature
+  $ space init next feature/my-new-feature
     Initialize workspace for 'next' project using project key
 
-  $ workspace init auth0-java feature/my-new-feature  
+  $ space init auth0-java feature/my-new-feature  
     Initialize workspace for 'java' project using repository name
 
-  $ workspace init java 123 456 bugfix/issue-123
+  $ space init java 123 456 bugfix/issue-123
     Initialize workspace for java project for GitHub issues 123 & 456
 
-  $ workspace init nextjs-auth0 --pr 789
+  $ space init nextjs-auth0 --pr 789
     Initialize workspace using repo name for pull request #789 (uses global --pr option)
 
-  $ workspace init spa feature/test --dry-run
+  $ space init spa feature/test --dry-run
     Preview what would be done without making changes
 
-  $ workspace init node 123 feature/fix-bug --analyse
+  $ space init node 123 feature/fix-bug --analyse
     Create analysis workspace for issue 123 without setting up git worktrees
 
 Description:
@@ -1057,9 +1057,9 @@ Description:
   branch with PR context included in templates.
 
 Related commands:
-  workspace projects    List available projects
-  workspace list        List existing workspaces
-  workspace info        Show workspace details`,
+  space projects    List available projects
+  space list        List existing workspaces
+  space info        Show workspace details`,
     )
     .action(
       async (

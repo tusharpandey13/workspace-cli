@@ -166,7 +166,7 @@ async function checkWorkspaceRoot(): Promise<DoctorCheckResult> {
         name: 'Workspace Root',
         status: 'warn',
         message: 'Workspace root directory not configured',
-        fix: 'Set workspace root: workspace doctor --setup-workspace-root',
+        fix: 'Set workspace root: space doctor --setup-workspace-root',
       };
     }
 
@@ -205,7 +205,7 @@ async function checkWorkspaceRoot(): Promise<DoctorCheckResult> {
       name: 'Workspace Root',
       status: 'fail',
       message: 'Could not load workspace configuration',
-      fix: 'Initialize user configuration: workspace doctor --init-config',
+      fix: 'Initialize user configuration: space doctor --init-config',
     };
   }
 }
@@ -221,7 +221,7 @@ async function checkUserConfig(): Promise<DoctorCheckResult> {
       name: 'User Configuration',
       status: 'warn',
       message: 'User configuration file does not exist',
-      fix: 'Initialize user configuration: workspace doctor --init-config',
+      fix: 'Initialize user configuration: space doctor --init-config',
     };
   }
 
@@ -239,7 +239,7 @@ async function checkUserConfig(): Promise<DoctorCheckResult> {
       name: 'User Configuration',
       status: 'fail',
       message: `Invalid user configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      fix: 'Reinitialize user configuration: workspace doctor --init-config',
+      fix: 'Reinitialize user configuration: space doctor --init-config',
     };
   }
 }
@@ -299,7 +299,7 @@ async function setupWorkspaceRoot(rootDir?: string): Promise<void> {
 
     logger.success(`✅ Workspace root configured: ${resolvedRoot}`);
   } else {
-    logger.warn('User configuration not found. Run: workspace doctor --init-config first');
+    logger.warn('User configuration not found. Run: space doctor --init-config first');
   }
 }
 
@@ -367,8 +367,8 @@ export async function doctorCommand(options: {
     }
 
     logger.info('\n📚 Quick setup commands:');
-    logger.info('  workspace doctor --init-config          Initialize user configuration');
-    logger.info('  workspace doctor --setup-workspace-root Setup workspace directory');
+    logger.info('  space doctor --init-config          Initialize user configuration');
+    logger.info('  space doctor --setup-workspace-root Setup workspace directory');
     logger.info('  gh auth login                          Authenticate GitHub CLI');
   } catch (error) {
     handleError(error as Error, logger);
@@ -389,16 +389,16 @@ export function registerDoctorCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace doctor
+  $ space doctor
     Run all diagnostic checks
 
-  $ workspace doctor --init-config
+  $ space doctor --init-config
     Create user configuration file from template
 
-  $ workspace doctor --setup-workspace-root
+  $ space doctor --setup-workspace-root
     Setup default workspace root directory
 
-  $ workspace doctor --setup-workspace-root --workspace-root ~/my-workspaces
+  $ space doctor --setup-workspace-root --workspace-root ~/my-workspaces
     Setup custom workspace root directory
 
 Description:
