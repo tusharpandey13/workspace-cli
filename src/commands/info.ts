@@ -13,10 +13,10 @@ export function infoCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace info next feature_my-new-feature
+  $ space info next feature_my-new-feature
     Show details for the Next.js workspace "feature_my-new-feature"
 
-  $ workspace info node bugfix_issue-123
+  $ space info node bugfix_issue-123
     Show details for the Node.js workspace "bugfix_issue-123"
 
 Description:
@@ -37,9 +37,9 @@ Description:
   initialization completed successfully.
 
 Related commands:
-  workspace list        List all workspaces
-  workspace init        Create a new workspace
-  workspace clean       Remove a workspace`,
+  space list        List all workspaces
+  space init        Create a new workspace
+  space clean       Remove a workspace`,
     )
     .action((project: string, workspace: string) => {
       try {

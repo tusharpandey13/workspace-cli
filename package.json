@@ -1,26 +1,30 @@
 {
-  "name": "workspace-cli",
+  "name": "@tusharpandey13/space-cli",
   "version": "0.1.0",
   "description": "Stack-agnostic CLI tool to automate multi-worktree development workflows for any codebase.",
   "preferGlobal": true,
   "bin": {
-    "workspace": "dist/bin/workspace.js"
+    "space": "dist/bin/workspace.js"
   },
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "build:dev": "tsc -p tsconfig.dev.json",
+    "build": "tsc && chmod +x dist/bin/workspace.js",
+    "build:dev": "tsc -p tsconfig.dev.json && chmod +x dist/bin/workspace.js",
     "dev": "tsx src/bin/workspace.ts --help",
     "start": "node dist/bin/workspace.js --help",
     "test": "vitest --run",
     "test:coverage": "vitest --coverage --run",
+    "test:install": "npm run test:install:local && npm run test:install:global",
+    "test:install:local": "node dist/bin/workspace.js --version",
+    "test:install:global": "space --version",
+    "troubleshoot": "scripts/troubleshoot.sh",
     "lint": "eslint . --ext .ts --ext .js || true",
     "lint:fix": "eslint . --ext .ts --ext .js --fix",
     "format": "prettier --write \"**/*.{ts,js,md,json}\"",
     "prepare": "husky install",
     "clean": "rm -rf dist",
-    "install-global": "npm run build && npm link",
-    "install-global:dev": "npm run build:dev && npm link",
+    "install-global": "npm run build && npm link && npm run test:install",
+    "install-global:dev": "npm run build:dev && npm link && npm run test:install",
     "uninstall-global": "npm unlink",
     "prepublishOnly": "npm run clean && npm run build"
   },

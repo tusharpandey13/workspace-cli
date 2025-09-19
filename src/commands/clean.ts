@@ -14,7 +14,10 @@ export function cleanCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace clean next feature_my-new-feature
+    $ space clean next feature_my-new-feature
+
+Examples:
+  $ space clean node bugfix_issue-123
     Remove the Next.js workspace "feature_my-new-feature"
 
   $ workspace clean node bugfix_issue-123
@@ -38,9 +41,9 @@ Description:
   • You want to free up disk space
 
 Related commands:
-  workspace list        List all workspaces
-  workspace info        Check workspace status before cleaning
-  workspace submit      Commit and push changes before cleaning`,
+  space list        List all workspaces
+  space info        Check workspace status before cleaning
+  space submit      Commit and push changes before cleaning`,
     )
     .action(async (project: string, workspace: string) => {
       try {

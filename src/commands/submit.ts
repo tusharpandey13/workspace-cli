@@ -21,7 +21,10 @@ export function submitCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace submit next feature_my-new-feature
+    $ space submit next feature_my-new-feature
+
+Examples:
+  $ space submit spa bugfix_issue-123
     Submit the Next.js workspace "feature_my-new-feature"
 
   $ workspace submit spa bugfix_issue-123
@@ -52,9 +55,9 @@ Description:
   provides suggestions and automation, but you make the final decisions.
 
 Related commands:
-  workspace info        Check workspace status before submitting
-  workspace list        List all workspaces
-  workspace clean       Clean up after successful submission`,
+  space info        Check workspace status before submitting
+  space list        List all workspaces
+  space clean       Clean up after successful submission`,
     )
     .action(
       async (

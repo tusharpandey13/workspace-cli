@@ -11,7 +11,7 @@ export function projectsCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace projects
+  $ space projects
     Show all configured projects with their repository details
 
 Description:
@@ -30,8 +30,8 @@ Description:
   configuration file needs to be set up or updated.
 
 Related commands:
-  workspace init        Create a workspace for a project
-  workspace list        List workspaces by project`,
+  space init        Create a workspace for a project
+  space list        List workspaces by project`,
     )
     .action(() => {
       try {
@@ -56,8 +56,8 @@ Related commands:
         }
 
         console.log('Usage:');
-        console.log(`  workspace init <project> [github-ids...] <branch-name>`);
-        console.log(`  workspace init ${projects[0]} 123 456 feature/my-branch`);
+        console.log(`  space init <project> [github-ids...] <branch-name>`);
+        console.log(`  space init ${projects[0]} 123 456 feature/my-branch`);
       } catch (error) {
         handleError(error as Error, logger);
       }

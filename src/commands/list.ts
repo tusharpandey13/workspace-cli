@@ -69,9 +69,9 @@ function listAllWorkspaces(): void {
   if (!hasAnyWorkspaces) {
     logger.info('No workspaces found for any project.');
     console.log('\nTo create a workspace, use:');
-    console.log('  workspace init <project> <branch-name>');
+    console.log('  space init <project> <branch-name>');
     console.log('\nTo see available projects, use:');
-    console.log('  workspace projects');
+    console.log('  space projects');
   }
 }
 
@@ -83,13 +83,13 @@ export function listCommand(program: Command): void {
       'after',
       `
 Examples:
-  $ workspace list
+  $ space list
     Show all workspaces across all projects
 
-  $ workspace list next
+  $ space list next
     Show only Next.js Auth0 workspaces
 
-  $ workspace list node
+  $ space list node
     Show only Node.js Auth0 workspaces
 
 Description:
@@ -104,9 +104,9 @@ Description:
   and viewing available projects are displayed.
 
 Related commands:
-  workspace projects    List available projects
-  workspace init        Create a new workspace
-  workspace info        Show details for a specific workspace`,
+  space projects    List available projects
+  space init        Create a new workspace
+  space info        Show details for a specific workspace`,
     )
     .action((project?: string) => {
       try {
