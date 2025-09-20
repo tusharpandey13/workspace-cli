@@ -1,56 +1,24 @@
-# Workspace CLI Configuration
+# Example configuration for space-cli
+# This is a demo configuration for testing setup functionality
 
-# Define projects and their repositories
 projects:
-  next:
-    name: "Auth0 Next.js SDK"
-    repo: "https://github.com/auth0/nextjs-auth0.git"
-    sample_repo: "https://github.com/auth0/nextjs-auth0-example.git"
-    env_file: "next.env.local"
-    post-init: "npm install"
+  example:
+    name: 'Example Project' 
+    repo: 'https://github.com/user/example-repo.git'
+    sample_repo: 'https://github.com/user/example-samples.git'
+    env_file: 'example.env.local'
 
-  spa:
-    name: "Auth0 SPA SDK"
-    repo: "https://github.com/auth0/auth0-spa-js.git"
-    sample_repo: "https://github.com/auth0/auth0-spa-js-sample.git"
-    env_file: "spa.env.local"
-    post-init: "npm install"
-
-  node:
-    name: "Auth0 Node.js SDK"
-    repo: "https://github.com/auth0/node-auth0.git"
-    # sample_repo: "https://github.com/auth0/auth0-nodejs-samples.git"
-    # env_file: "node.env.local"
-    post-init: "npm install"
-
-  java:
-    name: "Auth0 Java SDK"
-    repo: "https://github.com/auth0/auth0-java.git"
-    # env_file: "java.env.local"
-    # post-init: "gradle build"
-
-  example-project:
-    name: "Example Project"
-    repo: "https://github.com/user/example-repo.git"
-    sample_repo: "https://github.com/user/example-samples.git"
-    env_file: "example.env.local"
-    post-init: "echo 'Project initialized successfully'"
-
-# Global configuration
 global:
-  src_dir: "~/src"
-  workspace_base: "workspaces"
-  env_files_dir: "./env-files"
-  dependencies: ["git", "gh"]  # Core dependencies - project-specific tools configured per project
+  src_dir: '~/src'
+  workspace_base: 'workspaces'
+  env_files_dir: './env-files'
 
-# Template configuration
 templates:
-  dir: "./src/templates"
-  
-  # Which templates to copy for each project type
-  common:
-    - "analysis.prompt.md"
-    - "review-changes.prompt.md" 
-    - "tests.prompt.md"
-    - "fix-and-test.prompt.md"
-    - "PR_DESCRIPTION_TEMPLATE.md"
+  dir: './src/templates'
+
+workflows:
+  branch_patterns:
+    - 'feature/**'
+    - 'bugfix/**'
+    - 'hotfix/**'
+    - 'explore/**'
