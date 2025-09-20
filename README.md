@@ -48,6 +48,29 @@ git worktree add ../next-feature-auth-fix -b feature/auth-fix
 npm install -g @tusharpandey13/space-cli
 ```
 
+### First Time Setup
+
+After installing, run the setup wizard on first use:
+
+```bash
+space setup
+```
+
+The setup wizard will guide you through:
+
+- Configuring workspace directories
+- Adding your first projects
+- Setting up environment files
+- Enabling the full space-cli workflow
+
+**Setup Options:**
+
+- `space setup --preview` - See what setup will do without running it
+- `space setup --force` - Reconfigure even if config exists
+- `space setup --skip` - Skip setup entirely
+
+The CLI will automatically prompt for setup on first use of any command.
+
 ### Option 2: Development Installation
 
 ```bash

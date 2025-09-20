@@ -1,13 +1,34 @@
-# Workspace CLI - Copilot Instructions
+# Workspace CLI (space-cli) - Copilot Instructions
 
 ## Project Overview
 
-This is a **stack-agnostic MVP workspace CLI** designed for efficient multi-repository development with git worktrees. The CLI has been transformed from a JavaScript/TypeScript-coupled system to a simple, universal tool that works with any technology stack.
+This is **@tusharpandey13/space-cli**, a **stack-agnostic MVP workspace CLI** designed for efficient multi-repository development with git worktrees. The CLI has been transformed from a JavaScript/TypeScript-coupled system to a simple, universal tool that works with any technology stack.
+
+Published to npm as: `@tusharpandey13/space-cli@0.1.0`
 
 ### Core Command Signature
 
 ```bash
-workspace init <repo_name> <...github_ids> prefix/branch_name
+space init <repo_name> <...github_ids> prefix/branch_name
+```
+
+## Development Environment & Package Management
+
+### Package Manager Rule
+
+**CRITICAL**: Always use `pnpm` for development on this project (installing, adding, removing dependencies). The final published package remains npm compatible.
+
+- ✅ Development: Use `pnpm install`, `pnpm add package`, `pnpm run test`
+- ✅ Publishing: Package remains npm-compatible for end users
+- ❌ Never use `npm` or `yarn` for local development
+
+Examples:
+
+```bash
+pnpm install           # Install dependencies
+pnpm add prompts       # Add new dependency
+pnpm run test          # Run tests
+pnpm run build         # Build project
 ```
 
 ## Architecture & Design Principles
@@ -23,7 +44,7 @@ workspace init <repo_name> <...github_ids> prefix/branch_name
 **CRITICAL**: The CLI uses `path.basename()` to extract repository names from git URLs/paths:
 
 - Config: `repo: "https://github.com/user/my-awesome-project.git"`
-- CLI lookup: `workspace init my-awesome-project ...`
+- CLI lookup: `space init my-awesome-project ...`
 - Match: `path.basename("...my-awesome-project.git", ".git")` → `"my-awesome-project"`
 
 ### Configuration Structure
@@ -42,6 +63,29 @@ global:
   workspace_base: 'workspaces' # Workspace subdirectory name
   env_files_dir: './env-files' # Environment files location
 ```
+
+## Build & Development Commands
+
+### Essential Commands (all use pnpm)
+
+```bash
+pnpm run build              # Build TypeScript to JavaScript
+pnpm run build:dev          # Build with dev config
+pnpm run test               # Run vitest tests with --run
+pnpm run test:coverage      # Run tests with coverage
+pnpm run lint               # Run ESLint (allows failures)
+pnpm run lint:fix           # Run ESLint with auto-fix
+pnpm run format             # Format with Prettier
+pnpm run dev                # Run CLI in development mode
+pnpm run install-global     # Build and globally link for testing
+```
+
+### Testing Strategy
+
+- **Unit tests**: Configuration parsing, project resolution
+- **Integration tests**: Full init/clean workflows with dummy repositories
+- **End-to-end tests**: CLI commands with real parameters
+- Always run with `vitest --run` for consistent results
 
 ## Key Lessons Learned
 
@@ -110,13 +154,13 @@ next:
 
 ```bash
 # Simple SDK-only workspace
-workspace init my-python-api 1234 feature/add-auth
+space init my-python-api 1234 feature/add-auth
 
 # Full workspace with sample app
-workspace init next 1234 5678 bugfix/token-refresh
+space init next 1234 5678 bugfix/token-refresh
 
 # Analysis-only workspace (no GitHub issues)
-workspace init go-sdk feature/performance-optimization
+space init go-sdk feature/performance-optimization
 ```
 
 ### Testing Considerations
@@ -143,7 +187,7 @@ describe('CLI Tests', () => {
 
 1. Check config.yaml for project keys (e.g., `java`, `next`, `spa`)
 2. Check repository URLs to extract repo names (e.g., `auth0-java`, `nextjs-auth0`)
-3. Use either format in CLI commands: `workspace init java` or `workspace init auth0-java`
+3. Use either format in CLI commands: `space init java` or `space init auth0-java`
 4. Error message shows both available project keys and repo names for reference
 
 ### Help Text Inconsistencies
@@ -154,8 +198,8 @@ describe('CLI Tests', () => {
 ```typescript
 // In command files, update examples like:
 Examples:
-  $ workspace list next    # Match actual config
-  $ workspace list spa    # Not generic "next" or "node"
+  $ space list next    # Match actual config
+  $ space list spa    # Not generic "next" or "node"
 ```
 
 ### Test Environment Mismatches
@@ -169,7 +213,7 @@ Examples:
 
 1. Add to `config.yaml` with descriptive key
 2. Update help text examples if needed
-3. Test with actual `workspace init <repo-name> ...` command
+3. Test with actual `space init <repo-name> ...` command
 
 ### Modifying Templates
 
@@ -185,6 +229,7 @@ Templates are now stack-agnostic:
 - **Unit tests**: Focus on configuration parsing, project resolution
 - **Integration tests**: Test full init/clean workflows with dummy repositories
 - **End-to-end tests**: Validate actual CLI commands work as expected
+- Always run tests with `pnpm run test` (uses vitest --run)
 
 ## Performance & Scalability Notes
 
@@ -251,3 +296,4 @@ Templates are now stack-agnostic:
 - Test environments need consistent naming conventions
 - Help text should reflect actual config.yaml projects
 - Templates should be stack-agnostic and use universal placeholders
+- Always use `pnpm` for development commands, not `npm` or `yarn`
