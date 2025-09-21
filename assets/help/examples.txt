@@ -1,0 +1,18 @@
+Examples:
+  $ space init next feature/my-branch
+    Create a new Next.js space
+
+  $ space --pr 123 init react
+    Create a React space for pull request #123
+
+  $ space list
+    Show all existing spaces
+
+  $ space projects
+    Show available projects
+
+  $ space info next feature_my-branch
+    Show details for a specific space
+
+  $ space clean next feature_my-branch
+    Remove a space completely

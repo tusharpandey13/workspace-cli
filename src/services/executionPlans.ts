@@ -928,7 +928,7 @@ export class ExecutionPlanService {
 
     const mandatoryIncomplete = this.getMandatoryIncompleteSteps(executionPlan);
     if (mandatoryIncomplete.length > 0) {
-      summary.push('', '## ⚠️ MANDATORY STEPS REMAINING:', '');
+      summary.push('', '## WARNING: MANDATORY STEPS REMAINING:', '');
       for (const step of mandatoryIncomplete) {
         const phase = executionPlan.phases.find((p) => p.steps.includes(step));
         summary.push(`- **${phase?.name} > ${step.name}**: ${step.description}`);

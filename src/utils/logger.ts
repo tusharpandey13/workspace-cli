@@ -38,13 +38,13 @@ export class Logger {
 
   warn(message: string): void {
     if (this.level >= LogLevel.WARN) {
-      console.warn(chalk.yellow(`⚠️  ${message}`));
+      console.warn(chalk.yellow(`⚠️ ${message}`));
     }
   }
 
   info(message: string): void {
     if (this.level >= LogLevel.INFO) {
-      console.log(chalk.blue(`ℹ️  ${message}`));
+      console.log(chalk.blue(`ℹ️ ${message}`));
     }
   }
 
@@ -56,13 +56,13 @@ export class Logger {
 
   debug(message: string): void {
     if (this.level >= LogLevel.DEBUG) {
-      console.log(chalk.gray(`🐛 ${message}`));
+      console.log(chalk.gray(`DEBUG: ${message}`));
     }
   }
 
   verbose(message: string): void {
     if (this.level >= LogLevel.VERBOSE) {
-      console.log(chalk.gray(`📝 ${message}`));
+      console.log(chalk.gray(`VERBOSE: ${message}`));
     }
   }
 
@@ -70,7 +70,7 @@ export class Logger {
     if (this.level >= LogLevel.VERBOSE) {
       const cmdStr = `${command} ${args.join(' ')}`;
       const cwdStr = cwd ? ` (cwd: ${cwd})` : '';
-      console.log(chalk.cyan(`🔧 ${cmdStr}${cwdStr}`));
+      console.log(chalk.cyan(`EXEC: ${cmdStr}${cwdStr}`));
     }
   }
 

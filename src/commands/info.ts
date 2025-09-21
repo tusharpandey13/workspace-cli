@@ -8,38 +8,38 @@ import type { Command } from 'commander';
 export function infoCommand(program: Command): void {
   program
     .command('info <project> <workspace>')
-    .description('Display detailed workspace status, paths, and configuration')
+    .description('Display detailed space status, paths, and configuration')
     .addHelpText(
       'after',
       `
 Examples:
   $ space info next feature_my-new-feature
-    Show details for the Next.js workspace "feature_my-new-feature"
+    Show details for the Next.js space "feature_my-new-feature"
 
   $ space info node bugfix_issue-123
-    Show details for the Node.js workspace "bugfix_issue-123"
+    Show details for the Node.js space "bugfix_issue-123"
 
 Description:
-  This command provides comprehensive information about a specific workspace,
+  This command provides comprehensive information about a specific space,
   including:
   
   • Project configuration and paths
-  • Workspace directory structure
+  • Space directory structure
   • Git worktree status (SDK and samples)
   • Environment file availability
   • Sample application paths
 
   The workspace status indicators show:
-  ✅ Ready - Component is properly set up
-  ❌ Missing - Component needs to be initialized or has been removed
+  OK: Ready - Component is properly set up
+  MISSING: Missing - Component needs to be initialized or has been removed
 
-  This is useful for debugging workspace issues or verifying that
+  This is useful for debugging space issues or verifying that
   initialization completed successfully.
 
 Related commands:
-  space list        List all workspaces
-  space init        Create a new workspace
-  space clean       Remove a workspace`,
+  space list        List all spaces
+  space init        Create a new space
+  space clean       Remove a space`,
     )
     .action((project: string, workspace: string) => {
       try {
@@ -66,15 +66,15 @@ Related commands:
 
         console.log('');
         logger.info('Worktree Status:');
-        console.log(`  Source: ${sourceExists ? '✅ Ready' : '❌ Missing'}`);
-        console.log(`  Destination: ${destinationExists ? '✅ Ready' : '❌ Missing'}`);
+        console.log(`  Source: ${sourceExists ? 'OK: Ready' : 'MISSING: Missing'}`);
+        console.log(`  Destination: ${destinationExists ? 'OK: Ready' : 'MISSING: Missing'}`);
 
         // Show environment file status
         const envFilePath = configManager.getEnvFilePath(validatedProject);
         if (envFilePath) {
           const envExists = fs.existsSync(envFilePath);
           console.log(
-            `  Environment: ${envExists ? '✅ Available' : '❌ Missing'} (${envFilePath})`,
+            `  Environment: ${envExists ? 'OK: Available' : 'MISSING: Missing'} (${envFilePath})`,
           );
         }
       } catch (error) {

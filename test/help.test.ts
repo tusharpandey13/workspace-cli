@@ -8,31 +8,31 @@ describe('CLI Help Tests', () => {
   it('should display main help with --help', () => {
     const output = execSync(`node ${CLI_PATH} --help`, { encoding: 'utf8' });
 
-    expect(output).toContain('Stack-agnostic workspace CLI tool');
+    expect(output).toContain('Stack-agnostic space CLI tool');
     expect(output).toContain('Global Options:');
     expect(output).toContain('Examples:');
     expect(output).toContain('Getting Started:');
-    expect(output).toContain('workspace init');
-    expect(output).toContain('workspace list');
-    expect(output).toContain('workspace projects');
+    expect(output).toContain('space init');
+    expect(output).toContain('space list');
+    expect(output).toContain('space projects');
   });
 
   it('should display init command help with -h', () => {
     const output = execSync(`node ${CLI_PATH} init -h`, { encoding: 'utf8' });
 
-    expect(output).toContain('Initialize a new workspace with git worktrees');
+    expect(output).toContain('Initialize a new space with git worktrees');
     expect(output).toContain('Examples:');
     expect(output).toContain('Description:');
     expect(output).toContain('Related commands:');
-    expect(output).toContain('workspace init next feature/my-new-feature');
+    expect(output).toContain('space init next feature/my-new-feature');
   });
 
   it('should display list command help', () => {
     const output = execSync(`node ${CLI_PATH} list --help`, { encoding: 'utf8' });
 
-    expect(output).toContain('List all active workspaces');
+    expect(output).toContain('List all active spaces');
     expect(output).toContain('Examples:');
-    expect(output).toContain('workspace list next');
+    expect(output).toContain('space list next');
     expect(output).toContain('Related commands:');
   });
 
@@ -48,29 +48,18 @@ describe('CLI Help Tests', () => {
   it('should display info command help', () => {
     const output = execSync(`node ${CLI_PATH} info --help`, { encoding: 'utf8' });
 
-    expect(output).toContain('Display detailed workspace status');
+    expect(output).toContain('Display detailed space status');
     expect(output).toContain('Examples:');
-    expect(output).toContain('✅ Ready - Component is properly set up');
-    expect(output).toContain('workspace info next feature_my-new-feature');
+    expect(output).toContain('OK: Ready - Component is properly set up');
+    expect(output).toContain('space info next feature_my-new-feature');
   });
 
   it('should display clean command help', () => {
     const output = execSync(`node ${CLI_PATH} clean --help`, { encoding: 'utf8' });
 
-    expect(output).toContain('Clean up and remove workspace');
-    expect(output).toContain('⚠️  WARNING: This action is irreversible!');
+    expect(output).toContain('Clean up and remove space');
+    expect(output).toContain('WARNING: This action is irreversible!');
     expect(output).toContain('Examples:');
     expect(output).toContain('Related commands:');
-  });
-
-  it('should display submit command help', () => {
-    const output = execSync(`node ${CLI_PATH} submit --help`, { encoding: 'utf8' });
-
-    expect(output).toContain(
-      '**HUMAN-SUPERVISED**: Review, commit, push changes, and create a pull request',
-    );
-    expect(output).toContain('Examples:');
-    expect(output).toContain('Requirements:');
-    expect(output).toContain('GitHub CLI (gh) must be installed');
   });
 });

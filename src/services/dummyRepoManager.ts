@@ -146,6 +146,29 @@ export class DummyRepoManager {
         const defaultBranch = currentBranchResult.stdout.trim();
 
         for (const branch of config.branches) {
+          // Skip if the branch already exists (e.g., it's the current branch)
+          if (branch === defaultBranch) {
+            continue;
+          }
+
+          // Check if branch already exists
+          try {
+            const existingBranches = await executeCommand(
+              'git',
+              ['branch', '--list', branch],
+              { cwd: repoPath },
+              'check if branch exists',
+              false,
+            );
+
+            if (existingBranches.stdout.trim()) {
+              // Branch already exists, skip creation
+              continue;
+            }
+          } catch (error) {
+            // If command fails, proceed with branch creation
+          }
+
           await executeCommand(
             'git',
             ['checkout', '-b', branch],

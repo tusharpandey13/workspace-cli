@@ -10,8 +10,7 @@ import type { Command } from 'commander';
 function listProjectWorkspaces(project: string): void {
   try {
     const projectConfig = configManager.getProject(project);
-    const paths = configManager.getWorkspacePaths(project, 'dummy');
-    const baseDir = paths.baseDir;
+    const baseDir = configManager.getProjectBaseDir(project);
 
     if (!fs.existsSync(baseDir)) {
       logger.info(`No workspaces found for project '${project}' (${projectConfig.name})`);
@@ -44,8 +43,7 @@ function listAllWorkspaces(): void {
   for (const projectKey of projects) {
     try {
       const project = configManager.getProject(projectKey);
-      const paths = configManager.getWorkspacePaths(projectKey, 'dummy');
-      const baseDir = paths.baseDir;
+      const baseDir = configManager.getProjectBaseDir(projectKey);
 
       if (fs.existsSync(baseDir)) {
         const dirs = fs
@@ -78,35 +76,35 @@ function listAllWorkspaces(): void {
 export function listCommand(program: Command): void {
   program
     .command('list [project]')
-    .description('List all active workspaces, optionally filtered by project')
+    .description('List all active spaces, optionally filtered by project')
     .addHelpText(
       'after',
       `
 Examples:
   $ space list
-    Show all workspaces across all projects
+    Show all spaces across all projects
 
   $ space list next
-    Show only Next.js Auth0 workspaces
+    Show only Next.js Auth0 spaces
 
   $ space list node
-    Show only Node.js Auth0 workspaces
+    Show only Node.js Auth0 spaces
 
 Description:
-  This command displays all currently active workspaces. Each workspace
+  This command displays all currently active spaces. Each space
   represents a development environment with git worktrees for both SDK
   and samples repositories.
 
-  When no project is specified, all workspaces are grouped by project.
-  When a project is specified, only workspaces for that project are shown.
+  When no project is specified, all spaces are grouped by project.
+  When a project is specified, only spaces for that project are shown.
 
-  If no workspaces exist, helpful hints for creating new workspaces
+  If no spaces exist, helpful hints for creating new spaces
   and viewing available projects are displayed.
 
 Related commands:
   space projects    List available projects
-  space init        Create a new workspace
-  space info        Show details for a specific workspace`,
+  space init        Create a new space
+  space info        Show details for a specific space`,
     )
     .action((project?: string) => {
       try {

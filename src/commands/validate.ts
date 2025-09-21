@@ -145,10 +145,10 @@ class WorkspaceValidator {
 
     logger.info(`✅ Complete: ${complete.length}`);
     logger.info(`⏳ Incomplete: ${incomplete.length}`);
-    logger.info(`❌ Missing Artifacts: ${missing.length}\n`);
+    logger.info(`MISSING: Missing Artifacts: ${missing.length}\n`);
 
     if (missing.length > 0) {
-      logger.warn('❌ Missing Required Artifacts:');
+      logger.warn('MISSING: Missing Required Artifacts:');
       for (const result of missing) {
         logger.warn(`   ${result.phase} > ${result.step}`);
         if (result.missingArtifacts) {
@@ -178,7 +178,7 @@ class WorkspaceValidator {
       logger.info('🎉 All validation checks passed!');
     } else {
       logger.warn(
-        '⚠️  Some validation checks failed. Address missing artifacts and incomplete steps.',
+        'WARNING: Some validation checks failed. Address missing artifacts and incomplete steps.',
       );
     }
   }

@@ -1,7 +1,9 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { executeCommand, fileOps } from '../utils/init-helpers.js';
+import { executeGitCommand } from '../utils/secureExecution.js';
+import { validateBranchName, validateRepositoryPath } from '../utils/validation.js';
+import { fileOps } from '../utils/init-helpers.js';
 import type { ProjectConfig, WorkspacePaths } from '../types/index.js';
 import { ConfigManager } from '../utils/config.js';
 
@@ -18,6 +20,9 @@ async function ensureRepositoryExists(
     logger.verbose(`[DRY RUN] Would ensure repository exists at ${repoPath}`);
     return;
   }
+
+  // Validate URL before using it
+  validateRepositoryPath(repoUrl);
 
   // If repository already exists, we're good
   if (fs.existsSync(repoPath)) {
@@ -36,13 +41,12 @@ async function ensureRepositoryExists(
   await fileOps.ensureDir(parentDir, `parent directory for ${repoName}`, isDryRun);
 
   try {
-    await executeCommand(
-      'git',
-      ['clone', repoUrl, repoPath],
-      {},
-      `clone ${repoName} repository`,
-      isDryRun,
-    );
+    const result = await executeGitCommand(['clone', repoUrl, repoPath], {});
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Git clone failed: ${result.stderr}`);
+    }
+
     logger.success(`✅ Successfully cloned ${repoName} to ${repoPath}`);
   } catch (error) {
     throw new Error(
@@ -79,13 +83,11 @@ async function validateRepository(
 
     // Check if repository has a remote origin
     try {
-      await executeCommand(
-        'git',
-        ['remote', 'get-url', 'origin'],
-        { cwd: repoPath },
-        'check origin remote',
-        false,
-      );
+      const result = await executeGitCommand(['remote', 'get-url', 'origin'], { cwd: repoPath });
+
+      if (result.exitCode !== 0) {
+        throw new Error(`Git remote command failed: ${result.stderr}`);
+      }
     } catch {
       logger.warn(`Repository ${repoName} does not have an 'origin' remote`);
       // Continue anyway - might be a local-only repo
@@ -93,13 +95,11 @@ async function validateRepository(
 
     // Check if repository is in a clean state (no pending worktree operations)
     try {
-      await executeCommand(
-        'git',
-        ['worktree', 'list'],
-        { cwd: repoPath },
-        'check existing worktrees',
-        false,
-      );
+      const result = await executeGitCommand(['worktree', 'list'], { cwd: repoPath });
+
+      if (result.exitCode !== 0) {
+        throw new Error(`Git worktree command failed: ${result.stderr}`);
+      }
     } catch {
       // Worktree command might not be available in older git versions
       logger.verbose(`Could not check worktree status for ${repoName}`);
@@ -125,13 +125,11 @@ async function ensureRepositoryFreshness(repoPath: string, isDryRun: boolean): P
 
   try {
     // Always fetch latest changes from origin to ensure fresh worktree creation
-    await executeCommand(
-      'git',
-      ['fetch', 'origin', '--prune'],
-      { cwd: repoPath },
-      `fetch latest changes from origin for ${repoPath}`,
-      isDryRun,
-    );
+    const result = await executeGitCommand(['fetch', 'origin', '--prune'], { cwd: repoPath });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Git fetch failed: ${result.stderr}`);
+    }
 
     logger.verbose(
       `✅ Fetched latest changes for ${repoPath} (worktrees will use fresh origin refs)`,
@@ -154,37 +152,42 @@ export async function getDefaultBranch(repoPath: string, isDryRun: boolean): Pro
 
   try {
     // Try to get the default branch from remote
-    const result = await executeCommand(
-      'git',
-      ['symbolic-ref', 'refs/remotes/origin/HEAD'],
-      { cwd: repoPath },
-      'get default branch',
-      false,
-    );
-    const defaultRef = result.stdout.trim();
-    const branchName = defaultRef.replace('refs/remotes/origin/', '');
-    return branchName;
+    const result = await executeGitCommand(['symbolic-ref', 'refs/remotes/origin/HEAD'], {
+      cwd: repoPath,
+    });
+
+    if (result.exitCode === 0) {
+      const defaultRef = result.stdout.trim();
+      const branchName = defaultRef.replace('refs/remotes/origin/', '');
+      return branchName;
+    }
+
+    throw new Error('Failed to get default branch');
   } catch {
     // Fallback: check if main or master exists locally
     try {
-      await executeCommand(
-        'git',
+      const result = await executeGitCommand(
         ['show-ref', '--verify', '--quiet', 'refs/heads/main'],
         { cwd: repoPath },
-        'check main branch',
-        false,
       );
-      return 'main';
+
+      if (result.exitCode === 0) {
+        return 'main';
+      }
+
+      throw new Error('Main branch not found');
     } catch {
       try {
-        await executeCommand(
-          'git',
+        const result = await executeGitCommand(
           ['show-ref', '--verify', '--quiet', 'refs/heads/master'],
           { cwd: repoPath },
-          'check master branch',
-          false,
         );
-        return 'master';
+
+        if (result.exitCode === 0) {
+          return 'master';
+        }
+
+        throw new Error('Master branch not found');
       } catch {
         return 'main'; // Final fallback
       }
@@ -259,49 +262,101 @@ export async function setupWorktrees(
     targetBranch: string,
     baseBranch: string = 'main',
   ): Promise<void> => {
+    if (isDryRun) {
+      logger.verbose(
+        `[DRY RUN] Would create worktree at ${worktreePath} for branch ${targetBranch}`,
+      );
+      return;
+    }
+
     if (!isDryRun && fs.existsSync(worktreePath)) {
       await fileOps.removeFile(worktreePath, `stale worktree directory: ${worktreePath}`, isDryRun);
     }
 
     try {
-      await executeCommand(
-        'git',
-        ['worktree', 'prune'],
-        { cwd: repoDir },
-        `prune worktrees in ${repoDir}`,
-        isDryRun,
-      );
+      const result = await executeGitCommand(['worktree', 'prune'], { cwd: repoDir });
+
+      if (result.exitCode !== 0) {
+        logger.debug(`Worktree prune failed but continuing: ${result.stderr}`);
+      }
     } catch {
       // Ignore prune failures
     }
 
-    // Task 6.1: Always use latest version of base branch for worktree creation
+    // Validate branch name before using it
+    validateBranchName(targetBranch);
+
+    // Check if branch already exists locally
+    const checkBranchResult = await executeGitCommand(
+      ['show-ref', '--verify', '--quiet', `refs/heads/${targetBranch}`],
+      { cwd: repoDir },
+    );
+
+    const branchExists = checkBranchResult.exitCode === 0;
+
+    if (branchExists) {
+      logger.verbose(`⚠️  Branch ${targetBranch} already exists locally`);
+
+      // Try to add existing branch to worktree
+      try {
+        const result = await executeGitCommand(['worktree', 'add', worktreePath, targetBranch], {
+          cwd: repoDir,
+        });
+
+        if (result.exitCode !== 0) {
+          throw new Error(`Failed to add existing branch to worktree: ${result.stderr}`);
+        }
+
+        logger.verbose(`✅ Added existing branch ${targetBranch} to worktree`);
+        return;
+      } catch (error) {
+        // If that fails, try force adding
+        logger.verbose(`Retrying with force flag...`);
+
+        try {
+          const result = await executeGitCommand(
+            ['worktree', 'add', '-f', worktreePath, targetBranch],
+            { cwd: repoDir },
+          );
+
+          if (result.exitCode !== 0) {
+            throw new Error(
+              `Cannot add branch ${targetBranch} to worktree. The branch exists but may be checked out elsewhere. ` +
+                `Please delete the existing branch or use a different branch name.\n` +
+                `Error: ${result.stderr}`,
+            );
+          }
+
+          logger.verbose(`✅ Force added existing branch ${targetBranch} to worktree`);
+          return;
+        } catch (forceError) {
+          throw new Error(
+            `Cannot add branch ${targetBranch} to worktree. The branch exists but cannot be used. ` +
+              `Please manually delete the existing branch with: git branch -D ${targetBranch}\n` +
+              `Error: ${(forceError as Error).message}`,
+          );
+        }
+      }
+    }
+
+    // Branch doesn't exist, create new branch from base branch
     try {
-      await executeCommand(
-        'git',
+      const result = await executeGitCommand(
         ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${baseBranch}`],
         { cwd: repoDir },
-        `create new worktree with branch ${targetBranch} from origin/${baseBranch}`,
-        isDryRun,
       );
-    } catch {
-      try {
-        await executeCommand(
-          'git',
-          ['worktree', 'add', worktreePath, targetBranch],
-          { cwd: repoDir },
-          `add existing branch ${targetBranch} to worktree`,
-          isDryRun,
-        );
-      } catch {
-        await executeCommand(
-          'git',
-          ['worktree', 'add', '-f', worktreePath, targetBranch],
-          { cwd: repoDir },
-          `force add branch ${targetBranch} to worktree`,
-          isDryRun,
-        );
+
+      if (result.exitCode !== 0) {
+        throw new Error(`Failed to create new worktree branch: ${result.stderr}`);
       }
+
+      logger.verbose(`✅ Created new branch ${targetBranch} and added to worktree`);
+    } catch (error) {
+      throw new Error(
+        `Failed to create worktree for branch ${targetBranch}. ` +
+          `This may indicate repository issues or insufficient permissions.\n` +
+          `Error: ${(error as Error).message}`,
+      );
     }
   };
 

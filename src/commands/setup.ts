@@ -11,7 +11,7 @@ interface SetupCommandOptions {
 
 export const setupCommand = new Command()
   .name('setup')
-  .description('Setup wizard to configure your workspace')
+  .description('Setup wizard to configure your space')
   .option('-f, --force', 'Force setup even if configuration exists')
   .option('-s, --skip', 'Skip setup entirely')
   .option('-p, --preview', 'Show what setup will do without running it')

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs-extra';
 import os from 'os';
-import { ConfigManager } from '../src/utils/config';
-import { Config } from '../src/types';
+import { ConfigManager } from '../src/utils/config.js';
+import { Config } from '../src/types/index.js';
 
 describe('Project Resolution', () => {
   let tempDir: string;

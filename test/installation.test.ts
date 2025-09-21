@@ -74,13 +74,13 @@ describe('CLI Installation', () => {
     expect(result.stdout).toContain('workspace');
   });
 
-  it('should run doctor command without errors', async () => {
+  it('should run setup command without errors', async () => {
     const cliPath = join(process.cwd(), 'dist', 'bin', 'workspace.js');
-    const result = await runCommand('node', [cliPath, 'doctor']);
+    const result = await runCommand('node', [cliPath, 'setup', '--help']);
 
-    // Doctor command should run without crashing
+    // Setup command should run without crashing
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('System Check');
+    expect(result.stdout).toContain('Setup wizard to configure your space');
   });
 
   it('should have proper shebang in CLI file', async () => {
@@ -94,7 +94,16 @@ describe('CLI Installation', () => {
 
   it('should validate dry-run init command', async () => {
     const cliPath = join(process.cwd(), 'dist', 'bin', 'workspace.js');
-    const result = await runCommand('node', [cliPath, 'init', 'java', 'test-branch', '--dry-run']);
+    const configPath = join(process.cwd(), 'config.yaml');
+    const result = await runCommand('node', [
+      cliPath,
+      'init',
+      'example',
+      'test-branch',
+      '--dry-run',
+      '--config',
+      configPath,
+    ]);
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('DRY-RUN MODE');

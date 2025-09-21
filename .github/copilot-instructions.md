@@ -2,298 +2,153 @@
 
 ## Project Overview
 
-This is **@tusharpandey13/space-cli**, a **stack-agnostic MVP workspace CLI** designed for efficient multi-repository development with git worktrees. The CLI has been transformed from a JavaScript/TypeScript-coupled system to a simple, universal tool that works with any technology stack.
+**@tusharpandey13/space-cli** - Stack-agnostic MVP workspace CLI for efficient multi-repository development with git worktrees. Published to npm as `@tusharpandey13/space-cli@0.1.0`.
 
-Published to npm as: `@tusharpandey13/space-cli@0.1.0`
+**Core Command**: `space init <repo_name> <...github_ids> prefix/branch_name`
 
-### Core Command Signature
+## Environment Setup
 
-```bash
-space init <repo_name> <...github_ids> prefix/branch_name
-```
+### Package Manager (CRITICAL)
 
-## Development Environment & Package Management
+- **Development**: ONLY use `pnpm install`, `pnpm add`, `pnpm run test`
+- **Never**: Mix with `npm` or `yarn` (causes lockfile conflicts)
 
-### Package Manager Rule
+### Test Environment (CRITICAL)
 
-**CRITICAL**: Always use `pnpm` for development on this project (installing, adding, removing dependencies). The final published package remains npm compatible.
-
-- ✅ Development: Use `pnpm install`, `pnpm add package`, `pnpm run test`
-- ✅ Publishing: Package remains npm-compatible for end users
-- ❌ Never use `npm` or `yarn` for local development
-
-Examples:
+**VS Code debug injection causes test hanging**:
 
 ```bash
-pnpm install           # Install dependencies
-pnpm add prompts       # Add new dependency
-pnpm run test          # Run tests
-pnpm run build         # Build project
+# ALWAYS use for tests
+env NODE_OPTIONS="" pnpm run test
 ```
 
-## Architecture & Design Principles
+**Symptoms**: Tests hang indefinitely, mysterious timeouts
+**Solution**: Clear NODE_OPTIONS or disable VS Code auto-attach
+
+## Architecture & Critical Knowledge
+
+### Repository Name Resolution (CRITICAL)
+
+CLI uses `path.basename(repo, '.git')` for project matching:
+
+```typescript
+// Config: repo: "https://github.com/user/my-project.git"
+// CLI: space init my-project ...
+// Match: path.basename("...my-project.git", ".git") → "my-project"
+```
 
 ### Stack-Agnostic Design
 
-- **No technology assumptions**: Works with Java, Python, Go, Rust, etc.
-- **Minimal setup**: Only creates git worktrees and copies universal prompt templates
-- **Optional post-init**: Technology-specific setup (npm install, gradle build) only if explicitly configured
-
-### Repository Name Matching Logic
-
-**CRITICAL**: The CLI uses `path.basename()` to extract repository names from git URLs/paths:
-
-- Config: `repo: "https://github.com/user/my-awesome-project.git"`
-- CLI lookup: `space init my-awesome-project ...`
-- Match: `path.basename("...my-awesome-project.git", ".git")` → `"my-awesome-project"`
+- Works with any technology (Java, Python, Go, etc.)
+- Creates git worktrees + universal prompt templates only
+- Optional post-init commands for technology-specific setup
 
 ### Configuration Structure
 
 ```yaml
 projects:
-  next: # Project key (internal reference)
-    name: 'Auth0 Next.js SDK' # Human-readable name
-    repo: 'https://github.com/auth0/nextjs-auth0.git' # SDK repository
-    sample_repo: 'https://github.com/auth0/nextjs-auth0-example.git' # Optional
-    env_file: 'next.env.local' # Optional environment file
-    post-init: 'npm install' # Optional post-setup command
+  project-key:
+    name: 'Human Readable Name'
+    repo: 'https://github.com/org/repo.git'
+    sample_repo: 'https://github.com/org/sample.git' # optional
+    env_file: 'project.env.local' # optional
+    post-init: 'npm install' # optional
 
 global:
-  src_dir: '~/src' # Base directory for repositories
-  workspace_base: 'workspaces' # Workspace subdirectory name
-  env_files_dir: './env-files' # Environment files location
+  src_dir: '~/src'
+  workspace_base: 'workspaces'
+  env_files_dir: './env-files'
 ```
 
-## Build & Development Commands
+## Testing & Development
 
-### Essential Commands (all use pnpm)
+### Essential Commands
 
 ```bash
-pnpm run build              # Build TypeScript to JavaScript
-pnpm run build:dev          # Build with dev config
-pnpm run test               # Run vitest tests with --run
-pnpm run test:coverage      # Run tests with coverage
-pnpm run lint               # Run ESLint (allows failures)
-pnpm run lint:fix           # Run ESLint with auto-fix
-pnpm run format             # Format with Prettier
-pnpm run dev                # Run CLI in development mode
-pnpm run install-global     # Build and globally link for testing
+pnpm run test          # Run tests with --run
+pnpm run build         # Build TypeScript
+pnpm run lint:fix      # Fix linting issues
+pnpm run install-global # Global link for testing
 ```
 
-### Testing Strategy
+### Modern Testing Patterns (CRITICAL)
 
-- **Unit tests**: Configuration parsing, project resolution
-- **Integration tests**: Full init/clean workflows with dummy repositories
-- **End-to-end tests**: CLI commands with real parameters
-- Always run with `vitest --run` for consistent results
+**Single-file-per-component**: `test/clean-command.test.ts` (not fragmented files)
 
-## Key Lessons Learned
-
-### 1. Repository Name Extraction is Critical
-
-**Problem**: Tests were failing because they expected project "test" but `DummyRepoManager` created "test-sdk"
-**Root Cause**: `findProjectByRepoName()` uses `path.basename(repo, '.git')` to extract names
-**Solution**: Ensure test repositories match the expected naming convention
+**Selective Mocking** (for complex dependencies):
 
 ```typescript
-// This function is central to project resolution
-function findProjectByRepoName(repoName: string) {
-  const projectRepoName = path.basename(projectData.repo, '.git');
-  if (projectRepoName.toLowerCase() === repoName.toLowerCase()) {
-    return { projectKey, project };
-  }
-}
+vi.mock('execa', () => ({
+  execa: vi.fn().mockImplementation((command, args) => {
+    if (command === 'git') return originalExeca(command, args); // Real git
+    if (command === 'gh') return getMockResponse(command, args); // Mock GitHub CLI
+    return originalExeca(command, args);
+  }),
+}));
 ```
 
-### 2. Test Infrastructure Requires Consistent Naming
+**Helper Functions**: Use `setMockGitHubResponse()`, `clearMockGitHubResponses()` for clean test setup.
 
-**Best Practice**: When creating test environments, the repository names must match CLI expectations
+**Test Environment Setup**: Use `createTestEnvironment(projectName)` with names matching CLI expectations.
 
-- Use `createTestEnvironment('test')` for tests expecting project name "test"
-- Use `createTestEnvironment('test-sdk')` for tests expecting "test-sdk"
-- Consolidated method signature: `createTestEnvironment(projectName = 'test-sdk')`
+### Key Lessons Learned
 
-### 3. Stack-Agnostic Template Generation
+1. **Repository Name Extraction**: `DummyRepoManager` must create repos matching `basename()` expectations
+2. **Test Consolidation**: 12 files → single comprehensive files achieved 95.8% success rate
+3. **Selective Mocking**: Mock externals (GitHub CLI), allow internals (git commands for test setup)
+4. **Template Placeholders**: `{{SOURCE_PATH}}`, `{{PROJECT_NAME}}`, `{{BRANCH_NAME}}`, `{{GITHUB_DATA}}`
 
-Templates now use universal placeholders:
+## Development Guide
 
-- `{{SOURCE_PATH}}` - SDK repository worktree path
-- `{{DESTINATION_PATH}}` - Sample app worktree path (if applicable)
-- `{{PROJECT_NAME}}` - Human-readable project name
-- `{{BRANCH_NAME}}` - Current branch being worked on
-- `{{GITHUB_DATA}}` - Fetched GitHub issue/PR data
+### Quick Troubleshooting
 
-### 4. Workflow Detection Remains Universal
+**Test Hanging**: Check `echo $NODE_OPTIONS` (should be empty), use `env NODE_OPTIONS="" vitest --run`
+**Mock Issues**: Run single test file `npx vitest run test/specific-file.test.ts`
+**"No project found"**: Check project keys in config.yaml vs repository basename extraction
 
-The CLI detects workflows based on:
+### Development Workflow
 
-- **Branch name patterns**: `bugfix/*`, `feature/*`, `hotfix/*`, `explore/*`
-- **GitHub labels**: `bug`, `enhancement`, `documentation`
-- **Issue/PR content**: Keywords indicating the type of work
+1. **Before Feature**: Verify `NODE_OPTIONS` clean, run baseline tests
+2. **Test Strategy**: Create comprehensive test file, use helper functions, evidence-based debugging
+3. **Debugging**: Isolate → Evidence → Root Cause → Minimal Fix → Validate
 
-## Common Patterns & Best Practices
+### Success Metrics
 
-### Project Configuration
-
-```yaml
-# Minimal configuration - just git repositories
-my-python-api:
-  name: 'Python API'
-  repo: 'https://github.com/org/python-api.git'
-
-# Full configuration with samples and post-init
-next:
-  name: 'Auth0 Next.js SDK'
-  repo: 'https://github.com/auth0/nextjs-auth0.git'
-  sample_repo: 'https://github.com/auth0/nextjs-auth0-example.git'
-  env_file: 'next.env.local'
-  post-init: 'npm install && npm run build'
-```
-
-### Command Usage Examples
-
-```bash
-# Simple SDK-only workspace
-space init my-python-api 1234 feature/add-auth
-
-# Full workspace with sample app
-space init next 1234 5678 bugfix/token-refresh
-
-# Analysis-only workspace (no GitHub issues)
-space init go-sdk feature/performance-optimization
-```
-
-### Testing Considerations
-
-```typescript
-// When creating test environments, be explicit about naming
-describe('CLI Tests', () => {
-  beforeEach(async () => {
-    // For tests expecting 'test' project
-    const { sdkPath, samplePath } = await manager.createTestEnvironment('test');
-
-    // For tests expecting 'test-sdk' project
-    const { sdkPath, samplePath } = await manager.createTestEnvironment('test-sdk');
-  });
-});
-```
-
-## Troubleshooting Guide
-
-### "No project found with identifier: X"
-
-**Cause**: Project identifier doesn't match any project key or repository name
-**Solution**:
-
-1. Check config.yaml for project keys (e.g., `java`, `next`, `spa`)
-2. Check repository URLs to extract repo names (e.g., `auth0-java`, `nextjs-auth0`)
-3. Use either format in CLI commands: `space init java` or `space init auth0-java`
-4. Error message shows both available project keys and repo names for reference
-
-### Help Text Inconsistencies
-
-**Cause**: Hardcoded examples in help text don't match current config
-**Solution**: Update help text examples to match config.yaml project names
-
-```typescript
-// In command files, update examples like:
-Examples:
-  $ space list next    # Match actual config
-  $ space list spa    # Not generic "next" or "node"
-```
-
-### Test Environment Mismatches
-
-**Cause**: Test expects different repository names than DummyRepoManager creates
-**Solution**: Use the consolidated `createTestEnvironment(projectName)` method
-
-## Development Workflow
-
-### Adding New Projects
-
-1. Add to `config.yaml` with descriptive key
-2. Update help text examples if needed
-3. Test with actual `space init <repo-name> ...` command
-
-### Modifying Templates
-
-Templates are now stack-agnostic:
-
-- Remove technology-specific references
-- Use universal placeholders
-- Focus on analysis and documentation patterns
-- Avoid assuming specific test frameworks or build tools
-
-### Testing Strategy
-
-- **Unit tests**: Focus on configuration parsing, project resolution
-- **Integration tests**: Test full init/clean workflows with dummy repositories
-- **End-to-end tests**: Validate actual CLI commands work as expected
-- Always run tests with `pnpm run test` (uses vitest --run)
-
-## Performance & Scalability Notes
-
-### Git Worktree Management
-
-- Always prune existing worktrees before creating new ones
-- Handle repository freshness (fetch latest changes)
-- Support both SSH and HTTPS git URLs
-- Graceful handling of missing sample repositories
-
-### Template Processing
-
-- Templates are copied, not generated dynamically
-- Placeholder replacement is done once during workspace creation
-- Templates are stack-agnostic and reusable across projects
-
-## Security Considerations
-
-- Environment files are copied from secure local directory (`env_files_dir`)
-- GitHub API tokens should be configured via standard git credentials
-- Repository paths are validated to prevent directory traversal
-- Post-init commands run in sandbox workspace directory
-
-## Future Enhancements
-
-### Potential Improvements
-
-1. **Plugin system**: Allow custom post-init scripts per project type
-2. **Remote templates**: Fetch templates from git repositories
-3. **Workspace templates**: Pre-configured workspace layouts
-4. **Multi-branch workflows**: Work on multiple branches simultaneously
-
-### Architectural Decisions
-
-- **Stay stack-agnostic**: Resist adding technology-specific features
-- **Keep simple**: The MVP nature is a feature, not a limitation
-- **Template-driven**: Use templates for customization, not code
-- **Configuration over code**: Prefer YAML config over hardcoded logic
-
----
+- **95%+ test pass rate** (current: 95.8%)
+- **Single file per component**
+- **Clean selective mocking**
+- **Evidence-based debugging**
 
 ## Quick Reference
 
 ### Essential Files
 
 - `src/commands/init.ts` - Main workspace initialization
-- `src/services/gitWorktrees.ts` - Git worktree management
 - `src/utils/config.ts` - Configuration parsing
 - `config.yaml` - Project definitions
 - `src/templates/` - Universal prompt templates
 
 ### Key Functions
 
-- `configManager.findProject()` - Project resolution supporting both project keys and repository names
-- `findProjectByRepoName()` - DEPRECATED - Project resolution (repository name matching only)
-- `setupWorktrees()` - Git worktree creation and management
-- `configManager.getProject()` - Project configuration retrieval by project key only
-- `DummyRepoManager.createTestEnvironment()` - Test environment setup
+- `configManager.findProject()` - Supports both project keys and repo names
+- `setupWorktrees()` - Git worktree creation
+- `DummyRepoManager.createTestEnvironment()` - Test setup
 
-### Common Gotchas
+### Critical Gotchas
 
-- Project resolution in init command supports both project keys ('java') and repository names ('auth0-java')
-- Other commands (list, info, clean) use project keys only for consistency
-- Test environments need consistent naming conventions
-- Help text should reflect actual config.yaml projects
-- Templates should be stack-agnostic and use universal placeholders
-- Always use `pnpm` for development commands, not `npm` or `yarn`
+- **VS Code auto-attach** causes test hanging (clear NODE_OPTIONS)
+- **Mixed package managers** cause lockfile conflicts (pnpm-only)
+- **Global mocks** break test setup (use selective mocking)
+- **Repository names** must match `basename()` extraction logic
+- **Project resolution**: init command supports both keys + repo names, other commands use keys only
+
+### Templates & Workflow Detection
+
+- **Universal placeholders** for any tech stack
+- **Branch patterns**: `bugfix/*`, `feature/*`, `hotfix/*`, `explore/*`
+- **GitHub labels**: `bug`, `enhancement`, `documentation`
+- **Stack-agnostic**: No technology assumptions
+
+---
+
+**Note**: For detailed examples and comprehensive troubleshooting, reference the full documentation. This guide focuses on critical domain knowledge and common acceleration patterns.

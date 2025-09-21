@@ -62,7 +62,7 @@ export class WorkspaceSpinner {
 
     if (this.isVerbose) {
       if (text) {
-        logger.error(text.replace(/^❌\s*/, '').replace(/^⚠️\s*/, ''));
+        logger.error(text.replace(/^ERROR:\s*/, '').replace(/^WARNING:\s*/, ''));
       }
     } else if (this.spinner) {
       if (text) {
@@ -82,7 +82,7 @@ export class WorkspaceSpinner {
 
     if (this.isVerbose) {
       if (text) {
-        logger.warn(text.replace(/^⚠️\s*/, ''));
+        logger.warn(text.replace(/^WARNING:\s*/, ''));
       }
     } else if (this.spinner) {
       if (text) {
@@ -102,7 +102,7 @@ export class WorkspaceSpinner {
 
     if (this.isVerbose) {
       if (text) {
-        logger.info(text.replace(/^ℹ️\s*/, ''));
+        logger.info(text.replace(/^INFO:\s*/, ''));
       }
     } else if (this.spinner) {
       if (text) {

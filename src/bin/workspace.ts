@@ -7,86 +7,347 @@ import { validateDependencies } from '../utils/validation.js';
 import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { SetupWizard } from '../services/setupWizard.js';
-import { initCommand } from '../commands/init.js';
+import prompts from 'prompts';
 import { listCommand } from '../commands/list.js';
+import { initCommand } from '../commands/init.js';
 import { infoCommand } from '../commands/info.js';
 import { cleanCommand } from '../commands/clean.js';
-import { submitCommand } from '../commands/submit.js';
 import { projectsCommand } from '../commands/projects.js';
-import { registerDoctorCommand } from '../commands/doctor.js';
 import { setupCommand } from '../commands/setup.js';
+import { buildHelpText } from '../utils/help.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
 
+/**
+ * Execute the list command logic
+ */
+async function executeListCommand(): Promise<void> {
+  try {
+    const projects = configManager.listProjects();
+    let hasAnyWorkspaces = false;
+
+    for (const projectKey of projects) {
+      try {
+        const project = configManager.getProject(projectKey);
+        const baseDir = configManager.getProjectBaseDir(projectKey);
+
+        if (await import('fs-extra').then((fs) => fs.existsSync(baseDir))) {
+          const fs = await import('fs-extra');
+          const dirs = fs
+            .readdirSync(baseDir, { withFileTypes: true })
+            .filter((d) => d.isDirectory())
+            .map((d) => d.name);
+
+          if (dirs.length > 0) {
+            hasAnyWorkspaces = true;
+            console.log(`\n${project.name} (${projectKey}):`);
+            dirs.forEach((dir) => console.log(`  ${dir}`));
+          }
+        }
+      } catch (error) {
+        // Continue to next project if this one fails
+        continue;
+      }
+    }
+
+    if (!hasAnyWorkspaces) {
+      logger.info('No workspaces found for any project.');
+      console.log('\nTo create a workspace, use:');
+      console.log('  space init <project> <branch-name>');
+      console.log('\nTo see available projects, use:');
+      console.log('  space projects');
+    }
+  } catch (error) {
+    handleError(error as Error, logger);
+  }
+}
+
+/**
+ * Execute the projects command logic
+ */
+async function executeProjectsCommand(): Promise<void> {
+  try {
+    const projects = configManager.listProjects();
+
+    if (projects.length === 0) {
+      logger.info('No projects configured.');
+      return;
+    }
+
+    console.log('\nAvailable projects:');
+
+    for (const projectKey of projects) {
+      const project = configManager.getProject(projectKey);
+      console.log(`  ${projectKey}: ${project.name}`);
+      console.log(`    Repo: ${project.repo}`);
+      console.log(`    Samples: ${project.sample_repo || 'N/A'}`);
+      if (project.github_org) {
+        console.log(`    GitHub Org: ${project.github_org}`);
+      }
+      console.log('');
+    }
+
+    console.log('Usage:');
+    console.log(`  space init <project> [github-ids...] <branch-name>`);
+    console.log(`  space init ${projects[0]} 123 456 feature/my-branch`);
+  } catch (error) {
+    handleError(error as Error, logger);
+  }
+}
+
+/**
+ * Execute interactive init workflow
+ */
+async function executeInteractiveInit(): Promise<void> {
+  try {
+    const projects = configManager.listProjects();
+
+    if (projects.length === 0) {
+      console.log('No projects configured. Run "space setup" to add projects first.');
+      return;
+    }
+
+    console.log("🚀 Let's create a new workspace!\n");
+
+    // Interactive prompts for init
+    const initResponse = await prompts([
+      {
+        type: 'select',
+        name: 'project',
+        message: 'Select a project:',
+        choices: projects.map((key) => {
+          const project = configManager.getProject(key);
+          return {
+            title: `${key} → ${project.name}`,
+            value: key,
+            description: project.repo,
+          };
+        }),
+      },
+      {
+        type: 'text',
+        name: 'branchName',
+        message: 'Enter branch name:',
+        initial: 'feature/new-feature',
+        validate: (val: string) => (val.trim() ? true : 'Branch name is required'),
+      },
+      {
+        type: 'text',
+        name: 'githubIds',
+        message: 'GitHub issue IDs (optional, space-separated):',
+        initial: '',
+      },
+    ]);
+
+    if (!initResponse.project) {
+      console.log('Init cancelled.');
+      return;
+    }
+
+    // Build command arguments
+    const args = [initResponse.project];
+
+    // Add GitHub IDs if provided
+    if (initResponse.githubIds.trim()) {
+      const ids = initResponse.githubIds.trim().split(/\s+/);
+      args.push(...ids);
+    }
+
+    args.push(initResponse.branchName);
+
+    // Execute the init command programmatically
+    console.log(`\n⚡ Executing: space init ${args.join(' ')}\n`);
+
+    // Import and execute the init command logic
+    const { initCommand } = await import('../commands/init.js');
+    const initCommandInstance = new Command();
+    initCommand(initCommandInstance);
+
+    // Parse and execute with the constructed arguments
+    await initCommandInstance.parseAsync(['node', 'space', 'init', ...args], { from: 'user' });
+  } catch (error) {
+    handleError(error as Error, logger);
+  }
+}
+
+/**
+ * Execute the setup command logic
+ */
+async function executeSetupCommand(): Promise<void> {
+  const { SetupWizard } = await import('../services/setupWizard.js');
+  const wizard = new SetupWizard();
+
+  // Check if setup is needed
+  if (!wizard.isSetupNeeded({})) {
+    logger.info('Configuration already exists. Use --force to reconfigure.');
+    return;
+  }
+
+  // Run the setup wizard
+  const result = await wizard.run({});
+
+  if (result.completed) {
+    logger.info('Setup completed! You can now use space-cli commands.');
+  } else if (result.skipped) {
+    logger.info('Setup was skipped. Run "space setup" when you\'re ready.');
+  }
+}
+
+/**
+ * Show compact project list
+ */
+async function showCompactProjects(): Promise<void> {
+  try {
+    const projects = configManager.listProjects();
+
+    if (projects.length === 0) {
+      console.log('No projects configured. Run "space setup" to add projects first.');
+      return;
+    }
+
+    console.log('\n📚 Available projects:');
+    for (const projectKey of projects) {
+      const project = configManager.getProject(projectKey);
+      console.log(`  ${projectKey} → ${project.name}`);
+    }
+    console.log('');
+  } catch (error) {
+    logger.error('Failed to load projects:', error as Error);
+  }
+}
+
+/**
+ * Show interactive menu for configured users
+ */
+async function showInteractiveMenu(): Promise<void> {
+  // First show available projects compactly
+  await showCompactProjects();
+
+  // Show interactive menu
+  const response = await prompts({
+    type: 'select',
+    name: 'action',
+    message: 'What would you like to do?',
+    choices: [
+      { title: '🚀 Create new workspace', value: 'init' },
+      { title: '📋 List existing workspaces', value: 'list' },
+      { title: '📖 View project details', value: 'projects' },
+      { title: 'ℹ️  View workspace info', value: 'info' },
+      { title: '🧹 Clean up workspace', value: 'clean' },
+      { title: '⚙️  Settings', value: 'setup' },
+      { title: '❓ Help', value: 'help' },
+    ],
+  });
+
+  if (!response.action) {
+    console.log('Goodbye!');
+    return;
+  }
+
+  console.log(''); // Add some space
+
+  switch (response.action) {
+    case 'init': {
+      await executeInteractiveInit();
+      break;
+    }
+
+    case 'list': {
+      await executeListCommand();
+      break;
+    }
+
+    case 'projects': {
+      await executeProjectsCommand();
+      break;
+    }
+
+    case 'info':
+    case 'clean': {
+      console.log(`💡 Tip: Use "space ${response.action} <project> <workspace-name>"`);
+      console.log('   Run "space list" to see your available workspaces');
+      break;
+    }
+
+    case 'setup': {
+      await executeSetupCommand();
+      break;
+    }
+
+    case 'help': {
+      // Show help directly instead of spawning a process
+      program.help();
+      break;
+    }
+  }
+}
+
 const program = new Command();
 program
   .name('space')
-  .description('Stack-agnostic workspace CLI tool')
+  .description('Stack-agnostic space CLI tool')
   .version(pkg.version)
-  .addHelpText(
-    'after',
-    `
-Global Options:
-  The following options can be used with any subcommand:
-
-  -e, --env <path>       Path to custom .workspace.env file
-  -c, --config <path>    Path to custom configuration file
-  -v, --verbose          Enable verbose logging output
-  --debug                Enable debug logging (most detailed)
-  --pr <pr_id>           Initialize workspace for specific pull request
-  --non-interactive      Skip all user input prompts for automated usage
-
-Examples:
-  $ space init next feature/my-branch
-    Create a new Next.js workspace
-
-  $ space --pr 123 init react
-    Create a React workspace for pull request #123
-
-  $ space list
-    Show all existing workspaces
-
-  $ space projects
-    Show available projects
-
-  $ space info next feature_my-branch
-    Show details for a specific workspace
-
-  $ space submit next feature_my-branch
-    Submit workspace changes as a pull request
-
-  $ space clean next feature_my-branch
-    Remove a workspace completely
-
-Getting Started:
-  1. Run "space setup" to configure your workspace (first time)
-  2. Run "space projects" to see available projects
-  3. Run "space init <project> <branch-name>" to create a workspace
-  4. Develop in the created workspace directories
-  5. Run "space submit <project> <workspace>" when ready to submit
-  6. Run "space clean <project> <workspace>" when done
-
-For detailed help on any command, use:
-  space <command> --help`,
-  );
+  .addHelpText('after', buildHelpText());
 
 // Global options
-program.option('-e, --env <path>', 'Path to .workspace.env file');
+program.option('-e, --env <path>', 'Path to .space.env file');
 program.option('-c, --config <path>', 'Path to configuration file');
 program.option('-v, --verbose', 'Enable verbose logging');
 program.option('--debug', 'Enable debug logging');
-program.option('--pr <pr_id>', 'Open workspace for specific pull request');
+program.option('--pr <pr_id>', 'Open space for specific pull request');
 program.option('--non-interactive', 'Skip all user input prompts for automated usage');
+
+// Add default action for when no subcommand is provided
+program.action(async (options) => {
+  try {
+    // Check if config exists
+    let configExists = false;
+    try {
+      await configManager.loadConfig(options.config);
+      configExists = true;
+    } catch (error) {
+      configExists = false;
+    }
+
+    if (!configExists) {
+      // No config exists - run setup wizard
+      const wizard = new SetupWizard();
+      logger.info('Welcome to space-cli! It looks like this is your first time.');
+      logger.info("Let's set up your space configuration.\n");
+
+      const result = await wizard.run();
+      if (!result.completed && !result.skipped) {
+        logger.info('Setup is required to use space-cli commands.');
+        logger.info('Run "space setup" when you\'re ready to configure your space.');
+        process.exit(0);
+      }
+
+      if (result.completed) {
+        logger.info('Setup completed! You can now use space commands.\n');
+        // Load the newly created config
+        await configManager.loadConfig(options.config);
+        configExists = true;
+      } else {
+        process.exit(0);
+      }
+    }
+
+    if (configExists) {
+      // Config exists - show interactive menu
+      await showInteractiveMenu();
+    }
+  } catch (error) {
+    handleError(error as Error, logger);
+  }
+});
 
 // Register subcommands
 initCommand(program);
 listCommand(program);
 infoCommand(program);
 cleanCommand(program);
-submitCommand(program);
 projectsCommand(program);
-registerDoctorCommand(program);
 program.addCommand(setupCommand);
 
 program.hook('preAction', async (thisCommand) => {
@@ -105,29 +366,59 @@ program.hook('preAction', async (thisCommand) => {
     const commandOptions = thisCommand.opts();
 
     if (commandName !== 'setup') {
-      const wizard = new SetupWizard();
-      if (wizard.isSetupNeeded()) {
-        logger.info('🚀 Welcome to space-cli! It looks like this is your first time.');
-        logger.info("Let's set up your workspace configuration.\n");
+      // Try to load config first to see if any config exists (including custom paths)
+      let configExists = false;
+      try {
+        await configManager.loadConfig(opts.config);
+        configExists = true;
+      } catch (error) {
+        // Config loading failed, check if setup is needed
+        configExists = false;
+      }
+
+      // Only trigger setup if no config was found anywhere
+      if (!configExists) {
+        const wizard = new SetupWizard();
+        logger.info('Welcome to space-cli! It looks like this is your first time.');
+        logger.info("Let's set up your space configuration.\n");
 
         const result = await wizard.run();
         if (!result.completed && !result.skipped) {
           logger.info('Setup is required to use space-cli commands.');
-          logger.info('Run "space setup" when you\'re ready to configure your workspace.');
+          logger.info('Run "space setup" when you\'re ready to configure your space.');
           process.exit(0);
         }
 
         if (result.completed) {
-          logger.info('✅ Setup completed! Continuing with your command...\n');
+          logger.info('Setup completed! Continuing with your command...\n');
+          // Load the newly created config
+          await configManager.loadConfig(opts.config);
         }
       }
     } else if (commandName === 'setup' && commandOptions.preview) {
       // For setup command with preview, skip the first-run check
       // The preview will be handled by the setup command itself
+      // Still load config for setup command if it exists
+      try {
+        await configManager.loadConfig(opts.config);
+      } catch (error) {
+        // Config doesn't exist, which is expected for setup command
+      }
     }
 
-    // Load configuration
-    await configManager.loadConfig(opts.config);
+    // For setup command without preview, load config if it exists
+    if (commandName === 'setup' && !commandOptions.preview) {
+      try {
+        await configManager.loadConfig(opts.config);
+      } catch (error) {
+        // Config doesn't exist, which is fine for setup command
+      }
+    }
+
+    // If we haven't loaded config yet, try to load it now
+    if (!configManager.isLoaded()) {
+      await configManager.loadConfig(opts.config);
+    }
 
     // Load environment
     loadEnv(opts.env);

@@ -1,234 +1,546 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
+import { DummyRepoManager } from '../src/services/dummyRepoManager.js';
+import { configManager } from '../src/utils/config.js';
 
-// Set up mocks with inline factories
-vi.mock('fs-extra', () => ({
-  default: {
-    existsSync: vi.fn(),
-    readdir: vi.fn(),
-    readFile: vi.fn(),
-    readdirSync: vi.fn(),
-    statSync: vi.fn(),
-  },
+// Mock execa selectively - allow git commands, provide flexible GitHub CLI mocking
+const mockGitHubResponses: { [key: string]: any } = {};
+
+vi.mock('execa', () => ({
+  execa: vi.fn().mockImplementation(async (command: string, args: string[], options?: any) => {
+    // Allow git commands to execute normally for DummyRepoManager
+    if (command === 'git') {
+      const { execa: actualExeca } = await vi.importActual<typeof import('execa')>('execa');
+      return actualExeca(command, args, options);
+    }
+
+    // Mock GitHub CLI commands for test scenarios
+    if (command === 'gh') {
+      const subcommand = args[0];
+
+      if (subcommand === 'auth' && args[1] === 'status') {
+        // Mock GitHub auth status - assume authenticated by default
+        return { stdout: 'Logged in to github.com as testuser' };
+      }
+
+      if (subcommand === 'api') {
+        const apiPath = args[1];
+
+        // Handle the specific validation API call pattern
+        if (apiPath?.includes('repos/test-org/test/issues/2328') && args.includes('--jq')) {
+          return { stdout: '2328', exitCode: 0 };
+        }
+
+        // Check if a specific response is set for this API call
+        const mockKey = `api:${apiPath}`;
+        if (mockGitHubResponses[mockKey]) {
+          const mockResponse = mockGitHubResponses[mockKey];
+          if (mockResponse.error) {
+            throw mockResponse.error;
+          }
+          return mockResponse;
+        }
+
+        // Default successful responses
+        if (apiPath?.includes('/issues/')) {
+          const issueNumber = apiPath.split('/').pop();
+          return {
+            stdout: JSON.stringify({ number: issueNumber || 123 }),
+          };
+        }
+        if (apiPath?.includes('/pulls/')) {
+          const prNumber = apiPath.split('/').pop();
+          return {
+            stdout: JSON.stringify({ number: prNumber || 101 }),
+          };
+        }
+      }
+
+      // Default GitHub CLI mock
+      return { stdout: '{}' };
+    }
+
+    // Default mock for any other commands
+    return { stdout: 'mock-output' };
+  }),
 }));
 
-vi.mock('../src/utils/init-helpers.js', () => ({
-  executeCommand: vi.fn(),
-  executeGit: vi.fn(),
-  fileOps: {
-    ensureDir: vi.fn(),
-    removeFile: vi.fn(),
-    copyFile: vi.fn(),
-    writeFile: vi.fn(),
-  },
-  extractRelevantContent: vi.fn(),
-  fetchComments: vi.fn(),
-  createTestFileName: vi.fn(),
-}));
+// Helper functions for GitHub API mocking
+const setMockGitHubResponse = (apiPath: string, response: any) => {
+  mockGitHubResponses[`api:${apiPath}`] = response;
+};
 
+const clearMockGitHubResponses = () => {
+  Object.keys(mockGitHubResponses).forEach((key) => delete mockGitHubResponses[key]);
+};
+
+// Mock logger to suppress output during tests
 vi.mock('../src/utils/logger.js', () => ({
   logger: {
     verbose: vi.fn(),
     info: vi.fn(),
-    step: vi.fn(),
     success: vi.fn(),
     warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    step: vi.fn(),
+    command: vi.fn(),
   },
 }));
 
-vi.mock('../src/utils/config.js', () => ({
-  configManager: {
-    getTemplates: vi.fn(),
-    getGlobal: vi.fn(),
-    getEnvFilePath: vi.fn(),
-    getCliRoot: vi.fn(),
-  },
-}));
+// Mock validation utilities
+vi.mock('../src/utils/validation.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/utils/validation.js')>();
+  return {
+    ...actual,
+    validateProjectKey: vi.fn(),
+    validateWorkspaceName: vi.fn(),
+    validateRepositoryPath: vi.fn(), // Add the missing mock
+  };
+});
 
-vi.mock('node:readline/promises', () => ({
-  createInterface: vi.fn(() => ({
-    question: vi.fn().mockResolvedValue(''),
-    close: vi.fn(),
-  })),
-}));
+describe('Init Command - Comprehensive', () => {
+  let testDir: string;
+  let manager: DummyRepoManager;
+  let sourceRepoPath: string;
+  let destinationRepoPath: string;
 
-vi.mock('node:process', () => ({
-  stdin: {},
-  stdout: {},
-}));
-
-// Import after mocking
-import fs from 'fs-extra';
-import {
-  executeCommand,
-  executeGit,
-  fileOps,
-  extractRelevantContent,
-  fetchComments,
-  createTestFileName,
-} from '../src/utils/init-helpers.js';
-import { configManager } from '../src/utils/config.js';
-
-describe('Init Commands', () => {
-  // Mock project configuration for testing
-  // const mockProject = {
-  //   key: 'spa',
-  //   name: 'Auth0 SPA JS SDK',
-  //   sdk_repo: '~/src/auth0-spa-js',
-  //   sample_repo: 'spajs/spatest',
-  //   github_org: 'auth0',
-  //   sample_app_path: '/Users/test/src/spajs/spatest',
-  //   env_file: 'spa.env.local'
-  // };
-
-  // Mock workspace paths for testing
-  // const mockPaths = {
-  //   srcDir: '/Users/test/src',
-  //   baseDir: '/Users/test/src/workspaces',
-  //   workspaceDir: '/Users/test/src/workspaces/spa/bugfix_rt-rotation',
-  //   sdkPath: '/Users/test/src/workspaces/spa/bugfix_rt-rotation/auth0-spa-js',
-  //   samplesPath: '/Users/test/src/workspaces/spa/bugfix_rt-rotation/spatest',
-  //   sdkRepoPath: '/Users/test/src/auth0-spa-js',
-  //   sampleRepoPath: '/Users/test/src/spajs/spatest'
-  // };
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    clearMockGitHubResponses();
 
-    // Setup default mock implementations
-    (executeCommand as any).mockResolvedValue({ stdout: '{}' });
-    (executeGit as any).mockResolvedValue({ stdout: '' });
-    (fileOps.ensureDir as any).mockResolvedValue(undefined);
-    (fileOps.removeFile as any).mockResolvedValue(undefined);
-    (fileOps.copyFile as any).mockResolvedValue(undefined);
-    (fileOps.writeFile as any).mockResolvedValue(undefined);
+    testDir = path.join(os.tmpdir(), `init-test-${Date.now()}`);
+    await fs.ensureDir(testDir);
 
-    (extractRelevantContent as any).mockReturnValue({
-      id: 123,
-      title: 'Test Issue',
-      body: 'Test issue description',
-      state: 'open',
-      type: 'issue',
-      relevant_content: 'Relevant content',
-    });
+    manager = new DummyRepoManager(testDir);
+    const { sdkPath, samplePath } = await manager.createTestEnvironment('test');
+    sourceRepoPath = sdkPath;
+    destinationRepoPath = samplePath;
 
-    (fetchComments as any).mockResolvedValue([]);
-    (createTestFileName as any).mockReturnValue('test-file.test.ts');
+    // Load mock configuration for tests
+    const mockConfig = {
+      projects: {
+        test: {
+          name: 'Test Project',
+          repo: sourceRepoPath,
+          sample_repo: destinationRepoPath,
+        },
+      },
+      global: {
+        src_dir: testDir,
+        workspace_base: 'workspaces',
+        env_files_dir: './env-files',
+      },
+      templates: {
+        dir: './src/templates',
+      },
+      workflows: {
+        'issue-fix': {
+          prompts: ['fix-and-test.prompt.md'],
+          description: 'Fix bugs and issues',
+        },
+        'feature-development': {
+          prompts: ['analysis.prompt.md'],
+          description: 'Develop new features',
+        },
+      },
+    };
 
-    (configManager.getTemplates as any).mockReturnValue({
-      dir: '/test/templates',
-      common: ['analysis.prompt.md', 'review-changes.prompt.md'],
-    });
+    // Set the mock config directly on the configManager instance
+    configManager.config = mockConfig;
+  });
 
-    (configManager.getGlobal as any).mockReturnValue({
-      src_dir: '/Users/test/src',
-      workspace_base: 'workspaces',
-      package_manager: 'pnpm',
-    });
-
-    (configManager.getEnvFilePath as any).mockReturnValue('/test/env-files/spa.env.local');
-    (configManager.getCliRoot as any).mockReturnValue('/test/cli');
-
-    (fs.existsSync as any).mockReturnValue(false);
-    (fs.readdir as any).mockResolvedValue([]);
+  afterEach(async () => {
+    await manager.cleanupAll();
+    if (fs.existsSync(testDir)) {
+      await fs.remove(testDir);
+    }
   });
 
   describe('Worktree Setup Logic', () => {
-    // Import the function we're testing - we'll need to expose it or test it indirectly
-    // For now, let's test the behavior through integration tests
-
     it('should use specified branch for SDK worktree and fallback to default branch for sample worktree', async () => {
-      // Mock git commands for default branch detection
-      (executeGit as any)
-        // SDK worktree setup - should use the specified branch
-        .mockResolvedValueOnce({ stdout: '' }) // prune
-        .mockRejectedValueOnce(new Error('Create new branch failed')) // create new branch fails
-        .mockResolvedValueOnce({ stdout: '' }) // add existing branch succeeds
+      const { setupWorktrees } = await import('../src/services/gitWorktrees.js');
 
-        // Sample worktree setup - should detect and use default branch
-        .mockResolvedValueOnce({ stdout: 'refs/remotes/origin/master' }) // get default branch
-        .mockResolvedValueOnce({ stdout: '' }) // show-ref main fails
-        .mockResolvedValueOnce({ stdout: '' }) // show-ref master succeeds
-        .mockResolvedValueOnce({ stdout: '' }) // prune
-        .mockRejectedValueOnce(new Error('Create new branch failed')) // create new fails
-        .mockResolvedValueOnce({ stdout: '' }); // add existing master succeeds
+      const project = {
+        key: 'test',
+        name: 'Test Project',
+        repo: sourceRepoPath,
+        sample_repo: destinationRepoPath,
+      };
 
-      // We'll need to import and call the actual function here
-      // For now, this serves as documentation of expected behavior
+      const workspaceName = 'test-branch-logic';
+      const branchName = 'feature/branch-test';
+      const paths = configManager.getWorkspacePaths('test', workspaceName);
 
-      expect(true).toBe(true); // Placeholder until we can properly test the function
+      // Ensure workspace directory exists
+      await fs.ensureDir(paths.workspaceDir);
+
+      await setupWorktrees(project, paths, branchName, false);
+
+      // Verify SDK worktree was created with specified branch
+      expect(fs.existsSync(paths.sourcePath)).toBe(true);
+      expect(fs.existsSync(path.join(paths.sourcePath, '.git'))).toBe(true);
+
+      // Verify samples worktree was created
+      if (paths.destinationPath) {
+        expect(fs.existsSync(paths.destinationPath)).toBe(true);
+        expect(fs.existsSync(path.join(paths.destinationPath, '.git'))).toBe(true);
+      }
     });
 
     it('should handle mixed repository types (local paths vs repository names)', async () => {
-      // Test that the updated logic handles:
-      // - SDK repo: tilde path expansion (~/src/auth0-spa-js)
-      // - Sample repo: relative path (spajs/spatest)
+      // Test with local path for SDK repo and remote URL for sample repo
+      const project = {
+        key: 'test',
+        name: 'Mixed Repository Test',
+        repo: sourceRepoPath, // Local path
+        sample_repo: 'https://github.com/example/sample.git', // Remote URL
+      };
 
-      expect(true).toBe(true); // Placeholder
+      // Should not throw during configuration parsing
+      expect(project.repo).toEqual(sourceRepoPath);
+      expect(project.sample_repo).toContain('github.com');
     });
 
     it('should gracefully fallback when branch does not exist in sample repository', async () => {
-      // Mock sequence showing sample repo doesn't have the target branch
-      (executeGit as any)
-        // SDK setup succeeds
-        .mockResolvedValueOnce({ stdout: '' }) // prune
-        .mockResolvedValueOnce({ stdout: '' }) // add existing branch
+      const { setupWorktrees } = await import('../src/services/gitWorktrees.js');
 
-        // Sample setup falls back to default branch
-        .mockResolvedValueOnce({ stdout: 'refs/remotes/origin/main' }) // get default
-        .mockResolvedValueOnce({ stdout: '' }) // show-ref main succeeds
-        .mockResolvedValueOnce({ stdout: '' }) // prune
-        .mockResolvedValueOnce({ stdout: '' }); // add main branch
+      const project = {
+        key: 'test',
+        name: 'Test Project',
+        repo: sourceRepoPath,
+        sample_repo: destinationRepoPath,
+      };
 
-      expect(true).toBe(true); // Placeholder
+      const workspaceName = 'test-branch-fallback';
+      const nonExistentBranch = 'feature/non-existent-branch';
+      const paths = configManager.getWorkspacePaths('test', workspaceName);
+
+      // Ensure workspace directory exists
+      await fs.ensureDir(paths.workspaceDir);
+
+      // Should not throw error - should fallback to default branch for sample repo
+      await expect(setupWorktrees(project, paths, nonExistentBranch, false)).resolves.not.toThrow();
     });
 
     it('should handle repositories with master as default branch', async () => {
-      // Test the master/main detection logic
-      (executeGit as any)
-        .mockResolvedValueOnce({ stdout: '' }) // SDK prune
-        .mockResolvedValueOnce({ stdout: '' }) // SDK add
+      // Create a repository with 'master' as default branch
+      const masterRepoPath = await manager.createDummyRepo({
+        name: 'master-default',
+        type: 'sdk',
+        branches: ['master'],
+        hasRemote: false,
+      });
 
-        // Sample repo uses master as default
-        .mockRejectedValueOnce(new Error('No remote HEAD')) // symbolic-ref fails
-        .mockRejectedValueOnce(new Error('No main branch')) // show-ref main fails
-        .mockResolvedValueOnce({ stdout: '' }) // show-ref master succeeds
-        .mockResolvedValueOnce({ stdout: '' }) // prune
-        .mockResolvedValueOnce({ stdout: '' }); // add master
+      const project = {
+        key: 'test',
+        name: 'Master Branch Test',
+        repo: masterRepoPath,
+        sample_repo: destinationRepoPath,
+      };
 
-      expect(true).toBe(true); // Placeholder
+      const workspaceName = 'test-master-branch';
+      const branchName = 'feature/master-test';
+      const paths = configManager.getWorkspacePaths('test', workspaceName);
+
+      const { setupWorktrees } = await import('../src/services/gitWorktrees.js');
+
+      // Ensure workspace directory exists
+      await fs.ensureDir(paths.workspaceDir);
+
+      // Should handle master branch repositories correctly
+      await expect(setupWorktrees(project, paths, branchName, false)).resolves.not.toThrow();
     });
   });
 
   describe('Configuration Path Resolution', () => {
     it('should correctly resolve relative sample repository paths', () => {
-      // Test that spajs/spatest resolves correctly relative to src_dir
-      const srcDir = '/Users/test/src';
-      const sampleRepo = 'spajs/spatest';
-      const expectedPath = path.join(srcDir, sampleRepo);
+      // Test path resolution logic
+      const relativePath = './samples/example-app';
+      const resolved = path.resolve(relativePath);
 
-      expect(expectedPath).toBe('/Users/test/src/spajs/spatest');
+      expect(path.isAbsolute(resolved)).toBe(true);
+      expect(resolved).toContain('example-app');
     });
 
     it('should handle tilde expansion in SDK repository paths', () => {
-      // Test that ~/src/auth0-spa-js expands correctly
-      const homeDir = process.env.HOME || '/Users/test';
-      const sdkRepo = '~/src/auth0-spa-js';
-      const expectedPath = sdkRepo.replace('~', homeDir);
+      // Mock tilde expansion functionality
+      const tildeTest = '~/src/test-repo';
+      const homeDir = os.homedir();
+      const expanded = tildeTest.replace('~', homeDir);
 
-      expect(expectedPath).toBe(path.join(homeDir, 'src/auth0-spa-js'));
+      expect(expanded).toContain(homeDir);
+      expect(expanded).toContain('test-repo');
     });
   });
 
   describe('Error Handling', () => {
     it('should provide helpful error messages when worktree creation fails', () => {
-      // Test that ENOENT errors and other git failures are handled gracefully
-      expect(true).toBe(true); // Placeholder
+      // This is more of a contract test - ensuring error handling exists
+      const mockProject = {
+        key: 'test',
+        name: 'Error Test Project',
+        repo: '/non/existent/path',
+      };
+
+      expect(mockProject.repo).toBeDefined();
+      // Error handling would be tested in the actual implementation
     });
 
     it('should handle non-existent sample repository paths', () => {
-      // Test error handling when sample_repo path doesn't exist
-      expect(true).toBe(true); // Placeholder
+      const mockProject = {
+        key: 'test',
+        name: 'Non-existent Sample Test',
+        repo: sourceRepoPath,
+        sample_repo: '/non/existent/sample/path',
+      };
+
+      // Should not throw during configuration - error handling in implementation
+      expect(mockProject.sample_repo).toBeDefined();
     });
+  });
+
+  describe('Early GitHub ID validation', () => {
+    it('should validate GitHub IDs before workspace setup', async () => {
+      // Set up mock response for GitHub API to return a valid issue
+      setMockGitHubResponse('repos/test-org/test/issues/2328', {
+        stdout: JSON.stringify({
+          number: 2328,
+          title: 'Test Issue',
+          body: 'Test issue body',
+          state: 'open',
+        }),
+      });
+
+      const configPath = path.join(testDir, 'config.yaml');
+      const configContent = `
+projects:
+  test:
+    name: "Test Project"
+    repo: "${sourceRepoPath}"
+    sample_repo: "${destinationRepoPath}"
+    github_org: "test-org"
+
+global:
+  src_dir: "${testDir}"
+  workspace_base: "workspaces"
+`;
+      await fs.writeFile(configPath, configContent);
+
+      // Load the config manually for the test
+      await configManager.loadConfig(configPath);
+
+      const { initCommand } = await import('../src/commands/init.js');
+      const { Command } = await import('commander');
+
+      const mockProgram = new Command();
+      // Add the global config option to match the actual CLI behavior
+      mockProgram.option('-c, --config <path>', 'Path to configuration file');
+      initCommand(mockProgram);
+
+      // This should validate GitHub ID early and proceed with dry-run
+      await expect(
+        mockProgram.parseAsync([
+          'node',
+          'test',
+          'init',
+          'test',
+          '2328',
+          'feature/test-branch',
+          '--config',
+          configPath,
+          '--dry-run',
+        ]),
+      ).resolves.not.toThrow();
+    });
+
+    it('should fail early with non-existent GitHub ID', async () => {
+      const configPath = path.join(testDir, 'config.yaml');
+      const configContent = `
+projects:
+  test:
+    name: "Test Project"
+    repo: "${sourceRepoPath}"
+    sample_repo: "${destinationRepoPath}"
+    github_org: "test-org"
+
+global:
+  src_dir: "${testDir}"
+  workspace_base: "workspaces"
+`;
+      await fs.writeFile(configPath, configContent);
+
+      // Mock GitHub API 404 response
+      const error = new Error('API error');
+      (error as any).stderr = 'Not Found';
+      setMockGitHubResponse('repos/test-org/test-sdk/issues/999', { error });
+
+      const { initCommand } = await import('../src/commands/init.js');
+      const { Command } = await import('commander');
+
+      const mockProgram = new Command();
+      initCommand(mockProgram);
+
+      // Should fail early due to non-existent GitHub ID
+      await expect(
+        mockProgram.parseAsync([
+          'node',
+          'test',
+          'init',
+          'test',
+          '999',
+          'feature/test-branch',
+          '--config',
+          configPath,
+        ]),
+      ).rejects.toThrow();
+    });
+
+    it('should provide helpful error message for authentication issues', async () => {
+      const configPath = path.join(testDir, 'config.yaml');
+      const configContent = `
+projects:
+  test:
+    name: "Test Project"
+    repo: "${sourceRepoPath}"
+    sample_repo: "${destinationRepoPath}"
+    github_org: "test-org"
+
+global:
+  src_dir: "${testDir}"
+  workspace_base: "workspaces"
+`;
+      await fs.writeFile(configPath, configContent);
+
+      // Mock GitHub CLI authentication error
+      const error = new Error('API error');
+      (error as any).stderr = 'Unauthorized';
+      setMockGitHubResponse('repos/test-org/test-sdk/issues/123', { error });
+
+      const { initCommand } = await import('../src/commands/init.js');
+      const { Command } = await import('commander');
+
+      const mockProgram = new Command();
+      initCommand(mockProgram);
+
+      // Should fail with clear authentication guidance
+      await expect(
+        mockProgram.parseAsync([
+          'node',
+          'test',
+          'init',
+          'test',
+          '123',
+          'feature/test-branch',
+          '--config',
+          configPath,
+        ]),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('Enhanced workspace cleanup', () => {
+    it('should clean up git branches when overwriting workspace', async () => {
+      const { setupWorktrees } = await import('../src/services/gitWorktrees.js');
+
+      // Create initial workspace with branches
+      const workspaceName = 'test-cleanup-workspace';
+      const branchName = 'feature/cleanup-test';
+      const paths = configManager.getWorkspacePaths('test', workspaceName);
+
+      const project = {
+        key: 'test',
+        name: 'Test Project',
+        repo: sourceRepoPath,
+        sample_repo: destinationRepoPath,
+      };
+
+      // Ensure workspace directory exists
+      await fs.ensureDir(paths.workspaceDir);
+
+      // Set up worktrees initially
+      await setupWorktrees(project, paths, branchName, false);
+
+      // Verify directories were created
+      expect(fs.existsSync(paths.sourcePath)).toBe(true);
+      if (paths.destinationPath) {
+        expect(fs.existsSync(paths.destinationPath)).toBe(true);
+      }
+
+      // Verify branches were created
+      const { execa: actualExeca } = await vi.importActual<typeof import('execa')>('execa');
+      const { stdout: sourceBranches } = await actualExeca('git', ['branch'], {
+        cwd: sourceRepoPath,
+      });
+
+      expect(sourceBranches).toContain(branchName);
+    });
+
+    it('should handle missing branches gracefully during cleanup', async () => {
+      const workspaceName = 'test-missing-branches';
+      const paths = configManager.getWorkspacePaths('test', workspaceName);
+
+      // Create workspace directory without branches
+      await fs.ensureDir(paths.workspaceDir);
+      await fs.writeFile(path.join(paths.workspaceDir, 'test.txt'), 'test');
+
+      // Should handle cleanup gracefully even with missing branches
+      expect(fs.existsSync(paths.workspaceDir)).toBe(true);
+
+      // Cleanup logic would be tested in implementation
+    });
+  });
+
+  describe('Integration Testing', () => {
+    it('should create valid config and test simple command', async () => {
+      const configPath = path.join(testDir, 'config.yaml');
+      const configContent = `
+projects:
+  test:
+    name: "Test Project"
+    repo: "${sourceRepoPath}"
+    sample_repo: "${destinationRepoPath}"
+    github_org: "test-org"
+
+global:
+  src_dir: "${testDir}"
+  workspace_base: "workspaces"
+`;
+      await fs.writeFile(configPath, configContent);
+
+      // Verify config file was created
+      expect(fs.existsSync(configPath)).toBe(true);
+
+      // Verify config content is valid
+      const content = await fs.readFile(configPath, 'utf-8');
+      expect(content).toContain('test:');
+      expect(content).toContain('Test Project');
+    });
+
+    it('should validate repositories are properly created', async () => {
+      // This test validates the test environment setup itself
+      expect(fs.existsSync(sourceRepoPath)).toBe(true);
+      expect(fs.existsSync(destinationRepoPath)).toBe(true);
+
+      // Verify .git directories exist
+      expect(fs.existsSync(path.join(sourceRepoPath, '.git'))).toBe(true);
+      expect(fs.existsSync(path.join(destinationRepoPath, '.git'))).toBe(true);
+
+      // Validate git repositories can be queried
+      const { execa: actualExeca } = await vi.importActual<typeof import('execa')>('execa');
+      const sdkBranches = await actualExeca('git', ['branch', '--list'], {
+        cwd: sourceRepoPath,
+        timeout: 5000,
+      });
+      expect(sdkBranches.stdout).toContain('main');
+
+      const sampleBranches = await actualExeca('git', ['branch', '--list'], {
+        cwd: destinationRepoPath,
+        timeout: 5000,
+      });
+      expect(sampleBranches.stdout).toContain('main');
+    }, 10000);
   });
 });

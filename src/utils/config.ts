@@ -17,7 +17,7 @@ import type {
  * Configuration manager for workspace CLI
  */
 export class ConfigManager {
-  private config: Config | null = null;
+  public config: Config | null = null;
   private configPath: string | null = null;
 
   /**
@@ -26,7 +26,8 @@ export class ConfigManager {
   async loadConfig(customConfigPath: string | null = null): Promise<Config> {
     const configPaths = [
       customConfigPath,
-      path.join(os.homedir(), '.workspace-config.yaml'),
+      path.join(os.homedir(), '.space-config.yaml'),
+      path.join(os.homedir(), '.workspace-config.yaml'), // backwards compatibility
       path.join(process.cwd(), 'config.yaml'),
       path.join(this.getCliRoot(), 'config.yaml'),
     ].filter(Boolean) as string[];
@@ -58,6 +59,13 @@ export class ConfigManager {
         error as Error,
       );
     }
+  }
+
+  /**
+   * Check if configuration is loaded
+   */
+  isLoaded(): boolean {
+    return this.config !== null;
   }
 
   /**
@@ -256,6 +264,19 @@ export class ConfigManager {
 
     const envFilesDir = global.env_files_dir || path.join(this.getCliRoot(), 'env-files');
     return path.join(envFilesDir, project.env_file);
+  }
+
+  /**
+   * Get base directory path where all workspaces for a project are stored
+   */
+  getProjectBaseDir(projectKey: string): string {
+    const project = this.validateProject(projectKey);
+    const global = this.getGlobal();
+
+    const srcDir = global.src_dir || path.join(os.homedir(), 'src');
+    const workspaceBase = global.workspace_base || 'workspaces';
+
+    return path.join(srcDir, workspaceBase, project.key);
   }
 
   /**

@@ -1,5 +1,6 @@
 import { execa } from 'execa';
 import { logger } from '../utils/logger.js';
+import { gitHubCliService } from './gitHubCli.js';
 import type { GitHubIssueData, UrlContent } from '../types/index.js';
 
 /**
@@ -19,6 +20,19 @@ export class ContextDataFetcher {
     repoName: string,
     isDryRun: boolean,
   ): Promise<GitHubIssueData[]> {
+    // Check GitHub CLI availability first for any issues requiring API access
+    if (!isDryRun && issueIds.length > 0) {
+      const cliStatus = await gitHubCliService.checkStatus();
+
+      if (!cliStatus.isInstalled) {
+        throw new Error('GitHub CLI is not installed');
+      }
+
+      if (!cliStatus.isAuthenticated) {
+        throw new Error('GitHub CLI is not authenticated');
+      }
+    }
+
     const githubData: GitHubIssueData[] = [];
 
     for (const issueId of issueIds) {
@@ -37,7 +51,25 @@ export class ContextDataFetcher {
 
         githubData.push(extracted);
       } catch (error) {
-        logger.warn(`Error processing GitHub ID "${issueId}": ${(error as Error).message}`);
+        // For critical errors (auth/installation), re-throw
+        const errorMessage = (error as Error).message;
+        if (
+          errorMessage.includes('GitHub CLI is not installed') ||
+          errorMessage.includes('GitHub CLI is not authenticated')
+        ) {
+          throw error;
+        }
+
+        // For 404/401 errors with single issue, also re-throw for clear user feedback
+        if (
+          issueIds.length === 1 &&
+          (errorMessage.includes('not found in') || errorMessage.includes('Access denied to'))
+        ) {
+          throw error;
+        }
+
+        // For other errors, log and continue
+        logger.warn(`Error processing GitHub ID "${issueId}": ${errorMessage}`);
       }
     }
 
@@ -112,14 +144,29 @@ export class ContextDataFetcher {
 
     try {
       const apiUrl = `repos/${githubOrg}/${repoName}/issues/${issueId}`;
-      logger.verbose(`🐛 Making GitHub API call: gh api ${apiUrl}`);
+      logger.verbose(`DEBUG: Making GitHub API call: gh api ${apiUrl}`);
       const result = await execa('gh', ['api', apiUrl], { stdio: 'pipe' });
       const data = JSON.parse(result.stdout);
 
       this.cache.set(cacheKey, { data, timestamp: Date.now() });
       return data;
     } catch (error) {
-      throw new Error(`Failed to fetch GitHub item #${issueId}: ${(error as Error).message}`);
+      // Provide more specific error messages for common GitHub API errors
+      const errorMessage = (error as any).stderr || (error as Error).message;
+
+      if (errorMessage.includes('Not Found') || errorMessage.includes('404')) {
+        throw new Error(
+          `Issue #${issueId} not found in ${githubOrg}/${repoName}. Please verify the issue exists and you have access to the repository.`,
+        );
+      }
+
+      if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+        throw new Error(
+          `Access denied to ${githubOrg}/${repoName}. Please check your GitHub CLI authentication and repository permissions.`,
+        );
+      }
+
+      throw new Error(`Failed to fetch GitHub item #${issueId}: ${errorMessage}`);
     }
   }
 

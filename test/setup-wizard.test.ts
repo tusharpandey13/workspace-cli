@@ -21,7 +21,7 @@ describe('SetupWizard', () => {
 
     // Store original config path and override for testing
     originalConfigPath = (wizard as any).configPath;
-    (wizard as any).configPath = path.join(tempDir, 'config.yaml');
+    (wizard as any).configPath = path.join(tempDir, '.space-config.yaml');
   });
 
   afterEach(async () => {
@@ -71,7 +71,7 @@ describe('SetupWizard', () => {
       console.log = originalLog;
 
       expect(logs.some((log) => log.includes('Setup Preview'))).toBe(true);
-      expect(logs.some((log) => log.includes('Create a config.yaml file'))).toBe(true);
+      expect(logs.some((log) => log.includes('Create a ~/.space-config.yaml file'))).toBe(true);
       expect(logs.some((log) => log.includes('space init'))).toBe(true);
     });
   });

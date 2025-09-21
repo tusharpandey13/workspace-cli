@@ -110,21 +110,21 @@ fi
 
 # Test CLI functionality
 echo "🧪 Testing CLI functionality..."
-if workspace --help &> /dev/null; then
+if space --help &> /dev/null; then
     echo "✅ CLI help command works"
 else
     echo "❌ CLI help command failed"
 fi
 
-if workspace doctor &> /dev/null; then
-    echo "✅ CLI doctor command works"
+if space setup --help &> /dev/null; then
+    echo "✅ CLI setup command works"
 else
-    echo "⚠️  CLI doctor command failed (this might be normal if dependencies are missing)"
+    echo "⚠️  CLI setup command failed (this might be normal if config is missing)"
 fi
 
 # Final test with dry run
 echo "🧪 Testing workspace creation (dry run)..."
-if workspace init java test-branch --dry-run &> /dev/null; then
+if space init java test-branch --dry-run &> /dev/null; then
     echo "✅ Workspace creation test passed"
 else
     echo "⚠️  Workspace creation test failed (check configuration)"

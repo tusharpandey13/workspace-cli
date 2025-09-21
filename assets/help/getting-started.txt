@@ -1,0 +1,9 @@
+Getting Started:
+  1. Run "space setup" to configure your space (first time)
+  2. Run "space projects" to see available projects
+  3. Run "space init <project> <branch-name>" to create a space
+  4. Develop in the created space directories
+  5. Run "space clean <project> <space>" when done
+
+For detailed help on any command, use:
+  space <command> --help

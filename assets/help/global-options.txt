@@ -1,0 +1,9 @@
+Global Options:
+  The following options can be used with any subcommand:
+
+  -e, --env <path>       Path to custom .space.env file
+  -c, --config <path>    Path to custom configuration file
+  -v, --verbose          Enable verbose logging output
+  --debug                Enable debug logging (most detailed)
+  --pr <pr_id>           Initialize workspace for specific pull request
+  --non-interactive      Skip all user input prompts for automated usage

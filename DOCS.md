@@ -438,7 +438,7 @@ workspace list -h             # Help for list command
 workspace projects --help     # Help for projects command
 workspace info -h             # Help for info command
 workspace clean --help        # Help for clean command
-workspace submit -h           # Help for submit command
+workspace projects -h         # Help for projects command
 ```
 
 #### Help Content
