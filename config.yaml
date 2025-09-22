@@ -7,6 +7,13 @@ projects:
     repo: 'https://github.com/user/example-repo.git'
     sample_repo: 'https://github.com/user/example-samples.git'
     env_file: 'example.env.local'
+  
+  next:
+    name: 'Next.js Auth0 Project'
+    repo: 'https://github.com/auth0/nextjs-auth0.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-nextjs-samples.git'
+    env_file: 'next.env.local'
+    post-init: 'cd nextjs-auth0 && pnpm i && cd ../auth0-nextjs-samples/Sample-01 && pnpm i'
 
 global:
   src_dir: '~/src'
