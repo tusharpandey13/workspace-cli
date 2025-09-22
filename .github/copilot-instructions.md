@@ -1,157 +1,127 @@
+````instructions
 # Workspace CLI (space-cli) - Copilot Instructions
 
 ## Project Overview
+**@tusharpandey13/space-cli** - Stack-agnostic workspace CLI using git worktrees. Core: `space init <repo> <...ids> <branch>`
 
-**@tusharpandey13/space-cli** - Stack-agnostic MVP workspace CLI for efficient multi-repository development with git worktrees. Published to npm as `@tusharpandey13/space-cli@0.1.0`.
+## CRITICAL Environment Setup
 
-**Core Command**: `space init <repo_name> <...github_ids> prefix/branch_name`
+### Package Manager
+- **ONLY**: `pnpm install`, `pnpm add`, `pnpm run test`
+- **NEVER**: `npm`/`yarn` (lockfile conflicts) or `npx` (sudo prompts) - use `pnpm exec`
 
-## Environment Setup
-
-### Package Manager (CRITICAL)
-
-- **Development**: ONLY use `pnpm install`, `pnpm add`, `pnpm run test`
-- **Never**: Mix with `npm` or `yarn` (causes lockfile conflicts)
-- **NEVER use `npx`**: Causes sudo password prompts and security issues - use `pnpm exec` instead
-
-### Test Environment (CRITICAL)
-
-**VS Code debug injection causes test hanging**:
-
+### Test Environment
 ```bash
-# ALWAYS use for tests (NEVER use npx)
+# ALWAYS clear NODE_OPTIONS for tests
 env NODE_OPTIONS="" pnpm run test
-env NODE_OPTIONS="" pnpm exec vitest run test/specific-file.test.ts
+env NODE_OPTIONS="" pnpm exec vitest run test/file.test.ts
 ```
+**Issue**: VS Code debug injection hangs tests. **Fix**: Clear NODE_OPTIONS, use `pnpm exec`
 
-**Symptoms**: Tests hang indefinitely, mysterious timeouts, sudo password prompts
-**Solution**: Clear NODE_OPTIONS or disable VS Code auto-attach, use `pnpm exec` not `npx`
+## Architecture Patterns
 
-## Architecture & Critical Knowledge
-
-### Repository Name Resolution (CRITICAL)
-
-CLI uses `path.basename(repo, '.git')` for project matching:
-
+### Repository Matching (CRITICAL)
 ```typescript
-// Config: repo: "https://github.com/user/my-project.git"
-// CLI: space init my-project ...
-// Match: path.basename("...my-project.git", ".git") → "my-project"
+// CLI matches: path.basename("...my-project.git", ".git") → "my-project"
 ```
-
-### Stack-Agnostic Design
-
-- Works with any technology (Java, Python, Go, etc.)
-- Creates git worktrees + universal prompt templates only
-- Optional post-init commands for technology-specific setup
 
 ### Configuration Structure
-
 ```yaml
 projects:
-  project-key:
-    name: 'Human Readable Name'
-    repo: 'https://github.com/org/repo.git'
-    sample_repo: 'https://github.com/org/sample.git' # optional
-    env_file: 'project.env.local' # optional
-    post-init: 'npm install' # optional
-
-global:
-  src_dir: '~/src'
-  workspace_base: 'workspaces'
-  env_files_dir: './env-files'
+  key: { name: 'Name', repo: 'url', sample_repo: 'url', env_file: 'file.env', post-init: 'cmd' }
+global: { src_dir: '~/src', workspace_base: 'workspaces', env_files_dir: './env-files' }
 ```
 
-## Testing & Development
+## Testing & Development (CRITICAL)
 
-### Essential Commands
-
+### Commands
 ```bash
-pnpm run test          # Run tests with --run
+pnpm run test          # Run tests
 pnpm run build         # Build TypeScript
-pnpm run lint:fix      # Fix linting issues
-pnpm run install-global # Global link for testing
+pnpm run lint:fix      # Fix linting
 ```
 
-### Modern Testing Patterns (CRITICAL)
+### Testing Patterns
+- **Single-file-per-component**: `test/clean-command.test.ts`
+- **Selective Mocking**: Mock externals (GitHub CLI), allow internals (git)
+- **Test Names**: Match CLI expectations with `basename()` logic
+- **Helper Functions**: `setMockGitHubResponse()`, `createTestEnvironment()`
 
-**Single-file-per-component**: `test/clean-command.test.ts` (not fragmented files)
-
-**Selective Mocking** (for complex dependencies):
-
-```typescript
-vi.mock('execa', () => ({
-  execa: vi.fn().mockImplementation((command, args) => {
-    if (command === 'git') return originalExeca(command, args); // Real git
-    if (command === 'gh') return getMockResponse(command, args); // Mock GitHub CLI
-    return originalExeca(command, args);
-  }),
-}));
+### E2E Framework
+```bash
+e2e/
+├── test-matrix.md    # 40+ scenarios, 5 categories
+├── test-suite.sh     # Runner with timeouts
+└── helpers.sh        # Safety mechanisms
 ```
+**Timeouts**: 60s standard, 120s init, 90s setup | **Safety**: `--no-config`, `/tmp` isolation
 
-**Helper Functions**: Use `setMockGitHubResponse()`, `clearMockGitHubResponses()` for clean test setup.
+## Development Methodology
 
-**Test Environment Setup**: Use `createTestEnvironment(projectName)` with names matching CLI expectations.
+### Evidence-Based Debugging
+1. **Isolate** → **Capture Evidence** → **Root Cause** → **Minimal Fix** → **Validate**
+2. Document what works/fails, never assume behavior
 
-### Key Lessons Learned
+### Git Worktree Management
+- **Branch Scenarios**: local-only/remote-only/non-existent handling
+- **Samples Transform**: `bugfix/feature` → `bugfix-feature-samples`
+- **Conflict Resolution**: Auto-prune stale worktrees, force flags
+- **Fallbacks**: main/master detection, graceful degradation
 
-1. **Repository Name Extraction**: `DummyRepoManager` must create repos matching `basename()` expectations
-2. **Test Consolidation**: 12 files → single comprehensive files achieved 95.8% success rate
-3. **Selective Mocking**: Mock externals (GitHub CLI), allow internals (git commands for test setup)
-4. **Template Placeholders**: `{{SOURCE_PATH}}`, `{{PROJECT_NAME}}`, `{{BRANCH_NAME}}`, `{{GITHUB_DATA}}`
+### Configuration Patterns
+- **No-Config Mode**: `--no-config` flag for safe testing
+- **Property Normalization**: Support `post_init` and `'post-init'`
+- **Backward Compatibility**: Legacy format support
 
-## Development Guide
+## Quick Troubleshooting
 
-### Quick Troubleshooting
+| Issue | Solution |
+|-------|----------|
+| **Test Hanging** | Check `NODE_OPTIONS=""`, use `pnpm exec vitest --run` |
+| **Sudo Prompts** | Never `npx` - use `pnpm exec` |
+| **E2E Failures** | Use `--no-config`, check timeouts (60-120s) |
+| **Mock Issues** | Run single file: `pnpm exec vitest run test/file.test.ts` |
+| **"No project found"** | Check config keys vs `basename()` extraction |
+| **Git Worktree Conflicts** | `git worktree prune`, check branch naming |
 
-**Test Hanging**: Check `echo $NODE_OPTIONS` (should be empty), use `env NODE_OPTIONS="" pnpm exec vitest --run`
-**Sudo Prompts**: Never use `npx vitest` - use `pnpm exec vitest` instead
-**Mock Issues**: Run single test file `pnpm exec vitest run test/specific-file.test.ts`
-**"No project found"**: Check project keys in config.yaml vs repository basename extraction
+## Development Workflow
+1. **Setup**: Verify `NODE_OPTIONS=""`, baseline tests
+2. **Testing**: Single comprehensive files, selective mocking, evidence-based debugging
+3. **Git Ops**: Handle local/remote/nonexistent branches, samples transformation
+4. **Config**: Backward compatibility, property normalization
+5. **E2E**: Use `--no-config`, timeout protection
 
-### Development Workflow
+## CLI Architecture (CRITICAL)
 
-1. **Before Feature**: Verify `NODE_OPTIONS` clean, run baseline tests
-2. **Test Strategy**: Create comprehensive test file, use helper functions, evidence-based debugging
-3. **Debugging**: Isolate → Evidence → Root Cause → Minimal Fix → Validate
+### Non-Interactive Mode
+- All commands support `--non-interactive`
+- Graceful missing input handling
+- Clear actionable error messages
+- Setup wizard CLI-only support
 
-### Success Metrics
+### Error Handling & Safety
+- User-friendly contextual messages with suggestions
+- Proper automation exit codes
+- Input validation, path traversal protection
+- Safe git operations with validation
 
-- **95%+ test pass rate** (current: 95.8%)
-- **Single file per component**
-- **Clean selective mocking**
-- **Evidence-based debugging**
+## Success Metrics
+- **95%+ test pass rate** | **100% E2E coverage** (40/40 tests)
+- **Timeout protection** | **Evidence-based debugging**
 
-## Quick Reference
+## Critical Gotchas
+- **VS Code auto-attach**: Test hanging (clear NODE_OPTIONS)
+- **Package managers**: pnpm-only (no npm/yarn mixing)
+- **Global mocks**: Break test setup (use selective)
+- **Repository names**: Must match `basename()` logic
+- **Branch slashes**: Transform to dashes for samples
+- **Config formats**: Support both underscore/hyphen variants
+- **E2E safety**: Always `--no-config` to prevent corruption
 
-### Essential Files
-
-- `src/commands/init.ts` - Main workspace initialization
-- `src/utils/config.ts` - Configuration parsing
-- `config.yaml` - Project definitions
-- `src/templates/` - Universal prompt templates
-
-### Key Functions
-
-- `configManager.findProject()` - Supports both project keys and repo names
-- `setupWorktrees()` - Git worktree creation
-- `DummyRepoManager.createTestEnvironment()` - Test setup
-
-### Critical Gotchas
-
-- **VS Code auto-attach** causes test hanging (clear NODE_OPTIONS)
-- **Mixed package managers** cause lockfile conflicts (pnpm-only)
-- **Global mocks** break test setup (use selective mocking)
-- **Repository names** must match `basename()` extraction logic
-- **Project resolution**: init command supports both keys + repo names, other commands use keys only
-
-### Templates & Workflow Detection
-
-- **Universal placeholders** for any tech stack
-- **Branch patterns**: `bugfix/*`, `feature/*`, `hotfix/*`, `explore/*`
-- **GitHub labels**: `bug`, `enhancement`, `documentation`
-- **Stack-agnostic**: No technology assumptions
+## Key Files & Functions
+- `src/commands/init.ts`, `src/utils/config.ts`, `config.yaml`
+- `configManager.findProject()`, `setupWorktrees()`, `DummyRepoManager.createTestEnvironment()`
 
 ---
-
-**Note**: For detailed examples and comprehensive troubleshooting, reference the full documentation. This guide focuses on critical domain knowledge and common acceleration patterns.
+**Reference**: See DOCS.md and FUTURE_IMPROVEMENTS.md for detailed patterns and roadmap.
+````

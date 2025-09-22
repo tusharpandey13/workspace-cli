@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import { validateWorkspaceName, validateProjectKey } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
-import { handleError } from '../utils/errors.js';
+import { handleError, ValidationError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import type { Command } from 'commander';
 
@@ -55,7 +55,7 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
       logger.info('Force flag enabled - proceeding with cleanup');
     } else {
       logger.info('Use --force flag to confirm dangerous operations');
-      return;
+      throw new ValidationError('--force flag is required to clean workspaces');
     }
 
     // Progress reporting
@@ -63,8 +63,9 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
 
     // Check if workspace directory exists
     if (!fs.existsSync(paths.workspaceDir)) {
-      logger.warn('No workspaces found for project');
-      return;
+      throw new ValidationError(
+        `Workspace ${validatedWorkspace} not found for project ${validatedProject}`,
+      );
     }
 
     // Perform actual cleanup operations

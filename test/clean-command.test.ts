@@ -45,11 +45,14 @@ describe('Clean Command - Comprehensive', () => {
 
   // Define shared mock objects
   const mockProjectConfig = {
+    key: 'test-project',
     name: 'Test Project',
     repo: 'https://github.com/test/test-repo.git',
   };
 
   const mockWorkspacePaths = {
+    srcDir: '/test/src',
+    baseDir: '/test/workspace',
     workspaceDir: '/test/workspace/dir',
     sourcePath: '/test/workspace/dir/source',
     destinationPath: '/test/workspace/dir/destination',
@@ -149,8 +152,11 @@ describe('Clean Command - Comprehensive', () => {
 
       await cleanWorkspace('test-project', options);
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('No workspaces found for project'),
+      expect(handleError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('not found for project'),
+        }),
+        logger,
       );
     });
 

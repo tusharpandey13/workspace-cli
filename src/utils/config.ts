@@ -19,6 +19,7 @@ import type {
 export class ConfigManager {
   public config: Config | null = null;
   private configPath: string | null = null;
+  private noConfigMode: boolean = false;
 
   /**
    * Load configuration from file
@@ -68,7 +69,23 @@ export class ConfigManager {
    * Check if configuration is loaded
    */
   isLoaded(): boolean {
-    return this.config !== null;
+    return this.config !== null || this.noConfigMode;
+  }
+
+  /**
+   * Enable no-config mode for testing
+   */
+  enableNoConfigMode(): void {
+    this.noConfigMode = true;
+    this.config = null;
+    this.configPath = null;
+  }
+
+  /**
+   * Check if running in no-config mode
+   */
+  isNoConfigMode(): boolean {
+    return this.noConfigMode;
   }
 
   /**
@@ -256,6 +273,10 @@ export class ConfigManager {
    * List all available projects
    */
   listProjects(): string[] {
+    if (this.noConfigMode) {
+      return []; // Return empty array in no-config mode
+    }
+
     if (!this.config) {
       throw new ValidationError('Configuration not loaded');
     }

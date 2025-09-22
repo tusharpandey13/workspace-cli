@@ -7,7 +7,7 @@ import {
   validateGitHubIdsExistence,
 } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
-import { handleError } from '../utils/errors.js';
+import { handleError, ValidationError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { isNonInteractive } from '../utils/globalOptions.js';
 import {
@@ -1251,7 +1251,7 @@ Related commands:
               logger.error('Project identifier is required in non-interactive mode.');
               logger.info('Usage: space init <project> [github-ids...] <branch-name>');
               logger.info('Run "space projects" to see available projects.');
-              return;
+              throw new ValidationError('Project identifier is required in non-interactive mode');
             }
 
             const prompts = (await import('prompts')).default;

@@ -301,6 +301,7 @@ program.option('-v, --verbose', 'Enable verbose logging');
 program.option('--debug', 'Enable debug logging');
 program.option('--pr <pr_id>', 'Open space for specific pull request');
 program.option('--non-interactive', 'Skip all user input prompts for automated usage');
+program.option('--no-config', 'Run without loading any configuration files (testing mode)');
 
 // Add default action for when no subcommand is provided
 program.action(async (options) => {
@@ -374,6 +375,29 @@ program.addCommand(setupCommand);
 program.hook('preAction', async (thisCommand) => {
   try {
     const opts = thisCommand.opts();
+
+    // Handle --no-config flag for testing mode
+    if (opts.noConfig) {
+      configManager.enableNoConfigMode();
+      setGlobalOptions({
+        env: opts.env,
+        config: opts.config,
+        verbose: opts.verbose,
+        debug: opts.debug,
+        pr: opts.pr,
+        nonInteractive: opts.nonInteractive,
+        noConfig: true,
+      });
+
+      // Set logging level based on options
+      if (opts.debug) {
+        logger.setLevel(LogLevel.DEBUG);
+      } else if (opts.verbose) {
+        logger.setLevel(LogLevel.VERBOSE);
+      }
+
+      return; // Skip normal config loading
+    }
 
     // Store global options for access by commands
     setGlobalOptions({

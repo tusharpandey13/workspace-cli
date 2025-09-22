@@ -9,6 +9,7 @@ interface GlobalOptions {
   debug?: boolean;
   pr?: string;
   nonInteractive?: boolean;
+  noConfig?: boolean;
 }
 
 let globalOptions: GlobalOptions = {};

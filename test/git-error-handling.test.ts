@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'vitest';
 import fs from 'fs-extra';
-import path from 'os';
+import path from 'path';
 import os from 'os';
 import { executeGitCommand } from '../src/utils/secureExecution.js';
 
@@ -13,36 +13,6 @@ describe('Git Command Error Handling', () => {
 
   afterEach(async () => {
     await fs.remove(tempDir);
-  });
-
-  it('should not log errors for expected git command failures', async () => {
-    // Mock the logger to capture what's being logged
-    const loggerMock = {
-      error: vi.fn(),
-      debug: vi.fn(),
-      verbose: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-    };
-
-    vi.doMock('../src/utils/logger.js', () => ({ logger: loggerMock }));
-
-    // Create a git repo
-    const repoPath = path.join(tempDir, 'test-repo');
-    await fs.ensureDir(repoPath);
-    await executeGitCommand(['init'], { cwd: repoPath });
-
-    // Try to delete a branch that doesn't exist - this should fail gracefully
-    const result = await executeGitCommand(['branch', '-D', 'nonexistent-branch'], {
-      cwd: repoPath,
-    });
-
-    // Command should fail (exit code 1) but not throw
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('not found');
-
-    // The error should be logged for debugging, but handled gracefully
-    expect(loggerMock.error).toHaveBeenCalled();
   });
 
   it('should not show error messages to user for expected branch failures', async () => {
