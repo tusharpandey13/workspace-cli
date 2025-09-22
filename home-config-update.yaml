@@ -1,0 +1,15 @@
+# Updated content for ~/.space-config.yaml
+# Replace the entire content of ~/.space-config.yaml with this:
+
+projects:
+  next:
+    name: 'Next.js Auth0 Project'
+    repo: 'https://github.com/auth0/nextjs-auth0.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-nextjs-samples.git'
+    env_file: 'next.env.local'
+    post-init: 'cd nextjs-auth0 && pnpm i && cd ../auth0-nextjs-samples/Sample-01 && pnpm i'
+
+global:
+  src_dir: '~/src'
+  workspace_base: 'workspaces'
+  env_files_dir: '~/env-files'

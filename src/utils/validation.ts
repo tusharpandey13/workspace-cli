@@ -319,8 +319,19 @@ export function validatePath(basePath: string, targetPath: string): string {
  */
 export async function validateDependencies(): Promise<void> {
   const { configManager } = await import('./config.js');
-  const globalConfig = configManager.getGlobal();
-  const dependencies = globalConfig.dependencies || ['git', 'gh']; // Default fallback
+
+  // Use default dependencies if config is not loaded
+  let dependencies = ['git', 'gh']; // Default fallback
+
+  try {
+    if (configManager.isLoaded()) {
+      const globalConfig = configManager.getGlobal();
+      dependencies = globalConfig.dependencies || dependencies;
+    }
+  } catch (error) {
+    // Config not available, use default dependencies
+  }
+
   const missing: string[] = [];
 
   for (const dep of dependencies) {

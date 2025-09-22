@@ -14,7 +14,7 @@
     "start": "node dist/bin/workspace.js --help",
     "test": "env NODE_OPTIONS=\"\" vitest --run",
     "test:coverage": "env NODE_OPTIONS=\"\" vitest --coverage --run",
-    "test:install": "npm run test:install:local && npm run test:install:global",
+    "test:install": "pnpm run test:install:local && pnpm run test:install:global",
     "test:install:local": "node dist/bin/workspace.js --version",
     "test:install:global": "space --version",
     "troubleshoot": "scripts/troubleshoot.sh",
@@ -23,9 +23,9 @@
     "format": "prettier --write \"**/*.{ts,js,md,json}\"",
     "prepare": "husky install",
     "clean": "rm -rf dist",
-    "install-global": "npm run build && npm link && npm run test:install",
-    "install-global:dev": "npm run build:dev && npm link && npm run test:install",
-    "uninstall-global": "npm unlink",
+    "install-global": "pnpm run build && pnpm link --global && pnpm run test:install",
+    "install-global:dev": "pnpm run build:dev && pnpm link --global && pnpm run test:install",
+    "uninstall-global": "pnpm remove --global @tusharpandey13/space-cli 2>/dev/null || true",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

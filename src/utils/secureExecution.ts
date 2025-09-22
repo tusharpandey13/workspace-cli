@@ -49,7 +49,23 @@ export async function executeSecureCommand(
       exitCode: result.exitCode || 0,
     };
   } catch (error: any) {
-    logger.error(`Command execution failed: ${command} - ${error.message}`);
+    // Only log as error if it's not an expected failure
+    const isExpectedFailure =
+      error.exitCode === 1 &&
+      (error.stderr?.includes('not found') ||
+        error.stderr?.includes('does not exist') ||
+        error.stderr?.includes('No such file or directory') ||
+        // Git show-ref --verify --quiet fails silently with exit code 1 for missing refs
+        (command === 'git' &&
+          sanitizedArgs.includes('show-ref') &&
+          sanitizedArgs.includes('--quiet')));
+
+    if (isExpectedFailure) {
+      logger.debug(`Command failed as expected: ${command} - ${error.message}`);
+    } else {
+      logger.error(`Command execution failed: ${command} - ${error.message}`);
+    }
+
     logger.debug(`Error details: ${JSON.stringify(error, null, 2)}`);
 
     return {
@@ -92,6 +108,33 @@ export async function executeShellCommand(
     throw new Error('Shell command must be a non-empty string');
   }
 
-  // For shell commands, we pass the command as arguments to sh -c
-  return executeSecureCommand('sh', ['-c', shellCommand], { ...options, shell: false });
+  // For shell commands, we bypass normal sanitization since we're using sh -c
+  // The shell command itself may contain legitimate shell operators like && and |
+  const secureOptions: Options = {
+    ...options,
+    shell: false, // We still use sh -c rather than shell: true
+    timeout: options.timeout || 30000,
+    env: { ...process.env, ...options.env },
+  };
+
+  try {
+    logger.debug(`Executing shell command via sh -c: ${shellCommand}`);
+
+    const result = await execa('sh', ['-c', shellCommand], secureOptions);
+
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode || 0,
+    };
+  } catch (error: any) {
+    logger.error(`Shell command execution failed: ${shellCommand} - ${error.message}`);
+    logger.debug(`Error details: ${JSON.stringify(error, null, 2)}`);
+
+    return {
+      stdout: error.stdout || '',
+      stderr: error.stderr || error.message,
+      exitCode: error.exitCode || 1,
+    };
+  }
 }

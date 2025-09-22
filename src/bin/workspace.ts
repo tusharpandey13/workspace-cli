@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { createRequire } from 'module';
+import fs from 'fs-extra';
 import { loadEnv } from '../utils/env.js';
 import { logger, LogLevel } from '../utils/logger.js';
 import { validateDependencies } from '../utils/validation.js';
@@ -15,6 +16,7 @@ import { cleanCommand } from '../commands/clean.js';
 import { projectsCommand } from '../commands/projects.js';
 import { setupCommand } from '../commands/setup.js';
 import { buildHelpText } from '../utils/help.js';
+import { setGlobalOptions } from '../utils/globalOptions.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
@@ -32,8 +34,7 @@ async function executeListCommand(): Promise<void> {
         const project = configManager.getProject(projectKey);
         const baseDir = configManager.getProjectBaseDir(projectKey);
 
-        if (await import('fs-extra').then((fs) => fs.existsSync(baseDir))) {
-          const fs = await import('fs-extra');
+        if (fs.existsSync(baseDir)) {
           const dirs = fs
             .readdirSync(baseDir, { withFileTypes: true })
             .filter((d) => d.isDirectory())
@@ -199,6 +200,11 @@ async function executeSetupCommand(): Promise<void> {
  */
 async function showCompactProjects(): Promise<void> {
   try {
+    if (!configManager.isLoaded()) {
+      console.log('No configuration loaded. Run "space setup" to configure projects.');
+      return;
+    }
+
     const projects = configManager.listProjects();
 
     if (projects.length === 0) {
@@ -233,7 +239,6 @@ async function showInteractiveMenu(): Promise<void> {
       { title: '🚀 Create new workspace', value: 'init' },
       { title: '📋 List existing workspaces', value: 'list' },
       { title: '📖 View project details', value: 'projects' },
-      { title: 'ℹ️  View workspace info', value: 'info' },
       { title: '🧹 Clean up workspace', value: 'clean' },
       { title: '⚙️  Settings', value: 'setup' },
       { title: '❓ Help', value: 'help' },
@@ -263,7 +268,6 @@ async function showInteractiveMenu(): Promise<void> {
       break;
     }
 
-    case 'info':
     case 'clean': {
       console.log(`💡 Tip: Use "space ${response.action} <project> <workspace-name>"`);
       console.log('   Run "space list" to see your available workspaces');
@@ -301,39 +305,56 @@ program.option('--non-interactive', 'Skip all user input prompts for automated u
 // Add default action for when no subcommand is provided
 program.action(async (options) => {
   try {
-    // Check if config exists
-    let configExists = false;
-    try {
-      await configManager.loadConfig(options.config);
-      configExists = true;
-    } catch (error) {
-      configExists = false;
-    }
-
-    if (!configExists) {
-      // No config exists - run setup wizard
-      const wizard = new SetupWizard();
-      logger.info('Welcome to space-cli! It looks like this is your first time.');
-      logger.info("Let's set up your space configuration.\n");
-
-      const result = await wizard.run();
-      if (!result.completed && !result.skipped) {
-        logger.info('Setup is required to use space-cli commands.');
-        logger.info('Run "space setup" when you\'re ready to configure your space.');
-        process.exit(0);
-      }
-
-      if (result.completed) {
-        logger.info('Setup completed! You can now use space commands.\n');
-        // Load the newly created config
+    // Check if config is loaded (should have been loaded in preAction hook)
+    if (!configManager.isLoaded()) {
+      // Config was not loaded in preAction hook, try to load it
+      try {
         await configManager.loadConfig(options.config);
-        configExists = true;
-      } else {
-        process.exit(0);
+      } catch (error) {
+        // Config still doesn't exist
+        if (options.nonInteractive) {
+          logger.error('Configuration not found and --non-interactive mode is enabled.');
+          logger.info('Please run "space setup" first to create your configuration, or');
+          logger.info('provide a configuration file path with --config <path>');
+          process.exit(1);
+        }
+
+        // No config exists - run setup wizard
+        const wizard = new SetupWizard();
+        logger.info('Welcome to space-cli! It looks like this is your first time.');
+        logger.info("Let's set up your space configuration.\n");
+
+        const result = await wizard.run();
+        if (!result.completed && !result.skipped) {
+          logger.info('Setup is required to use space-cli commands.');
+          logger.info('Run "space setup" when you\'re ready to configure your space.');
+          process.exit(0);
+        }
+
+        if (result.completed) {
+          logger.info('Setup completed! You can now use space commands.\n');
+          // Load the newly created config
+          await configManager.loadConfig(options.config);
+        } else {
+          process.exit(0);
+        }
       }
     }
 
-    if (configExists) {
+    // Config should now be loaded, show appropriate interface
+    if (options.nonInteractive) {
+      // In non-interactive mode, show available commands instead of interactive menu
+      logger.info('Available commands:');
+      logger.info('  space init <project> [github-ids...] <branch-name>  Create a new workspace');
+      logger.info(
+        '  space list                                           List existing workspaces',
+      );
+      logger.info('  space projects                                       Show available projects');
+      logger.info('  space info <project> <workspace>                    Show workspace details');
+      logger.info('  space clean <project> <workspace>                   Clean workspace');
+      logger.info('  space setup                                          Configure space-cli');
+      logger.info('\nFor more information on any command, use: space <command> --help');
+    } else {
       // Config exists - show interactive menu
       await showInteractiveMenu();
     }
@@ -354,6 +375,16 @@ program.hook('preAction', async (thisCommand) => {
   try {
     const opts = thisCommand.opts();
 
+    // Store global options for access by commands
+    setGlobalOptions({
+      env: opts.env,
+      config: opts.config,
+      verbose: opts.verbose,
+      debug: opts.debug,
+      pr: opts.pr,
+      nonInteractive: opts.nonInteractive,
+    });
+
     // Set logging level based on options
     if (opts.debug) {
       logger.setLevel(LogLevel.DEBUG);
@@ -367,33 +398,12 @@ program.hook('preAction', async (thisCommand) => {
 
     if (commandName !== 'setup') {
       // Try to load config first to see if any config exists (including custom paths)
-      let configExists = false;
       try {
         await configManager.loadConfig(opts.config);
-        configExists = true;
       } catch (error) {
-        // Config loading failed, check if setup is needed
-        configExists = false;
-      }
-
-      // Only trigger setup if no config was found anywhere
-      if (!configExists) {
-        const wizard = new SetupWizard();
-        logger.info('Welcome to space-cli! It looks like this is your first time.');
-        logger.info("Let's set up your space configuration.\n");
-
-        const result = await wizard.run();
-        if (!result.completed && !result.skipped) {
-          logger.info('Setup is required to use space-cli commands.');
-          logger.info('Run "space setup" when you\'re ready to configure your space.');
-          process.exit(0);
-        }
-
-        if (result.completed) {
-          logger.info('Setup completed! Continuing with your command...\n');
-          // Load the newly created config
-          await configManager.loadConfig(opts.config);
-        }
+        // Config loading failed - this will be handled by individual commands
+        // For the main action, it will trigger setup wizard
+        // For other commands, they will show appropriate error messages
       }
     } else if (commandName === 'setup' && commandOptions.preview) {
       // For setup command with preview, skip the first-run check
@@ -413,11 +423,6 @@ program.hook('preAction', async (thisCommand) => {
       } catch (error) {
         // Config doesn't exist, which is fine for setup command
       }
-    }
-
-    // If we haven't loaded config yet, try to load it now
-    if (!configManager.isLoaded()) {
-      await configManager.loadConfig(opts.config);
     }
 
     // Load environment

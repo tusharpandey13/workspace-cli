@@ -8,6 +8,20 @@ import type { ProjectConfig, WorkspacePaths } from '../types/index.js';
 import { ConfigManager } from '../utils/config.js';
 
 /**
+ * Create a safe samples branch name from the original branch name
+ * Replaces forward slashes with dashes to avoid git reference issues
+ */
+function createSamplesBranchName(originalBranch: string): string {
+  // Replace forward slashes with dashes to create a valid git branch name
+  const safeBranchName = originalBranch.replace(/\//g, '-');
+  const samplesBranchName = `${safeBranchName}-samples`;
+
+  logger.verbose(`Transforming samples branch name: ${originalBranch} → ${samplesBranchName}`);
+
+  return samplesBranchName;
+}
+
+/**
  * Ensure repository exists locally by cloning if necessary
  */
 async function ensureRepositoryExists(
@@ -287,17 +301,69 @@ export async function setupWorktrees(
     validateBranchName(targetBranch);
 
     // Check if branch already exists locally
-    const checkBranchResult = await executeGitCommand(
+    const checkLocalBranchResult = await executeGitCommand(
       ['show-ref', '--verify', '--quiet', `refs/heads/${targetBranch}`],
       { cwd: repoDir },
     );
 
-    const branchExists = checkBranchResult.exitCode === 0;
+    const localBranchExists = checkLocalBranchResult.exitCode === 0;
 
-    if (branchExists) {
+    // Check if branch exists on remote
+    const checkRemoteBranchResult = await executeGitCommand(
+      ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${targetBranch}`],
+      { cwd: repoDir },
+    );
+
+    const remoteBranchExists = checkRemoteBranchResult.exitCode === 0;
+
+    if (localBranchExists) {
       logger.verbose(`⚠️  Branch ${targetBranch} already exists locally`);
 
-      // Try to add existing branch to worktree
+      // Check if branch is already used by another worktree
+      try {
+        const worktreeListResult = await executeGitCommand(['worktree', 'list', '--porcelain'], {
+          cwd: repoDir,
+        });
+
+        if (worktreeListResult.exitCode === 0) {
+          const lines = worktreeListResult.stdout.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('branch ') && line.includes(`refs/heads/${targetBranch}`)) {
+              // Found the worktree using this branch
+              const worktreeLine = lines[i - 2]; // worktree path is 2 lines before branch line
+              const existingPath = worktreeLine.replace('worktree ', '');
+
+              logger.verbose(`Branch ${targetBranch} is used by worktree at: ${existingPath}`);
+
+              // If the existing worktree is prunable (directory doesn't exist), prune it
+              if (!fs.existsSync(existingPath)) {
+                logger.verbose(`Pruning stale worktree: ${existingPath}`);
+                try {
+                  await executeGitCommand(['worktree', 'prune'], { cwd: repoDir });
+                  logger.verbose(`✅ Pruned stale worktrees`);
+                } catch {
+                  // Ignore prune failures
+                }
+                break; // Exit the loop and continue with worktree creation
+              } else {
+                throw new Error(
+                  `Branch ${targetBranch} is already used by worktree at ${existingPath}. ` +
+                    `Please remove the existing worktree first or use a different branch name.`,
+                );
+              }
+            }
+          }
+        }
+      } catch (error) {
+        if ((error as Error).message.includes('already used by worktree')) {
+          throw error; // Re-throw our custom error
+        }
+        // If worktree list failed, continue with normal flow
+        logger.debug(`Worktree list failed: ${error}`);
+      }
+
+      // Try to add existing local branch to worktree
       try {
         const result = await executeGitCommand(['worktree', 'add', worktreePath, targetBranch], {
           cwd: repoDir,
@@ -337,9 +403,30 @@ export async function setupWorktrees(
           );
         }
       }
+    } else if (remoteBranchExists) {
+      // Branch exists on remote but not locally - create local tracking branch
+      logger.verbose(`📥 Branch ${targetBranch} exists on remote, creating local tracking branch`);
+      try {
+        const result = await executeGitCommand(
+          ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${targetBranch}`],
+          { cwd: repoDir },
+        );
+
+        if (result.exitCode !== 0) {
+          throw new Error(`Failed to create tracking branch worktree: ${result.stderr}`);
+        }
+
+        logger.verbose(`✅ Created local tracking branch ${targetBranch} and added to worktree`);
+        return;
+      } catch (error) {
+        throw new Error(
+          `Failed to create worktree from remote branch ${targetBranch}. ` +
+            `Error: ${(error as Error).message}`,
+        );
+      }
     }
 
-    // Branch doesn't exist, create new branch from base branch
+    // Branch doesn't exist locally or remotely - create new branch from base branch
     try {
       const result = await executeGitCommand(
         ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${baseBranch}`],
@@ -367,10 +454,13 @@ export async function setupWorktrees(
   if (paths.destinationRepoPath && paths.destinationPath) {
     logger.verbose('🔀 Setting up destination worktree...');
     const defaultBranch = await getDefaultBranch(paths.destinationRepoPath, isDryRun);
+    // For destination repo, create a new worktree from the default branch
+    // Transform the branch name to avoid issues with slashes in git references
+    const samplesBranchName = createSamplesBranchName(branchName);
     await addWorktree(
       paths.destinationRepoPath,
       paths.destinationPath,
-      defaultBranch,
+      samplesBranchName,
       defaultBranch,
     );
   }

@@ -5,10 +5,19 @@ import os from 'os';
 import fs from 'fs-extra';
 import { logger } from '../utils/logger.js';
 import { gitHubCliService } from './gitHubCli.js';
+import { isNonInteractive } from '../utils/globalOptions.js';
 
 export interface SetupWizardOptions {
   force?: boolean;
   skip?: boolean;
+}
+
+export interface NonInteractiveSetupOptions {
+  force: boolean;
+  srcDir: string;
+  workspaceBase: string;
+  envFilesDir: string;
+  projects: string[];
 }
 
 export interface SetupResult {
@@ -55,6 +64,11 @@ export class SetupWizard {
 
     // Check if config already exists
     if (fs.existsSync(this.configPath) && !options.force) {
+      if (isNonInteractive()) {
+        logger.info(chalk.yellow('Configuration file already exists. Use --force to overwrite.'));
+        return { completed: false, skipped: true };
+      }
+
       const { overwrite } = await prompts({
         type: 'confirm',
         name: 'overwrite',
@@ -88,6 +102,87 @@ export class SetupWizard {
         return { completed: false, skipped: true };
       }
       throw error;
+    }
+  }
+
+  /**
+   * Run setup in non-interactive mode with provided options
+   */
+  public async runNonInteractive(options: NonInteractiveSetupOptions): Promise<SetupResult> {
+    try {
+      // Check if config already exists
+      if (fs.existsSync(this.configPath) && !options.force) {
+        logger.info(chalk.yellow('Configuration file already exists. Use --force to overwrite.'));
+        return { completed: false, skipped: true };
+      }
+
+      // Parse project specifications
+      const projects: Record<string, any> = {};
+      for (const projectSpec of options.projects) {
+        // Split only on first 3 colons to preserve URLs
+        const firstColonIndex = projectSpec.indexOf(':');
+        if (firstColonIndex === -1) {
+          logger.error(`Invalid project format: ${projectSpec}`);
+          logger.info('Expected format: key:name:repo[:sample_repo]');
+          return { completed: false, skipped: false };
+        }
+
+        const key = projectSpec.substring(0, firstColonIndex);
+        const rest = projectSpec.substring(firstColonIndex + 1);
+
+        const secondColonIndex = rest.indexOf(':');
+        if (secondColonIndex === -1) {
+          logger.error(`Invalid project format: ${projectSpec}`);
+          logger.info('Expected format: key:name:repo[:sample_repo]');
+          return { completed: false, skipped: false };
+        }
+
+        const name = rest.substring(0, secondColonIndex);
+        const repoAndSample = rest.substring(secondColonIndex + 1);
+
+        // For repo and sample_repo, we need to be more careful since URLs have colons
+        // Look for a pattern that indicates a second URL (likely starting with http)
+        const httpIndex = repoAndSample.indexOf('http', 1); // Start search after first char
+
+        let repo: string;
+        let sampleRepo: string | undefined;
+
+        if (httpIndex > 0) {
+          // Found a second http URL, split there
+          repo = repoAndSample.substring(0, httpIndex - 1); // -1 to remove the colon
+          sampleRepo = repoAndSample.substring(httpIndex);
+        } else {
+          // No second URL found, everything is the repo
+          repo = repoAndSample;
+        }
+
+        projects[key] = {
+          name,
+          repo,
+          ...(sampleRepo && { sample_repo: sampleRepo }),
+        };
+      }
+
+      // Build configuration
+      const config = {
+        global: {
+          src_dir: options.srcDir.replace(/^~/, process.env.HOME || '~'),
+          workspace_base: options.workspaceBase,
+          env_files_dir: options.envFilesDir,
+        },
+        projects,
+      };
+
+      // Write configuration
+      await this.writeConfiguration(config);
+
+      logger.info(chalk.green.bold('✅ Setup completed successfully!'));
+      logger.info(chalk.gray(`Configuration saved to: ${this.configPath}`));
+
+      return { completed: true, skipped: false, configPath: this.configPath };
+    } catch (error) {
+      logger.error('Setup failed:', error instanceof Error ? error : new Error(String(error)));
+      return { completed: false, skipped: false };
     }
   }
 

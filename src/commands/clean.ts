@@ -82,6 +82,8 @@ export function cleanCommand(program: Command): void {
   program
     .command('clean <project> <workspace>')
     .description('Clean up and remove space, including all git worktrees and files')
+    .option('--force', 'Confirm dangerous operations without prompting')
+    .option('--dry-run', 'Show what would be deleted without actually deleting')
     .addHelpText(
       'after',
       `
@@ -116,9 +118,13 @@ Related commands:
   space list        List all workspaces
   space info        Check workspace status before cleaning`,
     )
-    .action(async (project: string, workspace: string) => {
+    .action(async (project: string, workspace: string, options: any) => {
       try {
-        await cleanWorkspace(project, { workspace });
+        await cleanWorkspace(project, {
+          workspace,
+          force: options.force || false,
+          dryRun: options.dryRun || false,
+        });
       } catch (error) {
         handleError(error as Error, logger);
       }

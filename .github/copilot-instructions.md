@@ -12,18 +12,20 @@
 
 - **Development**: ONLY use `pnpm install`, `pnpm add`, `pnpm run test`
 - **Never**: Mix with `npm` or `yarn` (causes lockfile conflicts)
+- **NEVER use `npx`**: Causes sudo password prompts and security issues - use `pnpm exec` instead
 
 ### Test Environment (CRITICAL)
 
 **VS Code debug injection causes test hanging**:
 
 ```bash
-# ALWAYS use for tests
+# ALWAYS use for tests (NEVER use npx)
 env NODE_OPTIONS="" pnpm run test
+env NODE_OPTIONS="" pnpm exec vitest run test/specific-file.test.ts
 ```
 
-**Symptoms**: Tests hang indefinitely, mysterious timeouts
-**Solution**: Clear NODE_OPTIONS or disable VS Code auto-attach
+**Symptoms**: Tests hang indefinitely, mysterious timeouts, sudo password prompts
+**Solution**: Clear NODE_OPTIONS or disable VS Code auto-attach, use `pnpm exec` not `npx`
 
 ## Architecture & Critical Knowledge
 
@@ -102,8 +104,9 @@ vi.mock('execa', () => ({
 
 ### Quick Troubleshooting
 
-**Test Hanging**: Check `echo $NODE_OPTIONS` (should be empty), use `env NODE_OPTIONS="" vitest --run`
-**Mock Issues**: Run single test file `npx vitest run test/specific-file.test.ts`
+**Test Hanging**: Check `echo $NODE_OPTIONS` (should be empty), use `env NODE_OPTIONS="" pnpm exec vitest --run`
+**Sudo Prompts**: Never use `npx vitest` - use `pnpm exec vitest` instead
+**Mock Issues**: Run single test file `pnpm exec vitest run test/specific-file.test.ts`
 **"No project found"**: Check project keys in config.yaml vs repository basename extraction
 
 ### Development Workflow

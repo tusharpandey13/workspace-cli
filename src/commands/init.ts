@@ -9,6 +9,7 @@ import {
 import { logger } from '../utils/logger.js';
 import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
+import { isNonInteractive } from '../utils/globalOptions.js';
 import {
   executeGitCommand,
   executeGhCommand,
@@ -348,6 +349,14 @@ async function handleExistingWorkspace(
       return;
     }
 
+    if (isNonInteractive()) {
+      logger.error(
+        `Workspace ${workspaceDir} already exists and cannot prompt for confirmation in non-interactive mode.`,
+      );
+      logger.info('Use --silent flag to automatically overwrite existing workspaces.');
+      throw new Error('Workspace already exists - cannot continue in non-interactive mode');
+    }
+
     const rl = readline.createInterface({ input, output });
     const answer = (
       await rl.question(`Workspace ${workspaceDir} already exists. Clean and overwrite? [y/N] `)
@@ -369,8 +378,12 @@ async function handleExistingWorkspace(
  * Collect additional context from user
  */
 async function collectAdditionalContext(skipContextCollection: boolean = true): Promise<string[]> {
-  if (skipContextCollection) {
-    logger.verbose('⏭️  Skipping additional context collection');
+  if (skipContextCollection || isNonInteractive()) {
+    if (isNonInteractive()) {
+      logger.verbose('⏭️  Skipping context collection (non-interactive mode)');
+    } else {
+      logger.verbose('⏭️  Skipping additional context collection');
+    }
     return [];
   }
 
@@ -394,8 +407,56 @@ async function collectAdditionalContext(skipContextCollection: boolean = true): 
 }
 
 /**
- * Execute optional post-init command if configured
+ * Cleanup failed workspace directories and worktrees
  */
+async function cleanupFailedWorkspace(
+  paths: WorkspacePaths,
+  branchName: string,
+  isDryRun: boolean,
+): Promise<void> {
+  if (isDryRun) {
+    logger.verbose(`[DRY RUN] Would cleanup failed workspace at ${paths.workspaceDir}`);
+    return;
+  }
+
+  try {
+    logger.verbose('🧹 Cleaning up failed workspace...');
+
+    // Remove workspace directory if it exists
+    if (fs.existsSync(paths.workspaceDir)) {
+      await fileOps.removeFile(
+        paths.workspaceDir,
+        `failed workspace directory: ${paths.workspaceDir}`,
+        isDryRun,
+      );
+      logger.verbose(`✅ Removed workspace directory: ${paths.workspaceDir}`);
+    }
+
+    // Clean up any dangling worktrees
+    if (paths.sourceRepoPath && fs.existsSync(paths.sourceRepoPath)) {
+      try {
+        await executeGitCommand(['worktree', 'prune'], { cwd: paths.sourceRepoPath });
+        logger.verbose('✅ Pruned source repository worktrees');
+      } catch (error) {
+        logger.debug(`Could not prune source worktrees: ${error}`);
+      }
+    }
+
+    if (paths.destinationRepoPath && fs.existsSync(paths.destinationRepoPath)) {
+      try {
+        await executeGitCommand(['worktree', 'prune'], { cwd: paths.destinationRepoPath });
+        logger.verbose('✅ Pruned destination repository worktrees');
+      } catch (error) {
+        logger.debug(`Could not prune destination worktrees: ${error}`);
+      }
+    }
+
+    logger.info('🧹 Workspace cleanup completed');
+  } catch (cleanupError) {
+    logger.warn(`⚠️ Cleanup failed: ${(cleanupError as Error).message}`);
+    logger.warn('   You may need to manually remove workspace directories');
+  }
+}
 async function executePostInitCommand(
   project: ProjectConfig,
   paths: WorkspacePaths,
@@ -431,7 +492,7 @@ async function executePostInitCommand(
 
   try {
     const result = await executeShellCommand(project['post-init'], {
-      cwd: paths.sourcePath,
+      cwd: paths.workspaceDir,
       stdio: 'inherit',
     });
 
@@ -1186,6 +1247,13 @@ Related commands:
         try {
           // If no project identifier provided, go to interactive mode
           if (!projectIdentifier) {
+            if (isNonInteractive()) {
+              logger.error('Project identifier is required in non-interactive mode.');
+              logger.info('Usage: space init <project> [github-ids...] <branch-name>');
+              logger.info('Run "space projects" to see available projects.');
+              return;
+            }
+
             const prompts = (await import('prompts')).default;
             const projects = configManager.listProjects();
 
@@ -1248,6 +1316,14 @@ Related commands:
 
           // If no args provided but project identifier exists, go to interactive mode for args
           if (projectIdentifier && (!args || args.length === 0)) {
+            if (isNonInteractive()) {
+              logger.error(
+                'Branch name and optional GitHub issue IDs are required in non-interactive mode.',
+              );
+              logger.info('Usage: space init <project> [github-ids...] <branch-name>');
+              return;
+            }
+
             const prompts = (await import('prompts')).default;
 
             console.log("🚀 Let's create a new workspace!\n");
@@ -1305,11 +1381,13 @@ Related commands:
           const isVerbose = options.verbose || options.dryRun;
           const isDryRun = options.dryRun || false;
           const isAnalyseMode = options.analyse || false;
-          const isSilent = options.silent || false;
+          const isSilent = options.silent || isNonInteractive() || false;
           const withContext = options.withContext || false;
 
-          if (isSilent) {
+          if (isSilent && options.silent) {
             logger.info('SILENT MODE: Skipping all user input prompts');
+          } else if (isSilent && isNonInteractive()) {
+            logger.info('NON-INTERACTIVE MODE: Skipping all user input prompts');
           }
 
           if (isDryRun) {
@@ -1369,32 +1447,38 @@ Related commands:
           }
 
           // Initialize workspace (choose analysis or full mode)
-          if (isAnalyseMode) {
-            await initializeAnalysisOnlyWorkspace({
-              project,
-              projectKey,
-              issueIds,
-              branchName,
-              workspaceName,
-              paths,
-              isDryRun,
-              isVerbose: isVerbose || false,
-              isSilent,
-              withContext,
-            });
-          } else {
-            await initializeWorkspace({
-              project,
-              projectKey,
-              issueIds,
-              branchName,
-              workspaceName,
-              paths,
-              isDryRun,
-              isVerbose: isVerbose || false,
-              isSilent,
-              withContext,
-            });
+          try {
+            if (isAnalyseMode) {
+              await initializeAnalysisOnlyWorkspace({
+                project,
+                projectKey,
+                issueIds,
+                branchName,
+                workspaceName,
+                paths,
+                isDryRun,
+                isVerbose: isVerbose || false,
+                isSilent,
+                withContext,
+              });
+            } else {
+              await initializeWorkspace({
+                project,
+                projectKey,
+                issueIds,
+                branchName,
+                workspaceName,
+                paths,
+                isDryRun,
+                isVerbose: isVerbose || false,
+                isSilent,
+                withContext,
+              });
+            }
+          } catch (initError) {
+            logger.verbose('Workspace initialization failed, attempting cleanup...');
+            await cleanupFailedWorkspace(paths, branchName, isDryRun);
+            throw initError; // Re-throw to be handled by outer catch
           }
         } catch (error) {
           handleError(error as Error, logger);

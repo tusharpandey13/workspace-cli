@@ -57,10 +57,9 @@ global:
     const start = Date.now();
     try {
       const { stdout, stderr, exitCode } = await execa(
-        'npx',
+        'node',
         [
-          'tsx',
-          'src/bin/workspace.ts',
+          'dist/bin/workspace.js',
           'init',
           'test',
           'feature_silent-test',
@@ -118,10 +117,9 @@ global:
 
     // Test that silent mode prevents interactive prompts
     const result = await execa(
-      'npx',
+      'node',
       [
-        'tsx',
-        'src/bin/workspace.ts',
+        'dist/bin/workspace.js',
         'init',
         'test',
         'feature_silent-prompt-test',
@@ -169,10 +167,9 @@ global:
 
     // Should handle existing workspace in silent mode
     const result = await execa(
-      'npx',
+      'node',
       [
-        'tsx',
-        'src/bin/workspace.ts',
+        'dist/bin/workspace.js',
         'init',
         'test',
         'feature_existing',
@@ -215,10 +212,9 @@ global:
     // Multiple rapid executions should not interfere with each other
     const promises = [
       execa(
-        'npx',
+        'node',
         [
-          'tsx',
-          'src/bin/workspace.ts',
+          'dist/bin/workspace.js',
           'init',
           'test',
           'feature_batch1',
@@ -230,10 +226,9 @@ global:
         { cwd: process.cwd(), timeout: 8000 },
       ),
       execa(
-        'npx',
+        'node',
         [
-          'tsx',
-          'src/bin/workspace.ts',
+          'dist/bin/workspace.js',
           'init',
           'test',
           'feature_batch2',
@@ -299,10 +294,9 @@ global:
 
     // Test with --verbose flag for debugging purposes
     const result = await execa(
-      'npx',
+      'node',
       [
-        'tsx',
-        'src/bin/workspace.ts',
+        'dist/bin/workspace.js',
         'init',
         'test',
         'feature_debug-verbose',

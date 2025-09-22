@@ -48,6 +48,9 @@ export class ConfigManager {
       const configContent = await fs.readFile(this.configPath, 'utf8');
       this.config = yaml.load(configContent) as Config;
 
+      // Normalize property names for backward compatibility
+      this.normalizeConfigProperties();
+
       // Resolve relative paths
       this.resolveConfigPaths();
 
@@ -129,6 +132,26 @@ export class ConfigManager {
             project.sample_repo = path.resolve(srcDir, project.sample_repo);
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Normalize configuration property names for backward compatibility
+   */
+  normalizeConfigProperties(): void {
+    if (!this.config?.projects) return;
+
+    for (const projectKey in this.config.projects) {
+      const project = this.config.projects[projectKey] as any;
+
+      // Convert post_init to 'post-init' for backward compatibility
+      if (project.post_init && !project['post-init']) {
+        logger.verbose(
+          `🔧 Normalizing config: post_init → 'post-init' for project '${projectKey}'`,
+        );
+        project['post-init'] = project.post_init;
+        delete project.post_init;
       }
     }
   }
