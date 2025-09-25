@@ -20,8 +20,30 @@ export class ContextDataFetcher {
     repoName: string,
     isDryRun: boolean,
   ): Promise<GitHubIssueData[]> {
+    // In dry-run mode, return mock data without making any network calls
+    if (isDryRun) {
+      logger.verbose(`[DRY RUN] Would fetch GitHub data for issues: ${issueIds.join(', ')}`);
+      return issueIds.map((id) => ({
+        id,
+        title: `Fix authentication middleware - Issue #${id}`,
+        body: `Mock issue body for #${id} in dry-run mode`,
+        state: 'open',
+        type: 'issue' as const,
+        url: `https://github.com/${githubOrg}/${repoName}/issues/${id}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        labels: [],
+        assignees: [],
+        milestone: null,
+        comments: [],
+        linkedIssues: [],
+        fileChanges: [],
+        additionalContext: [],
+      }));
+    }
+
     // Check GitHub CLI availability first for any issues requiring API access
-    if (!isDryRun && issueIds.length > 0) {
+    if (issueIds.length > 0) {
       const cliStatus = await gitHubCliService.checkStatus();
 
       if (!cliStatus.isInstalled) {

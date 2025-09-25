@@ -39,16 +39,16 @@ describe('Logger', () => {
     expect(consoleLogs[0].message).toContain('Error message');
   });
 
-  it('should format messages with appropriate icons', () => {
+  it('should format messages with appropriate colors and content', () => {
     logger.error('Test error');
     logger.warn('Test warning');
     logger.info('Test info');
     logger.success('Test success');
 
-    expect(consoleLogs.find((log) => log.message.includes('❌'))).toBeTruthy();
-    expect(consoleLogs.find((log) => log.message.includes('⚠️'))).toBeTruthy();
-    expect(consoleLogs.find((log) => log.message.includes('ℹ️'))).toBeTruthy();
-    expect(consoleLogs.find((log) => log.message.includes('✅'))).toBeTruthy();
+    expect(consoleLogs.find((log) => log.message.includes('Test error'))).toBeTruthy();
+    expect(consoleLogs.find((log) => log.message.includes('Test warning'))).toBeTruthy();
+    expect(consoleLogs.find((log) => log.message.includes('Test info'))).toBeTruthy();
+    expect(consoleLogs.find((log) => log.message.includes('Test success'))).toBeTruthy();
   });
 
   it('should support step progress logging', () => {

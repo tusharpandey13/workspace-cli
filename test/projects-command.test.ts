@@ -79,6 +79,11 @@ describe('Projects Command', () => {
   });
 
   afterEach(async () => {
+    // Clean up ConfigManager to prevent event listener leaks
+    if (configManager) {
+      configManager.cleanup();
+    }
+
     await dummyManager.cleanupAll();
     await fs.remove(tempDir);
   });

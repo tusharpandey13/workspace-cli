@@ -17,6 +17,11 @@ describe('Path Resolution', () => {
   });
 
   afterEach(async () => {
+    // Clean up ConfigManager to prevent event listener leaks
+    if (configManager) {
+      configManager.cleanup();
+    }
+
     await fs.remove(tempDir);
   });
 

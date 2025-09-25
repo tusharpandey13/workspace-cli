@@ -377,6 +377,9 @@ global:
       (error as any).stderr = 'Not Found';
       setMockGitHubResponse('repos/test-org/test-sdk/issues/999', { error });
 
+      // Load config manually before testing
+      await configManager.loadConfig(configPath);
+
       const { initCommand } = await import('../src/commands/init.js');
       const { Command } = await import('commander');
 
@@ -385,16 +388,7 @@ global:
 
       // Should fail early due to non-existent GitHub ID
       await expect(
-        mockProgram.parseAsync([
-          'node',
-          'test',
-          'init',
-          'test',
-          '999',
-          'feature/test-branch',
-          '--config',
-          configPath,
-        ]),
+        mockProgram.parseAsync(['node', 'test', 'init', 'test', '999', 'feature/test-branch']),
       ).rejects.toThrow();
     });
 
@@ -419,6 +413,9 @@ global:
       (error as any).stderr = 'Unauthorized';
       setMockGitHubResponse('repos/test-org/test-sdk/issues/123', { error });
 
+      // Load config manually before testing
+      await configManager.loadConfig(configPath);
+
       const { initCommand } = await import('../src/commands/init.js');
       const { Command } = await import('commander');
 
@@ -427,16 +424,7 @@ global:
 
       // Should fail with clear authentication guidance
       await expect(
-        mockProgram.parseAsync([
-          'node',
-          'test',
-          'init',
-          'test',
-          '123',
-          'feature/test-branch',
-          '--config',
-          configPath,
-        ]),
+        mockProgram.parseAsync(['node', 'test', 'init', 'test', '123', 'feature/test-branch']),
       ).rejects.toThrow();
     });
   });

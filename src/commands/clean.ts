@@ -3,6 +3,7 @@ import { validateWorkspaceName, validateProjectKey } from '../utils/validation.j
 import { logger } from '../utils/logger.js';
 import { handleError, ValidationError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
+import { progressIndicator, type ProgressStep } from '../utils/progressIndicator.js';
 import type { Command } from 'commander';
 
 interface CleanOptions {
@@ -58,8 +59,24 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
       throw new ValidationError('--force flag is required to clean workspaces');
     }
 
-    // Progress reporting
-    logger.info('Cleaning workspaces for project');
+    // Setup progress indicators for cleanup
+    if (process.env.WORKSPACE_DISABLE_PROGRESS !== '1') {
+      const steps: ProgressStep[] = [
+        { id: 'validation', description: 'Validating workspace', weight: 1 },
+        { id: 'cleanup', description: 'Removing workspace files', weight: 2 },
+      ];
+
+      progressIndicator.initialize(steps, {
+        title: 'Workspace Cleanup',
+        showETA: true,
+      });
+    }
+
+    if (progressIndicator.isActive()) {
+      progressIndicator.startStep('validation');
+    } else {
+      logger.info('[1/2] Validating workspace...');
+    }
 
     // Check if workspace directory exists
     if (!fs.existsSync(paths.workspaceDir)) {
@@ -68,8 +85,20 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
       );
     }
 
+    if (progressIndicator.isActive()) {
+      progressIndicator.completeStep('validation');
+      progressIndicator.startStep('cleanup');
+    } else {
+      logger.info('[2/2] Removing workspace files...');
+    }
+
     // Perform actual cleanup operations
     await fs.remove(paths.workspaceDir);
+
+    if (progressIndicator.isActive()) {
+      progressIndicator.completeStep('cleanup');
+      progressIndicator.complete();
+    }
 
     // Success reporting
     logger.success('Workspace cleaned successfully');

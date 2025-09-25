@@ -1,0 +1,3 @@
+Initializing Next.js Auth0 Project workspace with branch: test/progress-e2e
+[1/6] Preparing workspace...
+Workspace /Users/tushar.pandey/src/workspaces/next/test_progress-e2e already exists. Clean and overwrite? [y/N] 

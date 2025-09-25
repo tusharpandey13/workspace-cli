@@ -1,4 +1,4 @@
-import { test, expect, beforeEach, describe } from 'vitest';
+import { test, expect, beforeEach, afterEach, describe } from 'vitest';
 import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
@@ -39,6 +39,17 @@ describe('ConfigManager - getProjectBaseDir', () => {
 
     // Load config
     await configManager.loadConfig(configPath);
+  });
+
+  afterEach(async () => {
+    // Clean up ConfigManager to prevent event listener leaks
+    if (configManager) {
+      configManager.cleanup();
+    }
+
+    if (tempDir) {
+      await fs.remove(tempDir);
+    }
   });
 
   test('should return correct base directory path', () => {

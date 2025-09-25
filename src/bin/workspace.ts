@@ -9,14 +9,9 @@ import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { SetupWizard } from '../services/setupWizard.js';
 import prompts from 'prompts';
-import { listCommand } from '../commands/list.js';
-import { initCommand } from '../commands/init.js';
-import { infoCommand } from '../commands/info.js';
-import { cleanCommand } from '../commands/clean.js';
-import { projectsCommand } from '../commands/projects.js';
-import { setupCommand } from '../commands/setup.js';
 import { buildHelpText } from '../utils/help.js';
 import { setGlobalOptions } from '../utils/globalOptions.js';
+import { commandLoader } from '../utils/lazyLoader.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
@@ -364,13 +359,29 @@ program.action(async (options) => {
   }
 });
 
-// Register subcommands
-initCommand(program);
-listCommand(program);
-infoCommand(program);
-cleanCommand(program);
-projectsCommand(program);
-program.addCommand(setupCommand);
+// Setup lazy command loading to improve startup time
+async function setupLazyCommands() {
+  // Get the command name being executed
+  const args = process.argv.slice(2);
+  const commandName = args.find((arg) => !arg.startsWith('-'));
+
+  // Default to 'help' or load all if no specific command
+  if (!commandName || ['--help', '-h', 'help'].includes(commandName)) {
+    // Load all commands for help display
+    await commandLoader.loadAllCommands(program);
+  } else {
+    // Load only the specific command being executed
+    const loaded = await commandLoader.loadAndRegisterCommand(program, commandName);
+    if (!loaded) {
+      // Fallback: load all commands if specific one failed
+      logger.debug(`Failed to load specific command '${commandName}', loading all commands`);
+      await commandLoader.loadAllCommands(program);
+    }
+  }
+}
+
+// Store the lazy loading promise to be awaited later
+const lazyCommandsPromise = setupLazyCommands();
 
 program.hook('preAction', async (thisCommand) => {
   try {
@@ -459,4 +470,8 @@ program.hook('preAction', async (thisCommand) => {
   }
 });
 
-program.parse();
+// Ensure lazy commands are loaded before parsing
+(async () => {
+  await lazyCommandsPromise;
+  program.parse();
+})();

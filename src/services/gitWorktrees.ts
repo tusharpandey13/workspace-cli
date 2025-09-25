@@ -6,6 +6,7 @@ import { validateBranchName, validateRepositoryPath } from '../utils/validation.
 import { fileOps } from '../utils/init-helpers.js';
 import type { ProjectConfig, WorkspacePaths } from '../types/index.js';
 import { ConfigManager } from '../utils/config.js';
+import { ParallelGitOperations, type GitOperation } from '../utils/parallelGit.js';
 
 /**
  * Create a safe samples branch name from the original branch name
@@ -212,6 +213,7 @@ export async function getDefaultBranch(repoPath: string, isDryRun: boolean): Pro
 /**
  * Set up git worktrees for SDK and sample repos.
  * Extracted from init.ts to promote reuse & testability.
+ * Uses parallel execution for independent repository operations.
  */
 export async function setupWorktrees(
   project: ProjectConfig,
@@ -219,6 +221,18 @@ export async function setupWorktrees(
   branchName: string,
   isDryRun: boolean,
 ): Promise<void> {
+  // In dry-run mode, skip all actual operations and just log what would happen
+  if (isDryRun) {
+    logger.info('[DRY RUN] Would set up git worktrees...');
+    logger.verbose(`[DRY RUN] Would clone main repository: ${project.repo}`);
+    if (project.sample_repo) {
+      logger.verbose(`[DRY RUN] Would clone sample repository: ${project.sample_repo}`);
+    }
+    logger.verbose(`[DRY RUN] Would create worktree for branch: ${branchName}`);
+    logger.verbose(`[DRY RUN] Would validate repositories and create workspace structure`);
+    return;
+  }
+
   // Load configuration for repository and testing preferences
   const configManager = new ConfigManager();
   let config: any;
@@ -232,239 +246,408 @@ export async function setupWorktrees(
     };
   }
 
-  // Ensure repositories exist locally (clone if necessary)
-  logger.verbose('📥 Ensuring repositories exist locally...');
-  await ensureRepositoryExists(paths.sourceRepoPath, project.repo, 'Main Repository', isDryRun);
-  if (paths.destinationRepoPath && project.sample_repo) {
-    await ensureRepositoryExists(
-      paths.destinationRepoPath,
-      project.sample_repo,
-      'Sample Repository',
-      isDryRun,
-    );
-  }
+  // Initialize parallel git operations manager
+  const parallelGit = new ParallelGitOperations(4); // Max 4 concurrent operations
 
-  // Task 6.5: Validate repository state before proceeding
-  logger.verbose('🔍 Validating repository state...');
-  const repoValid = await validateRepository(paths.sourceRepoPath, 'Main Repository', isDryRun);
-  let sampleValid = true;
-  if (paths.destinationRepoPath) {
-    sampleValid = await validateRepository(
-      paths.destinationRepoPath,
-      'Sample Repository',
-      isDryRun,
-    );
-  }
+  // Phase 1: Parallel Repository Setup (clone, validate, freshness)
+  logger.verbose('📦 Setting up repositories in parallel...');
+  await executeParallelRepositorySetup(parallelGit, project, paths, config, isDryRun);
 
-  if (!repoValid || (paths.destinationRepoPath && !sampleValid)) {
-    throw new Error('Repository validation failed - cannot proceed with worktree setup');
-  }
+  // Phase 2: Parallel Worktree Creation
+  logger.verbose('🔀 Creating worktrees in parallel...');
+  await executeParallelWorktreeSetup(parallelGit, project, paths, branchName, isDryRun);
 
-  // Task 6.1 & 6.2: Ensure repositories are fresh before creating worktrees (configurable)
-  if (config.repository?.ensure_freshness !== false) {
-    await ensureRepositoryFreshness(paths.sourceRepoPath, isDryRun);
+  // Validate repository integrity after all operations
+  if (!isDryRun) {
+    logger.verbose('� Validating repository integrity after parallel operations...');
+    const mainRepoValid = await parallelGit.validateRepositoryIntegrity(paths.sourceRepoPath);
+    let sampleRepoValid = true;
+
     if (paths.destinationRepoPath) {
-      await ensureRepositoryFreshness(paths.destinationRepoPath, isDryRun);
-    }
-  } else {
-    logger.verbose('⏭️  Skipping repository freshness check (disabled in config)');
-  }
-
-  const addWorktree = async (
-    repoDir: string,
-    worktreePath: string,
-    targetBranch: string,
-    baseBranch: string = 'main',
-  ): Promise<void> => {
-    if (isDryRun) {
-      logger.verbose(
-        `[DRY RUN] Would create worktree at ${worktreePath} for branch ${targetBranch}`,
-      );
-      return;
+      sampleRepoValid = await parallelGit.validateRepositoryIntegrity(paths.destinationRepoPath);
     }
 
-    if (!isDryRun && fs.existsSync(worktreePath)) {
-      await fileOps.removeFile(worktreePath, `stale worktree directory: ${worktreePath}`, isDryRun);
+    if (!mainRepoValid || !sampleRepoValid) {
+      throw new Error('Repository integrity validation failed after parallel operations');
     }
-
-    try {
-      const result = await executeGitCommand(['worktree', 'prune'], { cwd: repoDir });
-
-      if (result.exitCode !== 0) {
-        logger.debug(`Worktree prune failed but continuing: ${result.stderr}`);
-      }
-    } catch {
-      // Ignore prune failures
-    }
-
-    // Validate branch name before using it
-    validateBranchName(targetBranch);
-
-    // Check if branch already exists locally
-    const checkLocalBranchResult = await executeGitCommand(
-      ['show-ref', '--verify', '--quiet', `refs/heads/${targetBranch}`],
-      { cwd: repoDir },
-    );
-
-    const localBranchExists = checkLocalBranchResult.exitCode === 0;
-
-    // Check if branch exists on remote
-    const checkRemoteBranchResult = await executeGitCommand(
-      ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${targetBranch}`],
-      { cwd: repoDir },
-    );
-
-    const remoteBranchExists = checkRemoteBranchResult.exitCode === 0;
-
-    if (localBranchExists) {
-      logger.verbose(`⚠️  Branch ${targetBranch} already exists locally`);
-
-      // Check if branch is already used by another worktree
-      try {
-        const worktreeListResult = await executeGitCommand(['worktree', 'list', '--porcelain'], {
-          cwd: repoDir,
-        });
-
-        if (worktreeListResult.exitCode === 0) {
-          const lines = worktreeListResult.stdout.split('\n');
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('branch ') && line.includes(`refs/heads/${targetBranch}`)) {
-              // Found the worktree using this branch
-              const worktreeLine = lines[i - 2]; // worktree path is 2 lines before branch line
-              const existingPath = worktreeLine.replace('worktree ', '');
-
-              logger.verbose(`Branch ${targetBranch} is used by worktree at: ${existingPath}`);
-
-              // If the existing worktree is prunable (directory doesn't exist), prune it
-              if (!fs.existsSync(existingPath)) {
-                logger.verbose(`Pruning stale worktree: ${existingPath}`);
-                try {
-                  await executeGitCommand(['worktree', 'prune'], { cwd: repoDir });
-                  logger.verbose(`✅ Pruned stale worktrees`);
-                } catch {
-                  // Ignore prune failures
-                }
-                break; // Exit the loop and continue with worktree creation
-              } else {
-                throw new Error(
-                  `Branch ${targetBranch} is already used by worktree at ${existingPath}. ` +
-                    `Please remove the existing worktree first or use a different branch name.`,
-                );
-              }
-            }
-          }
-        }
-      } catch (error) {
-        if ((error as Error).message.includes('already used by worktree')) {
-          throw error; // Re-throw our custom error
-        }
-        // If worktree list failed, continue with normal flow
-        logger.debug(`Worktree list failed: ${error}`);
-      }
-
-      // Try to add existing local branch to worktree
-      try {
-        const result = await executeGitCommand(['worktree', 'add', worktreePath, targetBranch], {
-          cwd: repoDir,
-        });
-
-        if (result.exitCode !== 0) {
-          throw new Error(`Failed to add existing branch to worktree: ${result.stderr}`);
-        }
-
-        logger.verbose(`✅ Added existing branch ${targetBranch} to worktree`);
-        return;
-      } catch (error) {
-        // If that fails, try force adding
-        logger.verbose(`Retrying with force flag...`);
-
-        try {
-          const result = await executeGitCommand(
-            ['worktree', 'add', '-f', worktreePath, targetBranch],
-            { cwd: repoDir },
-          );
-
-          if (result.exitCode !== 0) {
-            throw new Error(
-              `Cannot add branch ${targetBranch} to worktree. The branch exists but may be checked out elsewhere. ` +
-                `Please delete the existing branch or use a different branch name.\n` +
-                `Error: ${result.stderr}`,
-            );
-          }
-
-          logger.verbose(`✅ Force added existing branch ${targetBranch} to worktree`);
-          return;
-        } catch (forceError) {
-          throw new Error(
-            `Cannot add branch ${targetBranch} to worktree. The branch exists but cannot be used. ` +
-              `Please manually delete the existing branch with: git branch -D ${targetBranch}\n` +
-              `Error: ${(forceError as Error).message}`,
-          );
-        }
-      }
-    } else if (remoteBranchExists) {
-      // Branch exists on remote but not locally - create local tracking branch
-      logger.verbose(`📥 Branch ${targetBranch} exists on remote, creating local tracking branch`);
-      try {
-        const result = await executeGitCommand(
-          ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${targetBranch}`],
-          { cwd: repoDir },
-        );
-
-        if (result.exitCode !== 0) {
-          throw new Error(`Failed to create tracking branch worktree: ${result.stderr}`);
-        }
-
-        logger.verbose(`✅ Created local tracking branch ${targetBranch} and added to worktree`);
-        return;
-      } catch (error) {
-        throw new Error(
-          `Failed to create worktree from remote branch ${targetBranch}. ` +
-            `Error: ${(error as Error).message}`,
-        );
-      }
-    }
-
-    // Branch doesn't exist locally or remotely - create new branch from base branch
-    try {
-      const result = await executeGitCommand(
-        ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${baseBranch}`],
-        { cwd: repoDir },
-      );
-
-      if (result.exitCode !== 0) {
-        throw new Error(`Failed to create new worktree branch: ${result.stderr}`);
-      }
-
-      logger.verbose(`✅ Created new branch ${targetBranch} and added to worktree`);
-    } catch (error) {
-      throw new Error(
-        `Failed to create worktree for branch ${targetBranch}. ` +
-          `This may indicate repository issues or insufficient permissions.\n` +
-          `Error: ${(error as Error).message}`,
-      );
-    }
-  };
-
-  logger.verbose('🔀 Setting up source worktree...');
-  const defaultBranch = await getDefaultBranch(paths.sourceRepoPath, isDryRun);
-  await addWorktree(paths.sourceRepoPath, paths.sourcePath, branchName, defaultBranch);
-
-  if (paths.destinationRepoPath && paths.destinationPath) {
-    logger.verbose('🔀 Setting up destination worktree...');
-    const defaultBranch = await getDefaultBranch(paths.destinationRepoPath, isDryRun);
-    // For destination repo, create a new worktree from the default branch
-    // Transform the branch name to avoid issues with slashes in git references
-    const samplesBranchName = createSamplesBranchName(branchName);
-    await addWorktree(
-      paths.destinationRepoPath,
-      paths.destinationPath,
-      samplesBranchName,
-      defaultBranch,
-    );
   }
 
   // Task 6.4: Remove testing infrastructure setup (no longer JS/TS specific)
   logger.verbose('⏭️  Testing infrastructure setup not needed for stack-agnostic CLI');
+}
+
+/**
+ * Execute repository setup operations in parallel (clone, validate, freshness)
+ */
+async function executeParallelRepositorySetup(
+  parallelGit: ParallelGitOperations,
+  project: ProjectConfig,
+  paths: WorkspacePaths,
+  config: any,
+  isDryRun: boolean,
+): Promise<void> {
+  const operations: GitOperation[] = [];
+
+  // Repository cloning operations (can run in parallel)
+  operations.push({
+    id: 'clone-main-repo',
+    type: 'clone',
+    repoPath: paths.sourceRepoPath,
+    description: `Clone main repository to ${paths.sourceRepoPath}`,
+    execute: () =>
+      ensureRepositoryExists(paths.sourceRepoPath, project.repo, 'Main Repository', isDryRun),
+  });
+
+  if (paths.destinationRepoPath && project.sample_repo) {
+    operations.push({
+      id: 'clone-sample-repo',
+      type: 'clone',
+      repoPath: paths.destinationRepoPath,
+      description: `Clone sample repository to ${paths.destinationRepoPath}`,
+      execute: () =>
+        ensureRepositoryExists(
+          paths.destinationRepoPath!,
+          project.sample_repo!,
+          'Sample Repository',
+          isDryRun,
+        ),
+    });
+  }
+
+  // Execute repository cloning in parallel
+  if (operations.length > 0) {
+    await parallelGit.executeParallel(operations);
+  }
+
+  // Repository validation and freshness (can run in parallel after cloning)
+  const validationOperations: GitOperation[] = [];
+
+  validationOperations.push({
+    id: 'validate-main-repo',
+    type: 'validate',
+    repoPath: paths.sourceRepoPath,
+    description: `Validate main repository at ${paths.sourceRepoPath}`,
+    execute: async () => {
+      const valid = await validateRepository(paths.sourceRepoPath, 'Main Repository', isDryRun);
+      if (!valid) {
+        throw new Error('Main repository validation failed');
+      }
+    },
+  });
+
+  if (paths.destinationRepoPath) {
+    validationOperations.push({
+      id: 'validate-sample-repo',
+      type: 'validate',
+      repoPath: paths.destinationRepoPath,
+      description: `Validate sample repository at ${paths.destinationRepoPath}`,
+      execute: async () => {
+        const valid = await validateRepository(
+          paths.destinationRepoPath!,
+          'Sample Repository',
+          isDryRun,
+        );
+        if (!valid) {
+          throw new Error('Sample repository validation failed');
+        }
+      },
+    });
+  }
+
+  // Execute repository validation in parallel
+  await parallelGit.executeParallel(validationOperations);
+
+  // Repository freshness operations (can run in parallel after validation)
+  if (config.repository?.ensure_freshness !== false) {
+    const freshnessOperations: GitOperation[] = [];
+
+    freshnessOperations.push({
+      id: 'freshness-main-repo',
+      type: 'freshness',
+      repoPath: paths.sourceRepoPath,
+      description: `Ensure freshness of main repository at ${paths.sourceRepoPath}`,
+      execute: () => ensureRepositoryFreshness(paths.sourceRepoPath, isDryRun),
+    });
+
+    if (paths.destinationRepoPath) {
+      freshnessOperations.push({
+        id: 'freshness-sample-repo',
+        type: 'freshness',
+        repoPath: paths.destinationRepoPath,
+        description: `Ensure freshness of sample repository at ${paths.destinationRepoPath}`,
+        execute: () => ensureRepositoryFreshness(paths.destinationRepoPath!, isDryRun),
+      });
+    }
+
+    // Execute repository freshness checks in parallel
+    await parallelGit.executeParallel(freshnessOperations);
+  } else {
+    logger.verbose('⏭️  Skipping repository freshness check (disabled in config)');
+  }
+}
+
+/**
+ * Execute worktree creation operations in parallel
+ */
+async function executeParallelWorktreeSetup(
+  parallelGit: ParallelGitOperations,
+  project: ProjectConfig,
+  paths: WorkspacePaths,
+  branchName: string,
+  isDryRun: boolean,
+): Promise<void> {
+  // Default branch fetching operations (can run in parallel)
+  const branchOperations: GitOperation[] = [];
+  let mainDefaultBranch = 'main';
+  let sampleDefaultBranch = 'main';
+
+  branchOperations.push({
+    id: 'branch-main-repo',
+    type: 'branch',
+    repoPath: paths.sourceRepoPath,
+    description: `Get default branch for main repository`,
+    execute: async () => {
+      mainDefaultBranch = await getDefaultBranch(paths.sourceRepoPath, isDryRun);
+      return mainDefaultBranch;
+    },
+  });
+
+  if (paths.destinationRepoPath) {
+    branchOperations.push({
+      id: 'branch-sample-repo',
+      type: 'branch',
+      repoPath: paths.destinationRepoPath,
+      description: `Get default branch for sample repository`,
+      execute: async () => {
+        sampleDefaultBranch = await getDefaultBranch(paths.destinationRepoPath!, isDryRun);
+        return sampleDefaultBranch;
+      },
+    });
+  }
+
+  // Execute default branch fetching in parallel
+  const branchResults = await parallelGit.executeParallel(branchOperations);
+
+  // Extract default branch results
+  const mainBranchResult = branchResults.find((r) => r.id === 'branch-main-repo');
+  if (mainBranchResult?.result) {
+    mainDefaultBranch = mainBranchResult.result;
+  }
+
+  const sampleBranchResult = branchResults.find((r) => r.id === 'branch-sample-repo');
+  if (sampleBranchResult?.result) {
+    sampleDefaultBranch = sampleBranchResult.result;
+  }
+
+  // Worktree creation operations (can run in parallel with different target directories)
+  const worktreeOperations: GitOperation[] = [];
+
+  worktreeOperations.push({
+    id: 'worktree-main',
+    type: 'worktree',
+    repoPath: paths.sourceRepoPath,
+    description: `Create worktree for main repository`,
+    execute: () =>
+      addWorktree(paths.sourceRepoPath, paths.sourcePath, branchName, isDryRun, mainDefaultBranch),
+  });
+
+  if (paths.destinationRepoPath && paths.destinationPath) {
+    const samplesBranchName = createSamplesBranchName(branchName);
+    worktreeOperations.push({
+      id: 'worktree-sample',
+      type: 'worktree',
+      repoPath: paths.destinationRepoPath,
+      description: `Create worktree for sample repository`,
+      execute: () =>
+        addWorktree(
+          paths.destinationRepoPath!,
+          paths.destinationPath!,
+          samplesBranchName,
+          isDryRun,
+          sampleDefaultBranch,
+        ),
+    });
+  }
+
+  // Execute worktree creation in parallel
+  await parallelGit.executeParallel(worktreeOperations);
+}
+
+/**
+ * Helper function to create a git worktree for a specific branch
+ */
+async function addWorktree(
+  repoDir: string,
+  worktreePath: string,
+  targetBranch: string,
+  isDryRun: boolean,
+  baseBranch: string = 'main',
+): Promise<void> {
+  if (isDryRun) {
+    logger.verbose(`[DRY RUN] Would create worktree at ${worktreePath} for branch ${targetBranch}`);
+    return;
+  }
+
+  if (!isDryRun && fs.existsSync(worktreePath)) {
+    await fileOps.removeFile(worktreePath, `stale worktree directory: ${worktreePath}`, isDryRun);
+  }
+
+  try {
+    const result = await executeGitCommand(['worktree', 'prune'], { cwd: repoDir });
+
+    if (result.exitCode !== 0) {
+      logger.debug(`Worktree prune failed but continuing: ${result.stderr}`);
+    }
+  } catch {
+    // Ignore prune failures
+  }
+
+  // Validate branch name before using it
+  validateBranchName(targetBranch);
+
+  // Check if branch already exists locally
+  const checkLocalBranchResult = await executeGitCommand(
+    ['show-ref', '--verify', '--quiet', `refs/heads/${targetBranch}`],
+    { cwd: repoDir },
+  );
+
+  const localBranchExists = checkLocalBranchResult.exitCode === 0;
+
+  // Check if branch exists on remote
+  const checkRemoteBranchResult = await executeGitCommand(
+    ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${targetBranch}`],
+    { cwd: repoDir },
+  );
+
+  const remoteBranchExists = checkRemoteBranchResult.exitCode === 0;
+
+  if (localBranchExists) {
+    logger.verbose(`⚠️  Branch ${targetBranch} already exists locally`);
+
+    // Check if branch is already used by another worktree
+    try {
+      const worktreeListResult = await executeGitCommand(['worktree', 'list', '--porcelain'], {
+        cwd: repoDir,
+      });
+
+      if (worktreeListResult.exitCode === 0) {
+        const lines = worktreeListResult.stdout.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (line.startsWith('branch ') && line.includes(`refs/heads/${targetBranch}`)) {
+            // Found the worktree using this branch
+            const worktreeLine = lines[i - 2]; // worktree path is 2 lines before branch line
+            const existingPath = worktreeLine.replace('worktree ', '');
+
+            logger.verbose(`Branch ${targetBranch} is used by worktree at: ${existingPath}`);
+
+            // If the existing worktree is prunable (directory doesn't exist), prune it
+            if (!fs.existsSync(existingPath)) {
+              logger.verbose(`Pruning stale worktree: ${existingPath}`);
+              try {
+                await executeGitCommand(['worktree', 'prune'], { cwd: repoDir });
+                logger.verbose(`✅ Pruned stale worktrees`);
+              } catch {
+                // Ignore prune failures
+              }
+              break; // Exit the loop and continue with worktree creation
+            } else {
+              throw new Error(
+                `Branch ${targetBranch} is already used by worktree at ${existingPath}. ` +
+                  `Please remove the existing worktree first or use a different branch name.`,
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if ((error as Error).message.includes('already used by worktree')) {
+        throw error; // Re-throw our custom error
+      }
+      // If worktree list failed, continue with normal flow
+      logger.debug(`Worktree list failed: ${error}`);
+    }
+
+    // Try to add existing local branch to worktree
+    try {
+      const result = await executeGitCommand(['worktree', 'add', worktreePath, targetBranch], {
+        cwd: repoDir,
+      });
+
+      if (result.exitCode !== 0) {
+        throw new Error(`Failed to add existing branch to worktree: ${result.stderr}`);
+      }
+
+      logger.verbose(`✅ Added existing branch ${targetBranch} to worktree`);
+      return;
+    } catch (error) {
+      // If that fails, try force adding
+      logger.verbose(`Retrying with force flag...`);
+
+      try {
+        const result = await executeGitCommand(
+          ['worktree', 'add', '-f', worktreePath, targetBranch],
+          { cwd: repoDir },
+        );
+
+        if (result.exitCode !== 0) {
+          throw new Error(
+            `Cannot add branch ${targetBranch} to worktree. The branch exists but may be checked out elsewhere. ` +
+              `Please delete the existing branch or use a different branch name.\n` +
+              `Error: ${result.stderr}`,
+          );
+        }
+
+        logger.verbose(`✅ Force added existing branch ${targetBranch} to worktree`);
+        return;
+      } catch (forceError) {
+        throw new Error(
+          `Cannot add branch ${targetBranch} to worktree. The branch exists but cannot be used. ` +
+            `Please manually delete the existing branch with: git branch -D ${targetBranch}\n` +
+            `Error: ${(forceError as Error).message}`,
+        );
+      }
+    }
+  } else if (remoteBranchExists) {
+    // Branch exists on remote but not locally - create local tracking branch
+    logger.verbose(`📥 Branch ${targetBranch} exists on remote, creating local tracking branch`);
+    try {
+      const result = await executeGitCommand(
+        ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${targetBranch}`],
+        { cwd: repoDir },
+      );
+
+      if (result.exitCode !== 0) {
+        throw new Error(`Failed to create tracking branch worktree: ${result.stderr}`);
+      }
+
+      logger.verbose(`✅ Created local tracking branch ${targetBranch} and added to worktree`);
+      return;
+    } catch (error) {
+      throw new Error(
+        `Failed to create worktree from remote branch ${targetBranch}. ` +
+          `Error: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  // Branch doesn't exist locally or remotely - create new branch from base branch
+  try {
+    const result = await executeGitCommand(
+      ['worktree', 'add', worktreePath, '-b', targetBranch, `origin/${baseBranch}`],
+      { cwd: repoDir },
+    );
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to create new worktree branch: ${result.stderr}`);
+    }
+
+    logger.verbose(`✅ Created new branch ${targetBranch} and added to worktree`);
+  } catch (error) {
+    throw new Error(
+      `Failed to create worktree for branch ${targetBranch}. ` +
+        `This may indicate repository issues or insufficient permissions.\n` +
+        `Error: ${(error as Error).message}`,
+    );
+  }
 }

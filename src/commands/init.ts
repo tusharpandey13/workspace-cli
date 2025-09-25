@@ -17,7 +17,7 @@ import {
 } from '../utils/secureExecution.js';
 import { fileOps, createTestFileName } from '../utils/init-helpers.js';
 import { ContextDataFetcher } from '../services/contextData.js';
-// import { createProgressBar } from '../utils/progressBar.js';
+import { progressIndicator, type ProgressStep } from '../utils/progressIndicator.js';
 import { getWorkflowTemplates } from '../utils/workflow.js';
 import readline from 'node:readline/promises';
 import { setupWorktrees } from '../services/gitWorktrees.js';
@@ -77,29 +77,68 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent, withContext } =
     options;
 
-  // Check if workspace already exists and handle cleanup
-  await handleExistingWorkspace(paths.workspaceDir, branchName, project, paths, isDryRun, isSilent);
+  // Check if workspace already exists first to determine if cleanup is needed
+  const workspaceExists = await fs.pathExists(paths.workspaceDir);
 
-  // Create progress bar
-  // // const progressBar = createProgressBar({ total: 6, width: 10 });
+  // Setup progress indicators (only if not silent) - before any work starts
+  if (!isSilent && process.env.WORKSPACE_DISABLE_PROGRESS !== '1') {
+    const steps: ProgressStep[] = [];
+
+    // Add cleanup step if workspace exists
+    if (workspaceExists) {
+      steps.push({ id: 'cleanup', description: 'Cleaning existing workspace', weight: 1 });
+    }
+
+    steps.push(
+      { id: 'directories', description: 'Creating workspace', weight: 1 },
+      { id: 'worktrees', description: 'Creating worktrees', weight: 3 },
+      { id: 'context', description: 'Preparing context', weight: 2 },
+      { id: 'postinit', description: 'Running post-init', weight: 1 },
+    );
+
+    progressIndicator.initialize(steps, {
+      title: 'Setting up workspace',
+      showETA: false,
+    });
+  }
+
+  // Handle existing workspace as part of progress tracking
+  await handleExistingWorkspace(
+    paths.workspaceDir,
+    branchName,
+    project,
+    paths,
+    isDryRun,
+    isSilent,
+    issueIds,
+  );
 
   // Create workspace directories
-  console.log('[1/4] Creating workspace directories...');
-  // // progressBar.update(1);
+  if (!isSilent) {
+    progressIndicator.startStep('directories');
+  }
+
   await fileOps.ensureDir(
     paths.workspaceDir,
     `workspace directory: ${paths.workspaceDir}`,
     isDryRun,
   );
 
+  progressIndicator.completeStep('directories');
+
   // Setup git worktrees
-  console.log('[2/4] Setting up git worktrees...');
-  // progressBar.update(2);
+  if (!isSilent) {
+    progressIndicator.startStep('worktrees');
+  }
+
   await setupWorktrees(project, paths, branchName, isDryRun);
 
+  progressIndicator.completeStep('worktrees');
+
   // Gather context and generate templates (consolidated step)
-  console.log('[3/4] Gathering context...');
-  // progressBar.update(3);
+  if (!isSilent) {
+    progressIndicator.startStep('context');
+  }
 
   // Collect additional context
   logger.verbose('📊 Collecting additional context...');
@@ -136,22 +175,32 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
     isDryRun,
   });
 
-  // Show workspace location
-  console.log(`Workspace location: ${paths.workspaceDir}`);
-
-  // Execute optional post-init command after showing workspace location
+  progressIndicator.completeStep('context');
+  // Execute optional post-init command
   if (project['post-init']) {
-    console.log('[4/4] Running post-init setup...');
-    // progressBar.update(6);
+    if (!isSilent) {
+      progressIndicator.startStep('postinit');
+    }
     await executePostInitCommand(project, paths, isDryRun);
+    if (!isSilent) {
+      progressIndicator.completeStep('postinit');
+    }
   } else {
     logger.verbose('No post-init command configured, skipping post-init setup');
   }
 
-  // progressBar.complete();
+  if (!isSilent) {
+    progressIndicator.pause();
+    console.log('\n');
+    progressIndicator.complete();
+    logger.info(`\n\nWorkspace ready`);
+  }
 
   if (isDryRun) {
     console.log('DRY-RUN COMPLETE: No actual changes were made');
+  } else if (isSilent) {
+    // Show brief success message even in silent/non-interactive mode
+    console.log(`Workspace location: ${paths.workspaceDir}`);
   }
 }
 
@@ -163,14 +212,18 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
     options;
 
   // Check if workspace already exists and handle cleanup
-  await handleExistingWorkspace(paths.workspaceDir, branchName, project, paths, isDryRun, isSilent);
-
-  // Create progress bar
-  // const progressBar = createProgressBar({ total: 4, width: 10 });
+  await handleExistingWorkspace(
+    paths.workspaceDir,
+    branchName,
+    project,
+    paths,
+    isDryRun,
+    isSilent,
+    issueIds,
+  );
 
   // Create workspace directories (but not worktrees)
   console.log('[1/3] Creating workspace directories...');
-  // progressBar.update(1);
   await fileOps.ensureDir(
     paths.workspaceDir,
     `workspace directory: ${paths.workspaceDir}`,
@@ -179,7 +232,6 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 
   // Gather context and generate templates (consolidated step)
   console.log('[2/3] Gathering context...');
-  // progressBar.update(2);
 
   // Collect additional context
   logger.verbose('📊 Collecting additional context...');
@@ -215,8 +267,6 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
     additionalContext,
     isDryRun,
   });
-
-  // progressBar.complete();
 
   // Show completion
   console.log('[3/3] Analysis complete');
@@ -339,13 +389,21 @@ async function handleExistingWorkspace(
   project: ProjectConfig,
   paths: WorkspacePaths,
   isDryRun: boolean,
-  isSilent: boolean = false,
+  isSilent: boolean,
+  issueIds: number[],
 ): Promise<void> {
   if (!isDryRun && fs.existsSync(workspaceDir) && (await fs.readdir(workspaceDir)).length > 0) {
     if (isSilent) {
       logger.warn(`Workspace ${workspaceDir} already exists. Auto-removing in silent mode...`);
-      console.log('Removing existing workspace...');
+      // Start cleanup progress step
+      if (progressIndicator.isActive()) {
+        progressIndicator.startStep('cleanup');
+      }
       await cleanupExistingWorkspace(workspaceDir, branchName, project, paths, isDryRun);
+      // Complete cleanup step
+      if (progressIndicator.isActive()) {
+        progressIndicator.completeStep('cleanup');
+      }
       return;
     }
 
@@ -354,22 +412,89 @@ async function handleExistingWorkspace(
         `Workspace ${workspaceDir} already exists and cannot prompt for confirmation in non-interactive mode.`,
       );
       logger.info('Use --silent flag to automatically overwrite existing workspaces.');
-      throw new Error('Workspace already exists - cannot continue in non-interactive mode');
+      throw new Error('\nWorkspace already exists - cannot continue in non-interactive mode');
     }
 
-    const rl = readline.createInterface({ input, output });
-    const answer = (
-      await rl.question(`Workspace ${workspaceDir} already exists. Clean and overwrite? [y/N] `)
-    )
-      .trim()
-      .toLowerCase();
-    rl.close();
+    // Pause progress bar and ensure clean output for user input
+    if (progressIndicator.isActive()) {
+      progressIndicator.pause();
+    }
+
+    process.stdout.write(`Workspace already exists. Clean and overwrite? [y/N] `);
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true, // Force terminal mode for proper prompt display
+    });
+
+    // Use a simple input reading approach
+    const answer = await new Promise<string>((resolve) => {
+      rl.on('line', (input) => {
+        resolve(input.trim().toLowerCase());
+        rl.close();
+      });
+    });
 
     if (answer === 'y' || answer === 'yes') {
-      console.log('Removing existing workspace...');
+      process.stdout.write('\n');
+      // Start cleanup progress step
+      if (progressIndicator.isActive()) {
+        progressIndicator.startStep('cleanup');
+      }
       await cleanupExistingWorkspace(workspaceDir, branchName, project, paths, isDryRun);
+      // Complete cleanup step
+      if (progressIndicator.isActive()) {
+        progressIndicator.completeStep('cleanup');
+      }
     } else {
-      console.log('Continuing with existing workspace.');
+      process.stdout.write('Continuing with existing workspace.\n\n');
+    }
+  }
+
+  // GitHub validation within the validation step
+  if (issueIds.length > 0) {
+    // Extract GitHub org and repo from repo URL or project config
+    let githubOrg = project.github_org || 'unknown';
+    let repoName = path.basename(project.repo).replace(/\.git$/, '');
+
+    if (project.repo.includes('github.com')) {
+      const match = project.repo.match(/github\.com[/:]([^/]+)\/([^/.]+)\.git/);
+      if (match) {
+        githubOrg = match[1];
+        repoName = match[2];
+      }
+    }
+
+    // Update progress to show GitHub validation is starting
+    if (progressIndicator.isActive()) {
+      progressIndicator.setCurrentOperation(
+        `Validating GitHub issues [${issueIds.join(',')}] in ${githubOrg}/${repoName}...`,
+      );
+    }
+
+    // Validate GitHub IDs existence with timeout
+    try {
+      await validateGitHubIdsExistence(issueIds, githubOrg, repoName);
+    } catch (error) {
+      // Provide clear, actionable error message
+      const errorMessage = (error as Error).message;
+      console.error(`${errorMessage}`);
+      console.error(`\n💡 Please verify:`);
+      console.error(`   • GitHub CLI is installed and authenticated: gh auth status`);
+      console.error(`   • Issue IDs exist in ${githubOrg}/${repoName}`);
+      console.error(`   • You have access to the repository`);
+      throw new Error('GitHub validation failed - stopping workspace setup');
+    }
+  }
+
+  // Complete validation progress step
+  if (progressIndicator.isActive()) {
+    // Show GitHub validation success if there were IDs to validate
+    if (issueIds.length > 0) {
+      progressIndicator.setCurrentOperation(
+        `GitHub issues [${issueIds.join(',')}] validated successfully`,
+      );
     }
   }
 }
@@ -491,14 +616,25 @@ async function executePostInitCommand(
   }
 
   try {
+    // Capture output instead of inheriting stdio - only show on error
     const result = await executeShellCommand(project['post-init'], {
       cwd: paths.workspaceDir,
-      stdio: 'inherit',
+      stdio: 'pipe', // Capture output instead of inheriting,
+      timeout: 3 * 60 * 1000, // TODO: make this configurable
     });
 
     if (result.exitCode !== 0) {
-      throw new Error(`Post-init command failed: ${result.stderr}`);
+      // Only show output on error
+      console.error(`\n❌ Post-init command failed:`);
+      if (result.stdout) {
+        console.error('STDOUT:', result.stdout);
+      }
+      if (result.stderr) {
+        console.error('STDERR:', result.stderr);
+      }
+      throw new Error(`Post-init command failed with exit code ${result.exitCode}`);
     }
+    // Success: don't show any output
   } catch (error) {
     logger.warn(`Error: ${(error as Error).message}`);
     logger.warn('   This is optional - the workspace is still ready for development.');
@@ -978,7 +1114,8 @@ ${additionalContextFormatted}
 async function handlePRInitialization(
   projectKey: string,
   prIdStr: string,
-  options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean },
+  options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean; silent?: boolean },
+  isSilent: boolean,
 ): Promise<void> {
   const isVerbose = options.verbose || options.dryRun;
   const isDryRun = options.dryRun || false;
@@ -1036,7 +1173,7 @@ async function handlePRInitialization(
           paths,
           isDryRun,
           isVerbose: isVerbose || false,
-          isSilent: true,
+          isSilent,
           withContext: false,
         });
       } else {
@@ -1049,7 +1186,7 @@ async function handlePRInitialization(
           paths,
           isDryRun,
           isVerbose: isVerbose || false,
-          isSilent: true,
+          isSilent,
           withContext: false,
         });
       }
@@ -1134,7 +1271,7 @@ async function handlePRInitialization(
         paths,
         isDryRun,
         isVerbose: isVerbose || false,
-        isSilent: true,
+        isSilent,
         withContext: false,
       });
     } else {
@@ -1147,7 +1284,7 @@ async function handlePRInitialization(
         paths,
         isDryRun,
         isVerbose: isVerbose || false,
-        isSilent: true,
+        isSilent,
         withContext: false,
       });
     }
@@ -1364,12 +1501,18 @@ Related commands:
             console.log(`\n⚡ Creating workspace: ${projectIdentifier} ${args.join(' ')}\n`);
           }
 
+          // Calculate common options first
+          const isVerbose = options.verbose || options.dryRun;
+          const isDryRun = options.dryRun || false;
+          const isAnalyseMode = options.analyse || false;
+          const isSilent = options.silent || isNonInteractive() || false;
+
           // Check if --pr option was used globally
           const globalOpts = program.opts();
           if (globalOpts.pr) {
             // Handle PR initialization - use new findProject method for better resolution
             const { projectKey } = configManager.findProject(projectIdentifier!);
-            return await handlePRInitialization(projectKey, globalOpts.pr, options);
+            return await handlePRInitialization(projectKey, globalOpts.pr, options, isSilent);
           }
 
           // Find project by repo name or project key using improved resolution
@@ -1377,11 +1520,6 @@ Related commands:
 
           // Parse arguments using new signature
           const { issueIds, branchName } = parseRepoInitArguments(args);
-
-          const isVerbose = options.verbose || options.dryRun;
-          const isDryRun = options.dryRun || false;
-          const isAnalyseMode = options.analyse || false;
-          const isSilent = options.silent || isNonInteractive() || false;
           const withContext = options.withContext || false;
 
           if (isSilent && options.silent) {
@@ -1398,53 +1536,21 @@ Related commands:
             logger.info('ANALYSIS MODE: Skipping git worktree creation');
           }
 
+          // Get workspace paths for this project
+          const workspaceName = branchName.replace(/\//g, '_');
+          const paths = configManager.getWorkspacePaths(projectKey, workspaceName);
+
           const initMessage =
             issueIds.length > 0
               ? `Initializing ${project.name} workspace for GitHub IDs [${issueIds.join(', ')}] with branch: ${branchName}`
               : `Initializing ${project.name} workspace with branch: ${branchName}`;
           console.log(initMessage);
-
-          // Get workspace paths for this project
-          const workspaceName = branchName.replace(/\//g, '_');
-          const paths = configManager.getWorkspacePaths(projectKey, workspaceName);
+          logger.info(`Final workspace path:\n${paths.workspaceDir}`);
 
           logger.verbose(`📍 Project: ${project.name} (${projectKey})`);
           logger.verbose(`📍 Workspace directory: ${paths.workspaceDir}`);
           logger.verbose(`📍 Repository path: ${paths.sourcePath}`);
           logger.verbose(`📍 Sample repository path: ${paths.destinationPath || 'N/A'}`);
-
-          // CRITICAL: Early validation of GitHub IDs BEFORE any workspace setup
-          if (issueIds.length > 0) {
-            console.log('🔍 Validating GitHub issues...');
-
-            // Extract GitHub org and repo from repo URL or project config
-            let githubOrg = project.github_org || 'unknown';
-            let repoName = path.basename(project.repo).replace(/\.git$/, '');
-
-            if (project.repo.includes('github.com')) {
-              const match = project.repo.match(/github\.com[/:]([^/]+)\/([^/.]+)\.git/);
-              if (match) {
-                githubOrg = match[1];
-                repoName = match[2];
-              }
-            }
-
-            // Validate GitHub IDs early to fail fast - this prevents wasted setup time
-            try {
-              await validateGitHubIdsExistence(issueIds, githubOrg, repoName);
-              console.log(`✅ GitHub issues validated successfully`);
-            } catch (error) {
-              // Provide clear, actionable error message
-              const errorMessage = (error as Error).message;
-              console.error(`\n❌ GitHub Validation Failed`);
-              console.error(`${errorMessage}`);
-              console.error(`\n💡 Please verify:`);
-              console.error(`   • GitHub CLI is installed and authenticated: gh auth status`);
-              console.error(`   • Issue IDs exist in ${githubOrg}/${repoName}`);
-              console.error(`   • You have access to the repository`);
-              throw new Error('Early validation failed - stopping before workspace setup');
-            }
-          }
 
           // Initialize workspace (choose analysis or full mode)
           try {

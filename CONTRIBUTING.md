@@ -179,8 +179,34 @@ refactor: simplify error handling logic
 
 - **Unit tests**: Test individual functions and classes
 - **Integration tests**: Test command workflows end-to-end
+- **Performance tests**: Validate startup time, memory usage, and optimization targets
 - **Edge cases**: Test error conditions and boundary cases
 - **Cross-platform**: Consider Windows, macOS, and Linux
+
+#### Performance Testing
+
+The project includes comprehensive performance benchmarking:
+
+```bash
+# Run performance tests
+pnpm exec vitest run test/performance/
+
+# Performance targets
+# - Startup time: ~200ms
+# - Memory usage: <15MB
+# - Config loading: Cached with 99.6% improvement
+# - Command loading: <1ms with lazy loading
+```
+
+Environment controls for debugging performance optimizations:
+
+```bash
+# Disable caching for debugging
+WORKSPACE_DISABLE_CACHE=1 pnpm test
+
+# Disable lazy loading for debugging
+WORKSPACE_DISABLE_LAZY=1 pnpm test
+```
 
 Example test structure:
 

@@ -18,6 +18,11 @@ describe('Config', () => {
   });
 
   afterEach(async () => {
+    // Clean up ConfigManager to prevent event listener leaks
+    if (configManager) {
+      configManager.cleanup();
+    }
+
     // Clean up temporary directory
     await fs.remove(tempDir);
   });

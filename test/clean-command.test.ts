@@ -489,7 +489,7 @@ describe('Clean Command - Comprehensive', () => {
 
       await cleanWorkspace('test-project', options);
 
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Cleaning workspaces'));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Force flag enabled'));
     });
 
     it('should report statistics after completion', async () => {

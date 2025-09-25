@@ -26,7 +26,8 @@
     "install-global": "pnpm run build && pnpm link --global && pnpm run test:install",
     "install-global:dev": "pnpm run build:dev && pnpm link --global && pnpm run test:install",
     "uninstall-global": "pnpm remove --global @tusharpandey13/space-cli 2>/dev/null || true",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "tmp": "tsx src/bin/workspace.ts init next bugfix/RT-same-scope-as-AT"
   },
   "keywords": [
     "cli",
@@ -39,14 +40,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@types/cli-progress": "^3.11.6",
     "@types/prompts": "^2.4.9",
     "chalk": "^5.3.0",
+    "chokidar": "^4.0.3",
+    "cli-progress": "^3.12.0",
     "commander": "^11.0.0",
     "dotenv": "^16.4.5",
     "execa": "^8.0.1",
     "fs-extra": "^11.2.0",
     "js-yaml": "^4.1.0",
     "ora": "^9.0.0",
+    "p-limit": "^7.1.1",
     "prompts": "^2.4.2"
   },
   "devDependencies": {

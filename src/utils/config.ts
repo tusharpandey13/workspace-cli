@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { ValidationError, FileSystemError } from './errors.js';
 import { logger } from './logger.js';
 import type {
@@ -14,6 +15,15 @@ import type {
 } from '../types/index.js';
 
 /**
+ * Configuration cache interface
+ */
+interface ConfigCache {
+  config: Config;
+  timestamp: number;
+  filePath: string;
+}
+
+/**
  * Configuration manager for workspace CLI
  */
 export class ConfigManager {
@@ -21,10 +31,65 @@ export class ConfigManager {
   private configPath: string | null = null;
   private noConfigMode: boolean = false;
 
+  // Configuration cache state
+  private cachedConfig: ConfigCache | null = null;
+  private cacheValid: boolean = false;
+  private configWatcher: FSWatcher | null = null;
+  private cacheDisabled: boolean = false;
+
+  // Process event listener references for cleanup
+  private exitHandler: (() => void) | null = null;
+  private sigintHandler: (() => void) | null = null;
+  private sigtermHandler: (() => void) | null = null;
+
   /**
-   * Load configuration from file
+   * Load configuration from file with caching
    */
   async loadConfig(customConfigPath: string | null = null): Promise<Config> {
+    // Check if caching is disabled via environment variable
+    if (process.env.WORKSPACE_DISABLE_CACHE === '1') {
+      this.cacheDisabled = true;
+    }
+
+    // If cache is disabled, use original loading behavior
+    if (this.cacheDisabled) {
+      return this.loadConfigDirect(customConfigPath);
+    }
+
+    // Check if we have a valid cached config for the same path
+    const resolvedConfigPath = customConfigPath || (await this.resolveConfigPath());
+    if (this.cachedConfig && this.cacheValid && this.cachedConfig.filePath === resolvedConfigPath) {
+      logger.debug(`Using cached configuration from: ${this.cachedConfig.filePath}`);
+      this.config = this.cachedConfig.config;
+      this.configPath = this.cachedConfig.filePath;
+      return this.config;
+    }
+
+    // Load config fresh and cache it
+    const config = await this.loadConfigDirect(customConfigPath);
+
+    // Cache the loaded configuration
+    if (this.configPath) {
+      this.cachedConfig = {
+        config,
+        timestamp: Date.now(),
+        filePath: this.configPath,
+      };
+      this.cacheValid = true;
+
+      // Setup file watcher for cache invalidation
+      this.setupFileWatcher();
+
+      logger.debug(`Cached configuration from: ${this.configPath}`);
+    }
+
+    return config;
+  }
+
+  /**
+   * Load configuration directly without caching (original implementation)
+   */
+  private async loadConfigDirect(customConfigPath: string | null = null): Promise<Config> {
     const configPaths = [
       customConfigPath,
       path.join(os.homedir(), '.space-config.yaml'),
@@ -94,6 +159,155 @@ export class ConfigManager {
   getCliRoot(): string {
     const currentFile = fileURLToPath(import.meta.url);
     return path.resolve(path.dirname(currentFile), '../..');
+  }
+
+  /**
+   * Resolve config file path without loading (for caching)
+   */
+  private async resolveConfigPath(): Promise<string | null> {
+    const configPaths = [
+      path.join(os.homedir(), '.space-config.yaml'),
+      path.join(os.homedir(), '.workspace-config.yaml'), // backwards compatibility
+      path.join(process.cwd(), 'config.yaml'),
+      path.join(this.getCliRoot(), 'config.yaml'),
+    ];
+
+    for (const configPath of configPaths) {
+      if (await fs.pathExists(configPath)) {
+        return configPath;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Setup file watcher for cache invalidation using chokidar
+   */
+  private setupFileWatcher(): void {
+    if (!this.configPath || this.configWatcher) {
+      return; // Already watching or no config path
+    }
+
+    try {
+      // Use chokidar for reliable cross-platform file watching
+      this.configWatcher = chokidar.watch(this.configPath, {
+        persistent: false, // Don't keep the process alive for CLI commands
+        ignoreInitial: true, // Don't emit events for existing files
+        awaitWriteFinish: {
+          stabilityThreshold: 100, // Wait 100ms for writes to complete
+          pollInterval: 50,
+        },
+      });
+
+      this.configWatcher
+        .on('change', () => {
+          logger.debug(`Configuration file changed: ${this.configPath}`);
+          this.invalidateCache();
+        })
+        .on('error', (error) => {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.warn(`Config file watcher error: ${errorMessage}`);
+          this.cacheDisabled = true;
+        });
+
+      // Setup cleanup on process exit (only if not already set)
+      if (!this.exitHandler) {
+        this.exitHandler = () => {
+          this.cleanupFileWatcher();
+        };
+
+        // Increase maxListeners if needed for test environments
+        const currentMaxListeners = process.getMaxListeners();
+        if (process.listenerCount('exit') >= currentMaxListeners - 1) {
+          process.setMaxListeners(currentMaxListeners + 5);
+        }
+
+        process.on('exit', this.exitHandler);
+      }
+
+      if (!this.sigintHandler) {
+        this.sigintHandler = () => {
+          this.cleanupFileWatcher();
+          process.exit(0);
+        };
+
+        // Increase maxListeners if needed for test environments
+        const currentMaxListeners = process.getMaxListeners();
+        if (process.listenerCount('SIGINT') >= currentMaxListeners - 1) {
+          process.setMaxListeners(currentMaxListeners + 5);
+        }
+
+        process.on('SIGINT', this.sigintHandler);
+      }
+
+      if (!this.sigtermHandler) {
+        this.sigtermHandler = () => {
+          this.cleanupFileWatcher();
+          process.exit(0);
+        };
+
+        // Increase maxListeners if needed for test environments
+        const currentMaxListeners = process.getMaxListeners();
+        if (process.listenerCount('SIGTERM') >= currentMaxListeners - 1) {
+          process.setMaxListeners(currentMaxListeners + 5);
+        }
+
+        process.on('SIGTERM', this.sigtermHandler);
+      }
+
+      logger.debug('Configuration file watcher setup with chokidar');
+    } catch (error) {
+      // File watching failed, disable caching as fallback
+      logger.warn(`Failed to setup file watcher: ${(error as Error).message}`);
+      this.cacheDisabled = true;
+    }
+  }
+
+  /**
+   * Invalidate configuration cache
+   */
+  private invalidateCache(): void {
+    this.cacheValid = false;
+    this.cachedConfig = null;
+    logger.debug('Configuration cache invalidated');
+  }
+
+  /**
+   * Public cleanup method for tests and external callers
+   */
+  cleanup(): void {
+    this.cleanupFileWatcher();
+    this.invalidateCache();
+  }
+
+  /**
+   * Cleanup file watcher and process listeners
+   */
+  private cleanupFileWatcher(): void {
+    if (this.configWatcher) {
+      this.configWatcher.close().catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`Error closing config file watcher: ${errorMessage}`);
+      });
+      this.configWatcher = null;
+    }
+
+    // Remove process event listeners
+    if (this.exitHandler) {
+      process.removeListener('exit', this.exitHandler);
+      this.exitHandler = null;
+    }
+    if (this.sigintHandler) {
+      process.removeListener('SIGINT', this.sigintHandler);
+      this.sigintHandler = null;
+    }
+    if (this.sigtermHandler) {
+      process.removeListener('SIGTERM', this.sigtermHandler);
+      this.sigtermHandler = null;
+    }
+
+    logger.debug('Configuration file watcher and process listeners cleaned up');
   }
 
   /**

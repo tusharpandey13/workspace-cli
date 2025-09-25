@@ -386,10 +386,98 @@ cleanup_failed_test() {
     fi
 }
 
+# Run interactive test case with automated input
+run_interactive_test_case() {
+    local test_id="$1"
+    local description="$2"
+    local expected_exit_code="$3"
+    local expected_pattern="$4"
+    local config_file="$5"
+    local user_input="$6"
+    shift 6
+    local command_args=("$@")
+    
+    TESTS_TOTAL=$((TESTS_TOTAL + 1))
+    
+    log_info "Running $test_id: $description"
+    
+    # Prepare log files
+    local test_name="${command_args[0]:-interactive}"
+    local stdout_log="$TEST_BASE_DIR/logs/${test_name}_stdout.log"
+    local stderr_log="$TEST_BASE_DIR/logs/${test_name}_stderr.log"
+    
+    # Build command with config file
+    local config_arg=""
+    if [[ -n "$config_file" ]]; then
+        config_arg="--config '$config_file'"
+    fi
+    
+    # Execute the command with timeout and input simulation
+    local timeout_duration=120  # Interactive commands may need more time
+    local exit_code=0
+    
+    # Use printf to send input followed by the command
+    timeout "${timeout_duration}s" bash -c "
+        cd '/Users/tushar.pandey/src/workspace-cli'
+        printf '%s\n' '$user_input' | NODE_ENV=test node '$SPACE_CLI_PATH' $config_arg \"\$@\" >'$stdout_log' 2>'$stderr_log'
+    " -- "${command_args[@]}" || exit_code=$?
+    
+    # Check if command timed out
+    if [[ $exit_code -eq 124 ]]; then
+        echo "TIMEOUT: Interactive command timed out after ${timeout_duration} seconds" > "$stderr_log"
+        exit_code=1
+    fi
+    
+    # Read output files
+    local stdout_content=""
+    local stderr_content=""
+    if [[ -f "$stdout_log" ]]; then
+        stdout_content=$(cat "$stdout_log" 2>/dev/null || echo "ERROR: Could not read stdout file")
+    fi
+    if [[ -f "$stderr_log" ]]; then
+        stderr_content=$(cat "$stderr_log" 2>/dev/null || echo "ERROR: Could not read stderr file")
+    fi
+    
+    # Check for timeout indicators
+    if echo "$stderr_content" | grep -q "TIMEOUT:"; then
+        log_error "$test_id TIMEOUT - Interactive command execution timed out"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+        cleanup_failed_test "$test_id"
+        return
+    fi
+    
+    # Check exit code and pattern
+    local exit_code_ok=false
+    if [[ "$exit_code" == "$expected_exit_code" ]]; then
+        exit_code_ok=true
+    fi
+    
+    local pattern_ok=false
+    if [[ -z "$expected_pattern" ]] || \
+       echo "$stdout_content" | grep -q "$expected_pattern" || \
+       echo "$stderr_content" | grep -q "$expected_pattern"; then
+        pattern_ok=true
+    fi
+    
+    # Determine test result
+    if $exit_code_ok && $pattern_ok; then
+        log_success "$test_id PASSED"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    else
+        log_error "$test_id FAILED"
+        log_error "  Expected exit code: $expected_exit_code, got: $exit_code"
+        [[ -n "$expected_pattern" ]] && log_error "  Expected pattern: $expected_pattern"
+        log_error "  STDOUT: $stdout_content"
+        log_error "  STDERR: $stderr_content"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+        cleanup_failed_test "$test_id"
+    fi
+}
+
 # Export functions for use in test scripts
 export -f log_info log_success log_error log_warning
 export -f setup_test_environment cleanup_test_environment
 export -f generate_test_config generate_minimal_config generate_invalid_config
-export -f run_space_command run_test_case
+export -f run_space_command run_test_case run_interactive_test_case
 export -f verify_directory_exists verify_directory_not_exists verify_file_exists
 export -f print_test_summary init_test_session cleanup_failed_test

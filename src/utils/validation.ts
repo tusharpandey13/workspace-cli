@@ -259,7 +259,10 @@ export async function validateGitHubIdsExistence(
       const apiUrl = `repos/${githubOrg}/${repoName}/issues/${issueId}`;
       logger.verbose(`Checking issue #${issueId}...`);
 
-      const result = await execa('gh', ['api', apiUrl, '--jq', '.number'], { stdio: 'pipe' });
+      const result = await execa('gh', ['api', apiUrl, '--jq', '.number'], {
+        stdio: 'pipe',
+        timeout: 10000, // 10 second timeout to prevent hanging
+      });
 
       if (result.exitCode !== 0) {
         throw new Error(`Failed to fetch issue #${issueId}`);
@@ -273,6 +276,13 @@ export async function validateGitHubIdsExistence(
       logger.verbose(`✅ Issue #${issueId} exists`);
     } catch (error) {
       const errorMessage = (error as any).stderr || (error as Error).message;
+
+      // Handle timeout errors specifically
+      if ((error as any).timedOut || errorMessage.includes('timed out')) {
+        throw new Error(
+          `❌ GitHub API request timed out for issue #${issueId}. Please check your network connection and try again.`,
+        );
+      }
 
       if (errorMessage.includes('Not Found') || errorMessage.includes('404')) {
         throw new Error(

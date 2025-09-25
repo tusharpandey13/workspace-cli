@@ -29,7 +29,7 @@ export class Logger {
 
   error(message: string, error: Error | null = null): void {
     if (this.level >= LogLevel.ERROR) {
-      console.error(chalk.red(`❌ ${message}`));
+      console.error(chalk.red(message));
       if (error && this.level >= LogLevel.DEBUG) {
         console.error(chalk.red(`   ${error.stack || error.message || error}`));
       }
@@ -38,19 +38,19 @@ export class Logger {
 
   warn(message: string): void {
     if (this.level >= LogLevel.WARN) {
-      console.warn(chalk.yellow(`⚠️ ${message}`));
+      console.warn(chalk.yellow(message));
     }
   }
 
   info(message: string): void {
     if (this.level >= LogLevel.INFO) {
-      console.log(chalk.blue(`ℹ️ ${message}`));
+      console.log(chalk.blue(message));
     }
   }
 
   success(message: string): void {
     if (this.level >= LogLevel.INFO) {
-      console.log(chalk.green(`✅ ${message}`));
+      console.log(chalk.green(message));
     }
   }
 

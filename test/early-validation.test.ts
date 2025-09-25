@@ -47,7 +47,7 @@ describe('validateGitHubIdsExistence', () => {
     expect(mockedExeca).toHaveBeenCalledWith(
       'gh',
       ['api', 'repos/auth0/nextjs-auth0/issues/123', '--jq', '.number'],
-      { stdio: 'pipe' },
+      { stdio: 'pipe', timeout: 10000 },
     );
   });
 

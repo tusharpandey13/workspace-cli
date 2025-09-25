@@ -229,6 +229,24 @@ EOF
     touch "$env_file"
     run_test_case "EDGE-10" "Environment file option" 0 "" "$config_file" \
         --env "$env_file" list --non-interactive
+    
+    # EDGE-11: Interactive overwrite prompt accept
+    # First create workspace, then test overwrite confirmation
+    run_space_command "$config_file" init test feature/interactive-test --non-interactive >/dev/null 2>&1
+    run_interactive_test_case "EDGE-11" "Interactive overwrite prompt accept" 0 "Workspace ready" "$config_file" "y" \
+        init test feature/interactive-test
+    
+    # Clean up for next test
+    run_space_command "$config_file" clean test feature_interactive-test --force --non-interactive >/dev/null 2>&1 || true
+    
+    # EDGE-12: Interactive overwrite prompt decline
+    # First create workspace, then test overwrite decline
+    run_space_command "$config_file" init test feature/interactive-test --non-interactive >/dev/null 2>&1
+    run_interactive_test_case "EDGE-12" "Interactive overwrite prompt decline" 0 "Continuing with existing" "$config_file" "n" \
+        init test feature/interactive-test
+    
+    # Clean up after test
+    run_space_command "$config_file" clean test feature_interactive-test --force --non-interactive >/dev/null 2>&1 || true
 }
 
 run_verification_tests() {

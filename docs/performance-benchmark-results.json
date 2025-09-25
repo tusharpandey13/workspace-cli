@@ -1,0 +1,43 @@
+{
+  "name": "Performance Benchmark Suite",
+  "results": [
+    {
+      "metric": "startup_time",
+      "value": 194.6754168,
+      "unit": "ms",
+      "target": 200,
+      "baseline": 200
+    },
+    {
+      "metric": "memory_usage",
+      "value": 11.772789001464844,
+      "unit": "MB",
+      "target": 15,
+      "baseline": 50
+    },
+    {
+      "metric": "config_loading_cold",
+      "value": 197.4878329999999,
+      "unit": "ms",
+      "baseline": 100
+    },
+    {
+      "metric": "config_loading_warm",
+      "value": 180.7114170000002,
+      "unit": "ms"
+    },
+    {
+      "metric": "workspace_init_dry_run",
+      "value": 315.13270799999964,
+      "unit": "ms",
+      "target": 2000,
+      "baseline": 5000
+    }
+  ],
+  "timestamp": "2025-09-25T07:10:47.251Z",
+  "environment": {
+    "platform": "darwin arm64",
+    "nodeVersion": "v22.12.0",
+    "memoryLimit": 36
+  }
+}
