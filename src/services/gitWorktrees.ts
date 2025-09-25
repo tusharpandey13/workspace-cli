@@ -391,7 +391,7 @@ async function executeParallelRepositorySetup(
  */
 async function executeParallelWorktreeSetup(
   parallelGit: ParallelGitOperations,
-  project: ProjectConfig,
+  _project: ProjectConfig,
   paths: WorkspacePaths,
   branchName: string,
   isDryRun: boolean,

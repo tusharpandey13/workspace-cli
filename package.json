@@ -14,6 +14,7 @@
     "start": "node dist/bin/workspace.js --help",
     "test": "env NODE_OPTIONS=\"\" vitest --run",
     "test:coverage": "env NODE_OPTIONS=\"\" vitest --coverage --run",
+    "test:e2e": "bash e2e/test-suite.sh",
     "test:install": "pnpm run test:install:local && pnpm run test:install:global",
     "test:install:local": "node dist/bin/workspace.js --version",
     "test:install:global": "space --version",
@@ -26,8 +27,7 @@
     "install-global": "pnpm run build && pnpm link --global && pnpm run test:install",
     "install-global:dev": "pnpm run build:dev && pnpm link --global && pnpm run test:install",
     "uninstall-global": "pnpm remove --global @tusharpandey13/space-cli 2>/dev/null || true",
-    "prepublishOnly": "npm run clean && npm run build",
-    "tmp": "tsx src/bin/workspace.ts init next bugfix/RT-same-scope-as-AT"
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "cli",
@@ -40,8 +40,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@types/cli-progress": "^3.11.6",
-    "@types/prompts": "^2.4.9",
     "chalk": "^5.3.0",
     "chokidar": "^4.0.3",
     "cli-progress": "^3.12.0",
@@ -55,9 +53,11 @@
     "prompts": "^2.4.2"
   },
   "devDependencies": {
+    "@types/cli-progress": "^3.11.6",
     "@types/fs-extra": "^11.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.17",
+    "@types/prompts": "^2.4.9",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/coverage-v8": "^3.2.4",

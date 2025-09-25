@@ -291,7 +291,7 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 export async function cleanupExistingWorkspace(
   workspaceDir: string,
   branchName: string,
-  project: ProjectConfig,
+  _project: ProjectConfig,
   paths: WorkspacePaths,
   isDryRun: boolean,
 ): Promise<void> {
@@ -536,7 +536,7 @@ async function collectAdditionalContext(skipContextCollection: boolean = true): 
  */
 async function cleanupFailedWorkspace(
   paths: WorkspacePaths,
-  branchName: string,
+  _branchName: string,
   isDryRun: boolean,
 ): Promise<void> {
   if (isDryRun) {

@@ -27,13 +27,11 @@ export class ProgressIndicator {
   private totalSteps = 0;
   private currentStep = 0;
   private steps: ProgressStep[] = [];
-  private currentOperation = '';
 
   /**
    * Set current operation description
    */
-  setCurrentOperation(operation: string): void {
-    this.currentOperation = operation;
+  setCurrentOperation(_operation: string): void {
     // Note: Don't use console.log here as it interferes with cli-progress rendering
     // The operation will be shown through the progress bar format string
   }
