@@ -5,17 +5,23 @@
 
 set -euo pipefail
 
-# Global test variables
-readonly TEST_BASE_DIR="$HOME/tmp/space-e2e-tests"
-readonly SPACE_CLI_PATH="/Users/tushar.pandey/src/workspace-cli/dist/bin/workspace.js"
-readonly TEST_CONFIG_TEMPLATE="/Users/tushar.pandey/src/workspace-cli/e2e/config-template.yaml"
+# Global configuration
+SPACE_CLI="$SCRIPT_DIR/../dist/bin/workspace.js"
+if [[ -z "${TEST_BASE_DIR:-}" ]]; then
+    readonly TEST_BASE_DIR="$HOME/tmp/space-e2e-tests"
+fi
+if [[ -z "${TEST_CONFIG_TEMPLATE:-}" ]]; then
+    readonly TEST_CONFIG_TEMPLATE="/Users/tushar.pandey/src/workspace-cli/e2e/config-template.yaml"
+fi
 
 # Colors for output
-readonly RED='\033[0;31m'
-readonly GREEN='\033[0;32m'
-readonly YELLOW='\033[1;33m'
-readonly BLUE='\033[0;34m'
-readonly NC='\033[0m' # No Color
+if [[ -z "${RED:-}" ]]; then
+    readonly RED='\033[0;31m'
+    readonly GREEN='\033[0;32m'
+    readonly YELLOW='\033[1;33m'
+    readonly BLUE='\033[0;34m'
+    readonly NC='\033[0m' # No Color
+fi
 
 # Test result counters
 TESTS_PASSED=0
@@ -36,7 +42,37 @@ log_error() {
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $*"
+    echo "[WARNING] $*" >&2
+}
+
+log_debug() {
+    echo "[DEBUG] $*"
+}
+
+log_phase() {
+    echo ""
+    echo "[INFO] 🔄 $1"
+    echo "=================================================="
+}
+
+log_test_start() {
+    local test_name="$1"
+    local description="$2"
+    echo "[INFO] ▶️  Testing: $description"
+}
+
+test_passed() {
+    local test_name="$1"
+    local message="$2"
+    echo "[PASS] $test_name: $message"
+    PASSED_TESTS+=("$test_name")
+}
+
+test_failed() {
+    local test_name="$1" 
+    local message="$2"
+    echo "[FAIL] $test_name: $message"
+    FAILED_TESTS+=("$test_name")
 }
 
 # Setup test environment

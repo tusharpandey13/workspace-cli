@@ -2,6 +2,106 @@
 # This is a demo configuration for testing setup functionality
 
 projects:
+  # Auth0 SDK Factory Configurations
+  node-auth0:
+    name: 'Auth0 Node.js SDK'
+    repo: 'https://github.com/auth0/node-auth0.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-nodejs-samples.git'
+    env_file: 'auth0-node.env.local'
+    post-init: 'cd node-auth0 && npm install && cd ../auth0-nodejs-samples/01-Authentication && npm install'
+
+  nextjs-auth0:
+    name: 'Auth0 Next.js SDK'
+    repo: 'https://github.com/auth0/nextjs-auth0.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-nextjs-samples.git'
+    env_file: 'auth0-nextjs.env.local'
+    post-init: 'cd nextjs-auth0 && npm install && cd ../auth0-nextjs-samples/Sample-01 && npm install'
+
+  auth0-spa-js:
+    name: 'Auth0 Single Page App SDK'
+    repo: 'https://github.com/auth0/auth0-spa-js.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-spa-js-samples.git'
+    env_file: 'auth0-spa.env.local'
+    post-init: 'cd auth0-spa-js && npm install && cd ../auth0-spa-js-samples/01-login && npm install'
+
+  auth0-react:
+    name: 'Auth0 React SDK'
+    repo: 'https://github.com/auth0/auth0-react.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-react-samples.git'
+    env_file: 'auth0-react.env.local'
+    post-init: 'cd auth0-react && npm install && cd ../auth0-react-samples/Sample-01 && npm install'
+
+  auth0-angular:
+    name: 'Auth0 Angular SDK'
+    repo: 'https://github.com/auth0/auth0-angular.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-angular-samples.git'
+    env_file: 'auth0-angular.env.local'
+    post-init: 'cd auth0-angular && npm install && cd ../auth0-angular-samples/Sample-01 && npm install'
+
+  java-jwt:
+    name: 'Auth0 Java JWT Library'
+    repo: 'https://github.com/auth0/java-jwt.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-java-samples.git'
+    env_file: 'auth0-java.env.local'
+    post-init: 'cd java-jwt && ./gradlew build && cd ../auth0-java-samples/01-login && ./gradlew build'
+
+  auth0-java:
+    name: 'Auth0 Java Management SDK'
+    repo: 'https://github.com/auth0/auth0-java.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-spring-security-mvc-sample.git'
+    env_file: 'auth0-java.env.local'
+    post-init: 'cd auth0-java && ./gradlew build && cd ../auth0-spring-security-mvc-sample && ./gradlew build'
+
+  express-openid-connect:
+    name: 'Auth0 Express OpenID Connect'
+    repo: 'https://github.com/auth0/express-openid-connect.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-express-webapp-sample.git'
+    env_file: 'auth0-node.env.local'
+    post-init: 'cd express-openid-connect && npm install && cd ../auth0-express-webapp-sample/01-Login && npm install'
+
+  auth0-vue:
+    name: 'Auth0 Vue.js SDK'
+    repo: 'https://github.com/auth0/auth0-vue.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-vue-samples.git'
+    env_file: 'auth0-vue.env.local'
+    post-init: 'cd auth0-vue && npm install && cd ../auth0-vue-samples/Sample-01 && npm install'
+
+  jwks-rsa-java:
+    name: 'Auth0 JWKS RSA Java Library'
+    repo: 'https://github.com/auth0/jwks-rsa-java.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-spring-security-mvc-sample.git'
+    env_file: 'auth0-java.env.local'
+    post-init: 'cd jwks-rsa-java && ./gradlew build && cd ../auth0-spring-security-mvc-sample && ./gradlew build'
+
+  lock:
+    name: 'Auth0 Lock Widget'
+    repo: 'https://github.com/auth0/lock.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-javascript-samples.git'
+    env_file: 'auth0-spa.env.local'
+    post-init: 'cd lock && npm install && cd ../auth0-javascript-samples/01-Login && npm install'
+
+  terraform-provider-auth0:
+    name: 'Auth0 Terraform Provider'
+    repo: 'https://github.com/auth0/terraform-provider-auth0.git'
+    sample_repo: 'https://github.com/auth0/terraform-provider-auth0.git'
+    env_file: 'auth0-terraform.env.local'
+    post-init: 'cd terraform-provider-auth0 && go mod download && echo "Terraform provider ready for use"'
+
+  react-native-auth0:
+    name: 'Auth0 React Native SDK'
+    repo: 'https://github.com/auth0/react-native-auth0.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-react-native-sample.git'
+    env_file: 'auth0-react.env.local'
+    post-init: 'cd react-native-auth0 && npm install && cd ../auth0-react-native-sample && npm install'
+
+  wordpress:
+    name: 'Auth0 WordPress Plugin'
+    repo: 'https://github.com/auth0/wordpress.git'
+    sample_repo: 'https://github.com/auth0/wordpress.git'
+    env_file: 'auth0-wordpress.env.local'
+    post-init: 'cd wordpress && composer install && echo "WordPress plugin ready for development"'
+
+  # Legacy configurations for backward compatibility
   example:
     name: 'Example Project' 
     repo: 'https://github.com/user/example-repo.git'
