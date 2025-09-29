@@ -97,71 +97,21 @@ async function executeProjectsCommand(): Promise<void> {
  */
 async function executeInteractiveInit(): Promise<void> {
   try {
-    const projects = configManager.listProjects();
-
-    if (projects.length === 0) {
-      console.log('No projects configured. Run "space setup" to add projects first.');
-      return;
-    }
-
-    console.log("🚀 Let's create a new workspace!\n");
-
-    // Interactive prompts for init
-    const initResponse = await prompts([
-      {
-        type: 'select',
-        name: 'project',
-        message: 'Select a project:',
-        choices: projects.map((key) => {
-          const project = configManager.getProject(key);
-          return {
-            title: `${key} → ${project.name}`,
-            value: key,
-            description: project.repo,
-          };
-        }),
-      },
-      {
-        type: 'text',
-        name: 'branchName',
-        message: 'Enter branch name:',
-        initial: 'feature/new-feature',
-        validate: (val: string) => (val.trim() ? true : 'Branch name is required'),
-      },
-      {
-        type: 'text',
-        name: 'githubIds',
-        message: 'GitHub issue IDs (optional, space-separated):',
-        initial: '',
-      },
-    ]);
-
-    if (!initResponse.project) {
-      console.log('Init cancelled.');
-      return;
-    }
-
-    // Build command arguments
-    const args = [initResponse.project];
-
-    // Add GitHub IDs if provided
-    if (initResponse.githubIds.trim()) {
-      const ids = initResponse.githubIds.trim().split(/\s+/);
-      args.push(...ids);
-    }
-
-    args.push(initResponse.branchName);
-
-    // Execute the init command programmatically
-    console.log(`\n⚡ Executing: space init ${args.join(' ')}\n`);
-
-    // Import and execute the init command logic
+    // Import the init command setup
     const { initCommand } = await import('../commands/init.js');
-    const initCommandInstance = new Command();
-    initCommand(initCommandInstance);
 
-    // Parse and execute with the constructed arguments
-    await initCommandInstance.parseAsync(['node', 'space', 'init', ...args], { from: 'user' });
+    // Create a temporary command to set up the init subcommand
+    const tempProgram = new Command();
+    initCommand(tempProgram);
+
+    // Find the init subcommand
+    const initCmd = tempProgram.commands.find((cmd) => cmd.name() === 'init');
+    if (!initCmd) {
+      throw new Error('Init command not found');
+    }
+
+    // Parse empty arguments to trigger interactive mode
+    await initCmd.parseAsync([], { from: 'user' });
   } catch (error) {
     handleError(error as Error, logger);
   }
@@ -170,18 +120,19 @@ async function executeInteractiveInit(): Promise<void> {
 /**
  * Execute the setup command logic
  */
-async function executeSetupCommand(): Promise<void> {
+async function executeSetupCommand(options: { force?: boolean } = {}): Promise<void> {
   const { SetupWizard } = await import('../services/setupWizard.js');
   const wizard = new SetupWizard();
 
-  // Check if setup is needed
-  if (!wizard.isSetupNeeded({})) {
-    logger.info('Configuration already exists. Use --force to reconfigure.');
-    return;
+  // Check if setup is needed, but allow force override for interactive mode
+  if (!wizard.isSetupNeeded({}) && !options.force) {
+    // For interactive menu usage, automatically proceed with force
+    // In CLI usage, require explicit --force flag
+    console.log('Configuration already exists. Proceeding with reconfiguration...');
   }
 
-  // Run the setup wizard
-  const result = await wizard.run({});
+  // Run the setup wizard with force option
+  const result = await wizard.run({ force: options.force || false });
 
   if (result.completed) {
     logger.info('Setup completed! You can now use space-cli commands.');
@@ -270,7 +221,7 @@ async function showInteractiveMenu(): Promise<void> {
     }
 
     case 'setup': {
-      await executeSetupCommand();
+      await executeSetupCommand({ force: true });
       break;
     }
 

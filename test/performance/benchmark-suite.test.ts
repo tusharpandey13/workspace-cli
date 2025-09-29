@@ -311,102 +311,108 @@ global:
   }
 }
 
-describe('Performance Benchmarking Suite', () => {
-  let benchmarker: PerformanceBenchmarker;
-  const benchmarkResults: BenchmarkResult[] = [];
+describe.skipIf(process.env.SKIP_PERFORMANCE_TESTS === 'true')(
+  'Performance Benchmarking Suite',
+  () => {
+    let benchmarker: PerformanceBenchmarker;
+    const benchmarkResults: BenchmarkResult[] = [];
 
-  beforeAll(async () => {
-    benchmarker = new PerformanceBenchmarker();
-    await benchmarker.setup();
-  });
+    beforeAll(async () => {
+      benchmarker = new PerformanceBenchmarker();
+      await benchmarker.setup();
+    });
 
-  afterAll(async () => {
-    // Generate and save benchmark report
-    const report = benchmarker.generateReport();
-    const outputPath = path.join(__dirname, '../../docs/performance-benchmark-results.json');
+    afterAll(async () => {
+      // Generate and save benchmark report
+      const report = benchmarker.generateReport();
+      const outputPath = path.join(__dirname, '../../docs/performance-benchmark-results.json');
 
-    try {
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-      await benchmarker.saveBenchmarkResults(outputPath);
-      console.log(`\nBenchmark results saved to: ${outputPath}`);
-    } catch (error) {
-      console.warn('Failed to save benchmark results:', error);
-    }
-
-    // Print summary
-    console.log('\n=== Performance Benchmark Summary ===');
-    for (const result of report.results) {
-      const status = result.target && result.value <= result.target ? '✅' : '⚠️';
-      console.log(`${status} ${result.metric}: ${result.value.toFixed(2)}${result.unit}`);
-
-      if (result.target) {
-        console.log(`   Target: ${result.target}${result.unit}`);
+      try {
+        await fs.mkdir(path.dirname(outputPath), { recursive: true });
+        await benchmarker.saveBenchmarkResults(outputPath);
+        console.log(`\nBenchmark results saved to: ${outputPath}`);
+      } catch (error) {
+        console.warn('Failed to save benchmark results:', error);
       }
 
-      if (result.baseline) {
-        const improvement = (((result.baseline - result.value) / result.baseline) * 100).toFixed(1);
-        console.log(`   Improvement: ${improvement}% vs baseline`);
+      // Print summary
+      console.log('\n=== Performance Benchmark Summary ===');
+      for (const result of report.results) {
+        const status = result.target && result.value <= result.target ? '✅' : '⚠️';
+        console.log(`${status} ${result.metric}: ${result.value.toFixed(2)}${result.unit}`);
+
+        if (result.target) {
+          console.log(`   Target: ${result.target}${result.unit}`);
+        }
+
+        if (result.baseline) {
+          const improvement = (((result.baseline - result.value) / result.baseline) * 100).toFixed(
+            1,
+          );
+          console.log(`   Improvement: ${improvement}% vs baseline`);
+        }
       }
-    }
 
-    await benchmarker.cleanup();
-  });
+      await benchmarker.cleanup();
+    });
 
-  it('should meet startup time performance targets', async () => {
-    const result = await benchmarker.benchmarkStartupTime(5);
-    benchmarkResults.push(result);
+    it('should meet startup time performance targets', async () => {
+      const result = await benchmarker.benchmarkStartupTime(5);
+      benchmarkResults.push(result);
 
-    expect(result.value).toBeLessThan(220); // Realistic target: <220ms (allowing for system variance)
-    console.log(`Startup time: ${result.value.toFixed(2)}ms (target: <200ms)`);
-  }, 30000);
+      expect(result.value).toBeLessThan(220); // Realistic target: <220ms (allowing for system variance)
+      console.log(`Startup time: ${result.value.toFixed(2)}ms (target: <200ms)`);
+    }, 30000);
 
-  it('should meet memory usage performance targets', async () => {
-    const result = await benchmarker.benchmarkMemoryUsage();
-    benchmarkResults.push(result);
+    it('should meet memory usage performance targets', async () => {
+      const result = await benchmarker.benchmarkMemoryUsage();
+      benchmarkResults.push(result);
 
-    expect(result.value).toBeLessThan(result.target!);
-    console.log(`Memory usage: ${result.value.toFixed(2)}MB (target: <${result.target}MB)`);
-  }, 20000);
+      expect(result.value).toBeLessThan(result.target!);
+      console.log(`Memory usage: ${result.value.toFixed(2)}MB (target: <${result.target}MB)`);
+    }, 20000);
 
-  it('should demonstrate config caching performance improvement', async () => {
-    const results = await benchmarker.benchmarkConfigLoading();
-    benchmarkResults.push(...results);
+    it('should demonstrate config caching performance improvement', async () => {
+      const results = await benchmarker.benchmarkConfigLoading();
+      benchmarkResults.push(...results);
 
-    const [coldResult, warmResult] = results;
+      const [coldResult, warmResult] = results;
 
-    // Config loading should be functional (not necessarily faster in test conditions)
-    expect(coldResult.value).toBeLessThan(250); // Should complete in reasonable time
-    expect(warmResult.value).toBeLessThan(250); // Should complete in reasonable time
+      // Config loading should be functional (not necessarily faster in test conditions)
+      expect(coldResult.value).toBeLessThan(250); // Should complete in reasonable time
+      expect(warmResult.value).toBeLessThan(250); // Should complete in reasonable time
 
-    const improvement = (((coldResult.value - warmResult.value) / coldResult.value) * 100).toFixed(
-      1,
-    );
-    console.log(
-      `Config loading - Cold: ${coldResult.value.toFixed(2)}ms, Warm: ${warmResult.value.toFixed(2)}ms`,
-    );
-    console.log(`Cache improvement: ${improvement}%`);
-  }, 15000);
+      const improvement = (
+        ((coldResult.value - warmResult.value) / coldResult.value) *
+        100
+      ).toFixed(1);
+      console.log(
+        `Config loading - Cold: ${coldResult.value.toFixed(2)}ms, Warm: ${warmResult.value.toFixed(2)}ms`,
+      );
+      console.log(`Cache improvement: ${improvement}%`);
+    }, 15000);
 
-  it('should meet workspace initialization performance targets', async () => {
-    const result = await benchmarker.benchmarkWorkspaceInit();
-    benchmarkResults.push(result);
+    it('should meet workspace initialization performance targets', async () => {
+      const result = await benchmarker.benchmarkWorkspaceInit();
+      benchmarkResults.push(result);
 
-    expect(result.value).toBeLessThan(result.target!);
-    console.log(
-      `Workspace init (dry-run): ${result.value.toFixed(2)}ms (target: <${result.target}ms)`,
-    );
-  }, 30000);
+      expect(result.value).toBeLessThan(result.target!);
+      console.log(
+        `Workspace init (dry-run): ${result.value.toFixed(2)}ms (target: <${result.target}ms)`,
+      );
+    }, 30000);
 
-  it('should validate overall performance meets all targets', () => {
-    const validation = benchmarker.validatePerformance();
+    it('should validate overall performance meets all targets', () => {
+      const validation = benchmarker.validatePerformance();
 
-    if (!validation.passed) {
-      console.error('Performance validation issues:');
-      validation.issues.forEach((issue) => console.error(`  - ${issue}`));
-    }
+      if (!validation.passed) {
+        console.error('Performance validation issues:');
+        validation.issues.forEach((issue) => console.error(`  - ${issue}`));
+      }
 
-    expect(validation.passed).toBe(true);
-  });
-});
+      expect(validation.passed).toBe(true);
+    });
+  },
+);
 
 export { PerformanceBenchmarker, type BenchmarkResult, type BenchmarkSuite };

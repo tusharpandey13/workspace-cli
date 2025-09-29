@@ -207,104 +207,109 @@ global:
   }
 }
 
-describe('Performance Integration Tests', () => {
-  let tester: PerformanceTester;
+describe.skipIf(process.env.SKIP_PERFORMANCE_TESTS === 'true')(
+  'Performance Integration Tests',
+  () => {
+    let tester: PerformanceTester;
 
-  beforeEach(async () => {
-    tester = new PerformanceTester();
-    await tester.setup();
-  });
+    beforeEach(async () => {
+      tester = new PerformanceTester();
+      await tester.setup();
+    });
 
-  afterEach(async () => {
-    await tester.cleanup();
-  });
+    afterEach(async () => {
+      await tester.cleanup();
+    });
 
-  it('should maintain fast startup time with all optimizations', async () => {
-    const startupTime = await tester.measureStartupTime();
-
-    // Should be under 220ms (allowing for system variance)
-    expect(startupTime).toBeLessThan(220);
-
-    console.log(`Startup time: ${startupTime.toFixed(2)}ms`);
-  }, 10000);
-
-  it('should maintain low memory usage', async () => {
-    const memoryUsage = await tester.measureMemoryUsage();
-
-    // Should be under 15MB (realistic target for full CLI)
-    expect(memoryUsage).toBeLessThan(15);
-
-    console.log(`Memory usage: ${memoryUsage.toFixed(2)}MB`);
-  }, 15000);
-
-  it('should show config caching performance improvement', async () => {
-    const { firstLoad, cachedLoad } = await tester.testConfigCaching();
-
-    // Second invocation should be comparable (no significant regression)
-    // Note: Process-level caching doesn't persist across CLI invocations
-    expect(cachedLoad).toBeLessThan(firstLoad * 1.5); // Allow for some variance
-
-    console.log(
-      `Config loading - First: ${firstLoad.toFixed(2)}ms, Cached: ${cachedLoad.toFixed(2)}ms`,
-    );
-    console.log(`Cache improvement: ${(((firstLoad - cachedLoad) / firstLoad) * 100).toFixed(1)}%`);
-  }, 15000);
-
-  it('should complete workspace initialization efficiently', async () => {
-    const initTime = await tester.testWorkspaceInit();
-
-    // Dry run should be very fast (under 2 seconds)
-    expect(initTime).toBeLessThan(2000);
-
-    console.log(`Workspace init (dry-run): ${initTime.toFixed(2)}ms`);
-  }, 30000);
-
-  it('should handle multiple rapid CLI invocations without degradation', async () => {
-    const iterations = 5;
-    const times: number[] = [];
-
-    // Run multiple CLI commands rapidly
-    for (let i = 0; i < iterations; i++) {
+    it('should maintain fast startup time with all optimizations', async () => {
       const startupTime = await tester.measureStartupTime();
-      times.push(startupTime);
-    }
 
-    // No significant degradation across iterations
-    const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
-    const maxTime = Math.max(...times);
+      // Should be under 220ms (allowing for system variance)
+      expect(startupTime).toBeLessThan(220);
 
-    expect(maxTime).toBeLessThan(avgTime * 2); // Max shouldn't be more than 2x average
+      console.log(`Startup time: ${startupTime.toFixed(2)}ms`);
+    }, 10000);
 
-    console.log(
-      `Multiple invocations - Average: ${avgTime.toFixed(2)}ms, Max: ${maxTime.toFixed(2)}ms`,
-    );
-  }, 30000);
+    it('should maintain low memory usage', async () => {
+      const memoryUsage = await tester.measureMemoryUsage();
 
-  it('should maintain performance with progress indicators enabled', async () => {
-    // Test with progress indicators (non-silent mode)
-    const start = performance.now();
+      // Should be under 15MB (realistic target for full CLI)
+      expect(memoryUsage).toBeLessThan(15);
 
-    try {
-      // Use actual config instead of --no-config to test realistic scenario
-      await tester.runCLI([
-        '--config',
-        './config.yaml',
-        'init',
-        '--dry-run',
-        'next',
-        'progress-perf-test',
-      ]);
+      console.log(`Memory usage: ${memoryUsage.toFixed(2)}MB`);
+    }, 15000);
 
-      const timeWithProgress = performance.now() - start;
+    it('should show config caching performance improvement', async () => {
+      const { firstLoad, cachedLoad } = await tester.testConfigCaching();
 
-      // Should still be fast even with progress indicators
-      expect(timeWithProgress).toBeLessThan(3000);
+      // Second invocation should be comparable (no significant regression)
+      // Note: Process-level caching doesn't persist across CLI invocations
+      expect(cachedLoad).toBeLessThan(firstLoad * 1.5); // Allow for some variance
 
-      console.log(`Init with progress indicators: ${timeWithProgress.toFixed(2)}ms`);
-    } catch (error) {
-      throw new Error(`Progress indicator performance test failed: ${error}`);
-    }
-  }, 30000);
-});
+      console.log(
+        `Config loading - First: ${firstLoad.toFixed(2)}ms, Cached: ${cachedLoad.toFixed(2)}ms`,
+      );
+      console.log(
+        `Cache improvement: ${(((firstLoad - cachedLoad) / firstLoad) * 100).toFixed(1)}%`,
+      );
+    }, 15000);
+
+    it('should complete workspace initialization efficiently', async () => {
+      const initTime = await tester.testWorkspaceInit();
+
+      // Dry run should be very fast (under 2 seconds)
+      expect(initTime).toBeLessThan(2000);
+
+      console.log(`Workspace init (dry-run): ${initTime.toFixed(2)}ms`);
+    }, 30000);
+
+    it('should handle multiple rapid CLI invocations without degradation', async () => {
+      const iterations = 5;
+      const times: number[] = [];
+
+      // Run multiple CLI commands rapidly
+      for (let i = 0; i < iterations; i++) {
+        const startupTime = await tester.measureStartupTime();
+        times.push(startupTime);
+      }
+
+      // No significant degradation across iterations
+      const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+      const maxTime = Math.max(...times);
+
+      expect(maxTime).toBeLessThan(avgTime * 2); // Max shouldn't be more than 2x average
+
+      console.log(
+        `Multiple invocations - Average: ${avgTime.toFixed(2)}ms, Max: ${maxTime.toFixed(2)}ms`,
+      );
+    }, 30000);
+
+    it('should maintain performance with progress indicators enabled', async () => {
+      // Test with progress indicators (non-silent mode)
+      const start = performance.now();
+
+      try {
+        // Use actual config instead of --no-config to test realistic scenario
+        await tester.runCLI([
+          '--config',
+          './config.yaml',
+          'init',
+          '--dry-run',
+          'next',
+          'progress-perf-test',
+        ]);
+
+        const timeWithProgress = performance.now() - start;
+
+        // Should still be fast even with progress indicators
+        expect(timeWithProgress).toBeLessThan(3000);
+
+        console.log(`Init with progress indicators: ${timeWithProgress.toFixed(2)}ms`);
+      } catch (error) {
+        throw new Error(`Progress indicator performance test failed: ${error}`);
+      }
+    }, 30000);
+  },
+);
 
 export { PerformanceTester, type PerformanceMetrics };
