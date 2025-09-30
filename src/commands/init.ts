@@ -18,7 +18,8 @@ import {
 import { fileOps, createTestFileName } from '../utils/init-helpers.js';
 import { ContextDataFetcher } from '../services/contextData.js';
 import { progressIndicator, type ProgressStep } from '../utils/progressIndicator.js';
-import { getWorkflowTemplates } from '../utils/workflow.js';
+import { ensureProjectsConfigured } from '../utils/projectValidation.js';
+import { getWorkflowTemplatesWithChoice } from '../utils/workflow.js';
 import readline from 'node:readline/promises';
 import { setupWorktrees } from '../services/gitWorktrees.js';
 import { stdin as input, stdout as output } from 'node:process';
@@ -50,6 +51,19 @@ interface AnalysisOnlyOptions {
 }
 
 /**
+ * Result of post-init command execution
+ */
+interface PostInitResult {
+  success: boolean;
+  output?: {
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number;
+  };
+  error?: Error;
+}
+
+/**
  * Parse command arguments for simplified repo-name based structure
  * New signature: space init <repo_name> <...github_ids> prefix/branch_name
  */
@@ -77,29 +91,44 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   const { project, projectKey, issueIds, branchName, paths, isDryRun, isSilent, withContext } =
     options;
 
-  // Check if workspace already exists first to determine if cleanup is needed
+  // Handle existing workspace first to determine if cleanup is needed
   const workspaceExists = await fs.pathExists(paths.workspaceDir);
+  let willCleanup = false;
 
-  // Setup progress indicators (only if not silent) - before any work starts
-  if (!isSilent && process.env.WORKSPACE_DISABLE_PROGRESS !== '1') {
-    const steps: ProgressStep[] = [];
-
-    // Add cleanup step if workspace exists
-    if (workspaceExists) {
-      steps.push({ id: 'cleanup', description: 'Cleaning existing workspace', weight: 1 });
+  // Check if we'll actually clean up (in silent mode or user confirms)
+  if (workspaceExists && !isDryRun && (await fs.readdir(paths.workspaceDir)).length > 0) {
+    if (isSilent) {
+      willCleanup = true;
+    } else if (!isNonInteractive()) {
+      // We'll ask the user, but we can't know the answer yet
+      // So we'll set up progress indicators after the user decides
     }
+  }
 
-    steps.push(
-      { id: 'directories', description: 'Creating workspace', weight: 1 },
-      { id: 'worktrees', description: 'Creating worktrees', weight: 3 },
-      { id: 'context', description: 'Preparing context', weight: 2 },
-      { id: 'postinit', description: 'Running post-init', weight: 1 },
-    );
+  // Setup progress indicators (only if not silent) - but wait for user decision if needed
+  if (!isSilent && process.env.WORKSPACE_DISABLE_PROGRESS !== '1') {
+    if (!workspaceExists || willCleanup || isSilent) {
+      // Either no existing workspace, or we know we'll clean up
+      const steps: ProgressStep[] = [];
 
-    progressIndicator.initialize(steps, {
-      title: 'Setting up workspace',
-      showETA: false,
-    });
+      // Add cleanup step if we know we'll clean up
+      if (willCleanup) {
+        steps.push({ id: 'cleanup', description: 'Cleaning existing workspace', weight: 1 });
+      }
+
+      steps.push(
+        { id: 'directories', description: 'Creating workspace', weight: 1 },
+        { id: 'worktrees', description: 'Creating worktrees', weight: 3 },
+        { id: 'context', description: 'Preparing context', weight: 2 },
+        { id: 'postinit', description: 'Running post-init', weight: 1 },
+      );
+
+      progressIndicator.initialize(steps, {
+        title: 'Setting up workspace',
+        showETA: false,
+      });
+    }
+    // If workspace exists and we're interactive, we'll initialize progress after user input
   }
 
   // Handle existing workspace as part of progress tracking
@@ -112,6 +141,25 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
     isSilent,
     issueIds,
   );
+
+  // Setup progress indicators if not already initialized
+  if (
+    !progressIndicator.isActive() &&
+    !isSilent &&
+    process.env.WORKSPACE_DISABLE_PROGRESS !== '1'
+  ) {
+    const steps: ProgressStep[] = [
+      { id: 'directories', description: 'Creating workspace', weight: 1 },
+      { id: 'worktrees', description: 'Creating worktrees', weight: 3 },
+      { id: 'context', description: 'Preparing context', weight: 2 },
+      { id: 'postinit', description: 'Running post-init', weight: 1 },
+    ];
+
+    progressIndicator.initialize(steps, {
+      title: 'Setting up workspace',
+      showETA: false,
+    });
+  }
 
   // Create workspace directories
   if (!isSilent) {
@@ -139,6 +187,8 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   if (!isSilent) {
     progressIndicator.startStep('context');
   }
+
+  // Sample app reproduction decision is now handled in the LLM template
 
   // Collect additional context
   logger.verbose('📊 Collecting additional context...');
@@ -176,24 +226,57 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   });
 
   progressIndicator.completeStep('context');
-  // Execute optional post-init command
+
+  // Execute optional post-init command and track result
+  let postInitResult: PostInitResult | null = null;
   if (project['post-init']) {
     if (!isSilent) {
       progressIndicator.startStep('postinit');
     }
-    await executePostInitCommand(project, paths, isDryRun);
-    if (!isSilent) {
-      progressIndicator.completeStep('postinit');
+    try {
+      postInitResult = await executePostInitCommand(project, paths, isDryRun);
+    } finally {
+      // Always complete the progress step, regardless of success/failure
+      if (!isSilent) {
+        progressIndicator.completeStep('postinit');
+      }
     }
   } else {
     logger.verbose('No post-init command configured, skipping post-init setup');
   }
 
+  // Complete progress bar first, before any status messages
   if (!isSilent) {
-    progressIndicator.pause();
-    console.log('\n');
     progressIndicator.complete();
-    logger.info(`\n\nWorkspace ready`);
+  }
+
+  // Show appropriate status message based on post-init result
+  if (postInitResult && !postInitResult.success) {
+    // Post-init failed
+    console.log('Workspace initialized, post init failed');
+
+    // Show detailed error output cleanly after progress completion
+    console.error(`\n❌ Post-init command failed:`);
+    if (postInitResult.output) {
+      if (postInitResult.output.stdout) {
+        console.error('STDOUT:', postInitResult.output.stdout);
+      }
+      if (postInitResult.output.stderr) {
+        console.error('STDERR:', postInitResult.output.stderr);
+      }
+      if (postInitResult.output.exitCode) {
+        console.error(`Exit Code: ${postInitResult.output.exitCode}`);
+      }
+    }
+    if (postInitResult.error) {
+      console.error('Error:', postInitResult.error.message);
+    }
+    console.error('\nNote: The workspace is still ready for development.');
+  } else {
+    // Success or no post-init
+    if (!isSilent) {
+      logger.info('Workspace ready');
+    }
   }
 
   if (isDryRun) {
@@ -233,6 +316,8 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
   // Gather context and generate templates (consolidated step)
   console.log('[2/3] Gathering context...');
 
+  // Sample app analysis handled automatically by templates
+
   // Collect additional context
   logger.verbose('📊 Collecting additional context...');
   const additionalContext = await collectAdditionalContext(!withContext);
@@ -270,6 +355,8 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 
   // Show completion
   console.log('[3/3] Analysis complete');
+  console.log('\n🎉Workspace ready');
+  console.log(`Workspace location: ${paths.workspaceDir}`);
 
   const summary =
     issueIds.length > 0
@@ -277,7 +364,6 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
       : `${project.name} analysis workspace created for branch ${branchName}`;
 
   console.log(summary);
-  console.log(`Analysis workspace location: ${paths.workspaceDir}`);
   console.log('Note: No git worktrees were created (analysis mode)');
 
   if (isDryRun) {
@@ -337,16 +423,21 @@ export async function cleanupExistingWorkspace(
       }
     }
 
-    // Step 2: Remove local branches with the same name to prevent conflicts
+    // Step 3: Prune worktrees first to clean up any stale references
+    await executeGitCommand(['worktree', 'prune'], { cwd: sourceRepoPath });
+    if (destinationRepoPath) {
+      await executeGitCommand(['worktree', 'prune'], { cwd: destinationRepoPath });
+    }
+
+    // Step 4: Remove local branches with the same name to prevent conflicts
     try {
       logger.verbose(`Removing local branch: ${branchName} from source repo`);
       await executeGitCommand(['branch', '-D', branchName], { cwd: sourceRepoPath });
       logger.verbose(`Local branch ${branchName} removed from source repo`);
     } catch (error) {
-      // Branch might not exist locally - that's fine
-      // Branch might not exist locally - that's fine
+      // Branch might not exist locally, or might be used by another worktree - that's fine for now
       logger.verbose(
-        `Local branch ${branchName} does not exist in source repo (or removal failed)`,
+        `Local branch ${branchName} does not exist in source repo or is in use (removal failed)`,
       );
     }
 
@@ -356,24 +447,18 @@ export async function cleanupExistingWorkspace(
         await executeGitCommand(['branch', '-D', branchName], { cwd: destinationRepoPath });
         logger.verbose(`Local branch ${branchName} removed from destination repo`);
       } catch (error) {
-        // Branch might not exist locally - that's fine
+        // Branch might not exist locally, or might be used by another worktree - that's fine for now
         logger.verbose(
-          `Local branch ${branchName} does not exist in destination repo (or removal failed)`,
+          `Local branch ${branchName} does not exist in destination repo or is in use (removal failed)`,
         );
       }
-    }
-
-    // Step 3: Prune worktrees to clean up any stale references
-    await executeGitCommand(['worktree', 'prune'], { cwd: sourceRepoPath });
-    if (destinationRepoPath) {
-      await executeGitCommand(['worktree', 'prune'], { cwd: destinationRepoPath });
     }
   } catch (error) {
     logger.warn(`Some cleanup operations failed: ${(error as Error).message}`);
     logger.warn('Continuing with directory removal...');
   }
 
-  // Step 4: Remove the workspace directory
+  // Step 5: Remove the workspace directory
   logger.verbose(`Removing workspace directory: ${workspaceDir}`);
   await fileOps.removeFile(workspaceDir, `existing workspace directory: ${workspaceDir}`, isDryRun);
 
@@ -381,7 +466,51 @@ export async function cleanupExistingWorkspace(
 }
 
 /**
+ * Check if git branches exist that would conflict with worktree creation
+ */
+async function checkGitBranchConflicts(
+  branchName: string,
+  paths: WorkspacePaths,
+): Promise<{ hasConflicts: boolean; conflictingSources: string[] }> {
+  const conflictingSources: string[] = [];
+
+  // Check source repository
+  if (fs.existsSync(paths.sourceRepoPath)) {
+    try {
+      const result = await executeGitCommand(['branch', '--list', branchName], {
+        cwd: paths.sourceRepoPath,
+      });
+      if (result.stdout.trim()) {
+        conflictingSources.push('source repository');
+      }
+    } catch {
+      // Ignore errors - repository might not exist yet
+    }
+  }
+
+  // Check destination repository if it exists
+  if (paths.destinationRepoPath && fs.existsSync(paths.destinationRepoPath)) {
+    try {
+      const result = await executeGitCommand(['branch', '--list', branchName], {
+        cwd: paths.destinationRepoPath,
+      });
+      if (result.stdout.trim()) {
+        conflictingSources.push('destination repository');
+      }
+    } catch {
+      // Ignore errors - repository might not exist yet
+    }
+  }
+
+  return {
+    hasConflicts: conflictingSources.length > 0,
+    conflictingSources,
+  };
+}
+
+/**
  * Handle existing workspace directory with comprehensive cleanup
+ * Returns true if cleanup was performed or will be performed
  */
 async function handleExistingWorkspace(
   workspaceDir: string,
@@ -391,28 +520,55 @@ async function handleExistingWorkspace(
   isDryRun: boolean,
   isSilent: boolean,
   issueIds: number[],
-): Promise<void> {
-  if (!isDryRun && fs.existsSync(workspaceDir) && (await fs.readdir(workspaceDir)).length > 0) {
+): Promise<boolean> {
+  const workspaceExists =
+    !isDryRun && fs.existsSync(workspaceDir) && (await fs.readdir(workspaceDir)).length > 0;
+
+  // Check for git branch conflicts even if workspace directory doesn't exist
+  const branchConflicts = await checkGitBranchConflicts(branchName, paths);
+
+  // If we have conflicts (workspace or git branches), we need to handle cleanup
+  if (workspaceExists || branchConflicts.hasConflicts) {
+    let conflictMessage = '';
+
+    if (workspaceExists && branchConflicts.hasConflicts) {
+      conflictMessage = `Workspace ${workspaceDir} and git branch '${branchName}' already exist (in ${branchConflicts.conflictingSources.join(', ')}).`;
+    } else if (workspaceExists) {
+      conflictMessage = `Workspace ${workspaceDir} already exists.`;
+    } else {
+      conflictMessage = `Git branch '${branchName}' already exists (in ${branchConflicts.conflictingSources.join(', ')}).`;
+    }
+
     if (isSilent) {
-      logger.warn(`Workspace ${workspaceDir} already exists. Auto-removing in silent mode...`);
-      // Start cleanup progress step
+      logger.warn(`${conflictMessage} Auto-removing in silent mode...`);
+      // Start cleanup progress step (check if step exists to avoid errors)
       if (progressIndicator.isActive()) {
-        progressIndicator.startStep('cleanup');
+        try {
+          progressIndicator.startStep('cleanup');
+        } catch (error) {
+          // If cleanup step doesn't exist, continue without progress tracking for cleanup
+          logger.debug('Cleanup step not found in progress indicator, continuing...');
+        }
       }
       await cleanupExistingWorkspace(workspaceDir, branchName, project, paths, isDryRun);
       // Complete cleanup step
       if (progressIndicator.isActive()) {
-        progressIndicator.completeStep('cleanup');
+        try {
+          progressIndicator.completeStep('cleanup');
+        } catch (error) {
+          // If cleanup step doesn't exist, continue without progress tracking for cleanup
+          logger.debug('Cleanup step not found in progress indicator, continuing...');
+        }
       }
-      return;
+      return true; // Cleanup was performed
     }
 
     if (isNonInteractive()) {
-      logger.error(
-        `Workspace ${workspaceDir} already exists and cannot prompt for confirmation in non-interactive mode.`,
+      logger.error(`${conflictMessage} Cannot prompt for confirmation in non-interactive mode.`);
+      logger.info('Use --silent flag to automatically overwrite existing workspaces and branches.');
+      throw new Error(
+        '\nWorkspace or git branch conflicts - cannot continue in non-interactive mode',
       );
-      logger.info('Use --silent flag to automatically overwrite existing workspaces.');
-      throw new Error('\nWorkspace already exists - cannot continue in non-interactive mode');
     }
 
     // Pause progress bar and ensure clean output for user input
@@ -420,35 +576,115 @@ async function handleExistingWorkspace(
       progressIndicator.pause();
     }
 
-    process.stdout.write(`Workspace already exists. Clean and overwrite? [y/N] `);
+    process.stdout.write(`${conflictMessage} Clean and overwrite? [y/N] `);
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: true, // Force terminal mode for proper prompt display
-    });
-
-    // Use a simple input reading approach
+    // Use raw stdin to capture input without any automatic echoing
     const answer = await new Promise<string>((resolve) => {
-      rl.on('line', (input) => {
-        resolve(input.trim().toLowerCase());
-        rl.close();
-      });
+      let input = '';
+
+      const onData = (chunk: Buffer) => {
+        const char = chunk.toString();
+
+        if (char === '\n' || char === '\r') {
+          // User pressed Enter - process the input
+          process.stdin.removeListener('data', onData);
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+
+          // Show newline only after we've processed input
+          process.stdout.write('\n');
+
+          resolve(input.trim().toLowerCase());
+        } else if (char === '\u0003') {
+          // Ctrl+C - exit gracefully
+          process.stdin.removeListener('data', onData);
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          process.exit(0);
+        } else if (char === '\u007f' || char === '\b') {
+          // Backspace - remove last character
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write('\b \b'); // Move cursor back, write space, move back again
+          }
+        } else if (char.length === 1 && char >= ' ' && char <= '~') {
+          // Printable character - add to input and echo
+          input += char;
+          process.stdout.write(char);
+        }
+      };
+
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.on('data', onData);
     });
 
     if (answer === 'y' || answer === 'yes') {
-      process.stdout.write('\n');
-      // Start cleanup progress step
+      // Initialize progress now that we know user wants cleanup
+      if (
+        !progressIndicator.isActive() &&
+        !isSilent &&
+        process.env.WORKSPACE_DISABLE_PROGRESS !== '1'
+      ) {
+        const steps: ProgressStep[] = [
+          { id: 'cleanup', description: 'Cleaning existing workspace', weight: 1 },
+          { id: 'directories', description: 'Creating workspace', weight: 1 },
+          { id: 'worktrees', description: 'Creating worktrees', weight: 3 },
+          { id: 'context', description: 'Preparing context', weight: 2 },
+          { id: 'postinit', description: 'Running post-init', weight: 1 },
+        ];
+        progressIndicator.initialize(steps, {
+          title: 'Setting up workspace',
+          showETA: false,
+        });
+      }
+
+      // Start cleanup progress step (check if step exists to avoid errors)
       if (progressIndicator.isActive()) {
-        progressIndicator.startStep('cleanup');
+        try {
+          progressIndicator.startStep('cleanup');
+        } catch (error) {
+          // If cleanup step doesn't exist, continue without progress tracking for cleanup
+          logger.debug('Cleanup step not found in progress indicator, continuing...');
+        }
       }
       await cleanupExistingWorkspace(workspaceDir, branchName, project, paths, isDryRun);
       // Complete cleanup step
       if (progressIndicator.isActive()) {
-        progressIndicator.completeStep('cleanup');
+        try {
+          progressIndicator.completeStep('cleanup');
+        } catch (error) {
+          // If cleanup step doesn't exist, continue without progress tracking for cleanup
+          logger.debug('Cleanup step not found in progress indicator, continuing...');
+        }
       }
+      return true; // Cleanup was performed
     } else {
-      process.stdout.write('Continuing with existing workspace.\n\n');
+      process.stdout.write('Continuing with existing workspace.\n');
+
+      // Initialize progress now that we know user doesn't want cleanup
+      if (
+        !progressIndicator.isActive() &&
+        !isSilent &&
+        process.env.WORKSPACE_DISABLE_PROGRESS !== '1'
+      ) {
+        const steps: ProgressStep[] = [
+          { id: 'directories', description: 'Creating workspace', weight: 1 },
+          { id: 'worktrees', description: 'Creating worktrees', weight: 3 },
+          { id: 'context', description: 'Preparing context', weight: 2 },
+          { id: 'postinit', description: 'Running post-init', weight: 1 },
+        ];
+        progressIndicator.initialize(steps, {
+          title: 'Setting up workspace',
+          showETA: false,
+        });
+      }
+
+      // Resume progress bar after user input (no longer needed since we initialize fresh)
+      // if (progressIndicator.isActive()) {
+      //   progressIndicator.resume();
+      // }
+      return false; // No cleanup was performed
     }
   }
 
@@ -497,6 +733,8 @@ async function handleExistingWorkspace(
       );
     }
   }
+
+  return false; // No cleanup was needed
 }
 
 /**
@@ -586,10 +824,10 @@ async function executePostInitCommand(
   project: ProjectConfig,
   paths: WorkspacePaths,
   isDryRun: boolean,
-): Promise<void> {
+): Promise<PostInitResult> {
   if (!project['post-init']) {
     logger.verbose('No post-init command configured, skipping...');
-    return;
+    return { success: true };
   }
 
   // Copy environment file if configured
@@ -612,11 +850,11 @@ async function executePostInitCommand(
 
   if (isDryRun) {
     logger.verbose(`[DRY RUN] Would execute: ${project['post-init']}`);
-    return;
+    return { success: true };
   }
 
   try {
-    // Capture output instead of inheriting stdio - only show on error
+    // Capture output instead of inheriting stdio - buffer all output
     const result = await executeShellCommand(project['post-init'], {
       cwd: paths.workspaceDir,
       stdio: 'pipe', // Capture output instead of inheriting,
@@ -624,20 +862,23 @@ async function executePostInitCommand(
     });
 
     if (result.exitCode !== 0) {
-      // Only show output on error
-      console.error(`\n❌ Post-init command failed:`);
-      if (result.stdout) {
-        console.error('STDOUT:', result.stdout);
-      }
-      if (result.stderr) {
-        console.error('STDERR:', result.stderr);
-      }
-      throw new Error(`Post-init command failed with exit code ${result.exitCode}`);
+      return {
+        success: false,
+        output: {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+        },
+      };
     }
-    // Success: don't show any output
+
+    // Success: return success result
+    return { success: true };
   } catch (error) {
-    logger.warn(`Error: ${(error as Error).message}`);
-    logger.warn('   This is optional - the workspace is still ready for development.');
+    return {
+      success: false,
+      error: error as Error,
+    };
   }
 }
 
@@ -659,8 +900,8 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
     isDryRun,
   } = options;
 
-  // Use universal templates for all workflows
-  const workflowTemplates = getWorkflowTemplates();
+  // Select templates based on project configuration
+  const workflowTemplates = getWorkflowTemplatesWithChoice(project);
 
   logger.verbose(`📋 Selected templates: ${workflowTemplates.join(', ')}`);
 
@@ -680,6 +921,48 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
     } else {
       logger.warn(`WARNING: Template not found: ${templateFile}`);
     }
+  }
+
+  // Verify all expected templates were created
+  if (!isDryRun) {
+    const missingTemplates: string[] = [];
+    for (const templateFile of workflowTemplates) {
+      const templatePath = path.join(paths.workspaceDir, templateFile);
+      if (!(await fs.pathExists(templatePath))) {
+        missingTemplates.push(templateFile);
+      }
+    }
+
+    if (missingTemplates.length > 0) {
+      logger.warn(`⚠️ Some templates were not created: ${missingTemplates.join(', ')}`);
+    } else {
+      logger.verbose(`✅ All ${workflowTemplates.length} workflow templates created successfully`);
+    }
+  }
+
+  // Copy workspace copilot instructions
+  const workspaceCopilotInstructionsSource = path.join(
+    templatesDir,
+    'workspace-copilot-instructions.md',
+  );
+  const workspaceCopilotInstructionsDest = path.join(
+    paths.workspaceDir,
+    '.github',
+    'copilot-instructions.md',
+  );
+
+  if (await fs.pathExists(workspaceCopilotInstructionsSource)) {
+    await fileOps.ensureDir(
+      path.dirname(workspaceCopilotInstructionsDest),
+      '.github directory',
+      isDryRun,
+    );
+    await fileOps.copyFile(
+      workspaceCopilotInstructionsSource,
+      workspaceCopilotInstructionsDest,
+      'workspace copilot instructions',
+      isDryRun,
+    );
   }
 
   // Generate placeholder values and update templates
@@ -712,6 +995,25 @@ async function generateTemplatesAndDocs(options: GenerateTemplatesOptions): Prom
         isDryRun,
       );
     }
+
+    // Update workspace copilot instructions with placeholders
+    const copilotInstructionsPath = path.join(
+      paths.workspaceDir,
+      '.github',
+      'copilot-instructions.md',
+    );
+    if (await fs.pathExists(copilotInstructionsPath)) {
+      let contents = await fs.readFile(copilotInstructionsPath, 'utf8');
+      for (const [placeholder, value] of Object.entries(placeholderValues)) {
+        contents = contents.split(placeholder).join(value);
+      }
+      await fileOps.writeFile(
+        copilotInstructionsPath,
+        contents,
+        'copilot instructions with placeholders',
+        isDryRun,
+      );
+    }
   }
 
   // Generate bug report or workspace info file
@@ -741,8 +1043,8 @@ async function generateAnalysisTemplatesAndDocs(options: GenerateTemplatesOption
     isDryRun,
   } = options;
 
-  // Detect workflow type and select templates
-  const workflowTemplates = getWorkflowTemplates();
+  // Select templates based on project configuration
+  const workflowTemplates = getWorkflowTemplatesWithChoice(project);
 
   logger.verbose(`� Selected templates: ${workflowTemplates.join(', ')}`);
 
@@ -761,6 +1063,48 @@ async function generateAnalysisTemplatesAndDocs(options: GenerateTemplatesOption
     } else {
       logger.verbose(`WARNING: Template ${templateName} not found, skipping`);
     }
+  }
+
+  // Verify all expected templates were created
+  if (!isDryRun) {
+    const missingTemplates: string[] = [];
+    for (const templateName of workflowTemplates) {
+      const templatePath = path.join(paths.workspaceDir, templateName);
+      if (!(await fs.pathExists(templatePath))) {
+        missingTemplates.push(templateName);
+      }
+    }
+
+    if (missingTemplates.length > 0) {
+      logger.warn(`⚠️ Some workflow templates were not created: ${missingTemplates.join(', ')}`);
+    } else {
+      logger.verbose(`✅ All ${workflowTemplates.length} workflow templates verified successfully`);
+    }
+  }
+
+  // Copy workspace copilot instructions
+  const workspaceCopilotInstructionsSource = path.join(
+    templatesDir,
+    'workspace-copilot-instructions.md',
+  );
+  const workspaceCopilotInstructionsDest = path.join(
+    paths.workspaceDir,
+    '.github',
+    'copilot-instructions.md',
+  );
+
+  if (await fs.pathExists(workspaceCopilotInstructionsSource)) {
+    await fileOps.ensureDir(
+      path.dirname(workspaceCopilotInstructionsDest),
+      '.github directory',
+      isDryRun,
+    );
+    await fileOps.copyFile(
+      workspaceCopilotInstructionsSource,
+      workspaceCopilotInstructionsDest,
+      'workspace copilot instructions',
+      isDryRun,
+    );
   }
 
   // Generate placeholder values for analysis mode (with mock key files)
@@ -790,6 +1134,25 @@ async function generateAnalysisTemplatesAndDocs(options: GenerateTemplatesOption
         promptPath,
         contents,
         `prompt file ${file} with placeholders`,
+        isDryRun,
+      );
+    }
+
+    // Update workspace copilot instructions with placeholders
+    const copilotInstructionsPath = path.join(
+      paths.workspaceDir,
+      '.github',
+      'copilot-instructions.md',
+    );
+    if (await fs.pathExists(copilotInstructionsPath)) {
+      let contents = await fs.readFile(copilotInstructionsPath, 'utf8');
+      for (const [placeholder, value] of Object.entries(placeholderValues)) {
+        contents = contents.split(placeholder).join(value);
+      }
+      await fileOps.writeFile(
+        copilotInstructionsPath,
+        contents,
+        'copilot instructions with placeholders',
         isDryRun,
       );
     }
@@ -1392,13 +1755,12 @@ Related commands:
             }
 
             const prompts = (await import('prompts')).default;
-            const projects = configManager.listProjects();
 
-            if (projects.length === 0) {
-              console.log('No projects configured. Run "space setup" to add projects first.');
+            if (!ensureProjectsConfigured(true)) {
               return;
             }
 
+            const projects = configManager.listProjects();
             console.log("🚀 Let's create a new workspace!\n");
 
             // Interactive prompts for init
@@ -1505,7 +1867,7 @@ Related commands:
           const isVerbose = options.verbose || options.dryRun;
           const isDryRun = options.dryRun || false;
           const isAnalyseMode = options.analyse || false;
-          const isSilent = options.silent || isNonInteractive() || false;
+          const isSilent = options.silent || isNonInteractive() || isDryRun || false;
 
           // Check if --pr option was used globally
           const globalOpts = program.opts();
@@ -1537,7 +1899,7 @@ Related commands:
           }
 
           // Get workspace paths for this project
-          const workspaceName = branchName.replace(/\//g, '_');
+          const workspaceName = branchName;
           const paths = configManager.getWorkspacePaths(projectKey, workspaceName);
 
           const initMessage =

@@ -128,8 +128,8 @@ export async function executeShellCommand(
       exitCode: result.exitCode || 0,
     };
   } catch (error: any) {
-    logger.error(`Shell command execution failed: ${shellCommand} - ${error.message}`);
-    logger.debug(`Error details: ${JSON.stringify(error, null, 2)}`);
+    // Error details are captured in return value for proper handling upstream
+    // Avoid logging here to prevent interference with progress indicators
 
     return {
       stdout: error.stdout || '',

@@ -10,7 +10,9 @@ describe('Universal Workflow System', () => {
       expect(templates).toContain('fix-and-test.prompt.md');
       expect(templates).toContain('review-changes.prompt.md');
       expect(templates).toContain('PR_DESCRIPTION_TEMPLATE.md');
-      expect(templates).toHaveLength(4);
+      expect(templates).toContain('PR_REVIEW_INSTRUCTIONS.md');
+      expect(templates).toContain('enhanced-analysis.prompt.md');
+      expect(templates).toHaveLength(6);
     });
 
     it('should always return the same templates regardless of parameters', () => {
@@ -28,8 +30,10 @@ describe('Universal Workflow System', () => {
       expect(steps).toEqual(`**Next recommended prompt:**
 
 - Issue analysis: \`analysis.prompt.md\`
+- Enhanced analysis: \`enhanced-analysis.prompt.md\`
 - Implementation: \`fix-and-test.prompt.md\`
-- Review changes: \`review-changes.prompt.md\``);
+- Review changes: \`review-changes.prompt.md\`
+- PR review guide: \`PR_REVIEW_INSTRUCTIONS.md\``);
     });
 
     it('should always return the same steps', () => {

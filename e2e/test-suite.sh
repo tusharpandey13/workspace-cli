@@ -36,27 +36,27 @@ run_happy_path_tests() {
         init test feature/test-branch --non-interactive
     
     # HAPPY-04: List workspaces after init
-    run_test_case "HAPPY-04" "List workspaces after init" 0 "feature_test-branch" "$config_file" \
+    run_test_case "HAPPY-04" "List workspaces after init" 0 "feature/test-branch" "$config_file" \
         list --non-interactive
     
     # HAPPY-05: List workspaces for specific project
-    run_test_case "HAPPY-05" "List workspaces for specific project" 0 "feature_test-branch" "$config_file" \
+    run_test_case "HAPPY-05" "List workspaces for specific project" 0 "feature/test-branch" "$config_file" \
         list test --non-interactive
     
     # HAPPY-06: Get info for existing workspace
     run_test_case "HAPPY-06" "Get info for existing workspace" 0 "Test Project" "$config_file" \
-        info test feature_test-branch --non-interactive
+        info test "feature/test-branch" --non-interactive
     
     # HAPPY-07: Clean existing workspace
     run_test_case "HAPPY-07" "Clean existing workspace" 0 "cleaned" "$config_file" \
-        clean test feature_test-branch --force --non-interactive
+        clean test "feature/test-branch" --force --non-interactive
     
     # HAPPY-08: Init with GitHub issue IDs
     run_test_case "HAPPY-08" "Init with GitHub issue IDs" 0 "Workspace location" "$config_file" \
         init test 123 456 bugfix/issue-123 --non-interactive
     
     # Clean up for next test
-    run_space_command "$config_file" clean test bugfix_issue-123 --force --non-interactive >/dev/null 2>&1 || true
+    run_space_command "$config_file" clean test "bugfix/issue-123" --force --non-interactive >/dev/null 2>&1 || true
     
     # HAPPY-09: Init with dry-run
     run_test_case "HAPPY-09" "Init with dry-run" 0 "DRY-RUN" "$config_file" \
@@ -67,17 +67,17 @@ run_happy_path_tests() {
         init test feature/analyse-test --analyse --non-interactive
     
     # Clean up for next test
-    run_space_command "$config_file" clean test feature_analyse-test --force --non-interactive >/dev/null 2>&1 || true
+    run_space_command "$config_file" clean test "feature/analyse-test" --force --non-interactive >/dev/null 2>&1 || true
     
     # Create workspace for clean test
     run_space_command "$config_file" init test feature/clean-test --non-interactive >/dev/null 2>&1
     
     # HAPPY-11: Clean with dry-run
     run_test_case "HAPPY-11" "Clean with dry-run" 0 "would" "$config_file" \
-        clean test feature_clean-test --dry-run --non-interactive
+        clean test "feature/clean-test" --dry-run --non-interactive
     
     # Actually clean the workspace
-    run_space_command "$config_file" clean test feature_clean-test --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/clean-test" --force --non-interactive >/dev/null 2>&1
     
     # HAPPY-12: Setup with force option
     run_test_case "HAPPY-12" "Setup with force option" 0 "" "$config_file" \
@@ -118,7 +118,7 @@ run_failure_path_tests() {
         init test feature/duplicate-test --non-interactive
     
     # Clean up
-    run_space_command "$config_file" clean test feature_duplicate-test --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/duplicate-test" --force --non-interactive >/dev/null 2>&1
     
     # FAIL-04: Clean non-existent workspace
     run_test_case "FAIL-04" "Clean non-existent workspace" 1 "not found" "$config_file" \
@@ -141,10 +141,10 @@ run_failure_path_tests() {
     
     # FAIL-08: Clean without force
     run_test_case "FAIL-08" "Clean without force" 1 "force" "$config_file" \
-        clean test feature_force-test --non-interactive
+        clean test "feature/force-test" --non-interactive
     
     # Clean up
-    run_space_command "$config_file" clean test feature_force-test --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/force-test" --force --non-interactive >/dev/null 2>&1
     
     # FAIL-09: Init with insufficient args
     run_test_case "FAIL-09" "Init with insufficient args" 1 "" "$config_file" \
@@ -187,28 +187,28 @@ EOF
         init nextjs-auth0 feature/repo-name-test --non-interactive
     
     # Clean up
-    run_space_command "$config_file" clean nextjs-auth0-project feature_repo-name-test --force --non-interactive >/dev/null 2>&1 || true
+    run_space_command "$config_file" clean nextjs-auth0-project "feature/repo-name-test" --force --non-interactive >/dev/null 2>&1 || true
     
     # EDGE-03: Multiple GitHub issue IDs
     run_test_case "EDGE-03" "Multiple GitHub issue IDs" 0 "Workspace location" "$config_file" \
         init test 123 456 789 feature/multi-issues --non-interactive
     
     # Clean up
-    run_space_command "$config_file" clean test feature_multi-issues --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/multi-issues" --force --non-interactive >/dev/null 2>&1
     
     # EDGE-04: Branch with special characters (CLI correctly rejects invalid characters)
     run_test_case "EDGE-04" "Branch with special characters" 1 "invalid characters" "$config_file" \
         init test "feature/test-with_special.chars" --non-interactive
     
     # Clean up
-    run_space_command "$config_file" clean test "feature_test-with_special.chars" --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/test-with_special.chars" --force --non-interactive >/dev/null 2>&1
     
     # EDGE-05: Very long branch name
     run_test_case "EDGE-05" "Very long branch name" 0 "Workspace location" "$config_file" \
         init test feature/very-long-branch-name-that-exceeds-normal-length-limits --non-interactive
     
     # Clean up
-    run_space_command "$config_file" clean test feature_very-long-branch-name-that-exceeds-normal-length-limits --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/very-long-branch-name-that-exceeds-normal-length-limits" --force --non-interactive >/dev/null 2>&1
     
     # EDGE-07: Config with missing projects section
     local invalid_config
@@ -237,7 +237,7 @@ EOF
         init test feature/interactive-test
     
     # Clean up for next test
-    run_space_command "$config_file" clean test feature_interactive-test --force --non-interactive >/dev/null 2>&1 || true
+    run_space_command "$config_file" clean test "feature/interactive-test" --force --non-interactive >/dev/null 2>&1 || true
     
     # EDGE-12: Interactive overwrite prompt decline
     # First create workspace, then test overwrite decline
@@ -246,7 +246,7 @@ EOF
         init test feature/interactive-test
     
     # Clean up after test
-    run_space_command "$config_file" clean test feature_interactive-test --force --non-interactive >/dev/null 2>&1 || true
+    run_space_command "$config_file" clean test "feature/interactive-test" --force --non-interactive >/dev/null 2>&1 || true
 }
 
 run_verification_tests() {
@@ -265,7 +265,7 @@ run_verification_tests() {
     TESTS_TOTAL=$((TESTS_TOTAL + 1))
     
     # VERIFY-02: Workspace cleanup filesystem state
-    run_space_command "$config_file" clean test feature_verify-create --force --non-interactive >/dev/null 2>&1
+    run_space_command "$config_file" clean test "feature/verify-create" --force --non-interactive >/dev/null 2>&1
     # Note: This test might be tricky as the workspaces directory might still exist but be empty
     
     # VERIFY-03: Config file generation
@@ -325,12 +325,12 @@ run_integration_tests() {
     fi
     
     # Info
-    if $workflow_success && ! run_space_command "$config_file" info test feature_workflow --non-interactive >/dev/null 2>&1; then
+    if $workflow_success && ! run_space_command "$config_file" info test "feature/workflow" --non-interactive >/dev/null 2>&1; then
         workflow_success=false
     fi
     
     # Clean
-    if $workflow_success && ! run_space_command "$config_file" clean test feature_workflow --force --non-interactive >/dev/null 2>&1; then
+    if $workflow_success && ! run_space_command "$config_file" clean test "feature/workflow" --force --non-interactive >/dev/null 2>&1; then
         workflow_success=false
     fi
     

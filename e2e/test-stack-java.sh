@@ -71,7 +71,7 @@ test_workspace_creation() {
     if timeout "$TIMEOUT_BUILD" "$SPACE_CLI" init java-test feature/e2e-test --config "$config_file" --non-interactive; then
         
         # Verify workspace directory was created
-        local workspace_dir="src/workspaces/java-test_feature-e2e-test"
+        local workspace_dir="src/workspaces/java-test/feature/e2e-test"
         if [[ -d "$workspace_dir" ]]; then
             log_debug "✅ Workspace directory created: $workspace_dir"
             
@@ -100,7 +100,7 @@ test_environment_files() {
     
     log_test_start "$test_name" "Testing environment file copying"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test/feature/e2e-test"
     local env_file="$workspace_dir/.env.local"
     
     if [[ -f "$env_file" ]]; then
@@ -127,7 +127,7 @@ test_post_init_execution() {
     
     log_test_start "$test_name" "Testing post-init command execution"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test/feature/e2e-test"
     
     # Check if gradlew exists and post-init ran
     if [[ -f "$workspace_dir/spring-boot/gradlew" ]]; then
@@ -155,7 +155,7 @@ test_git_worktree_structure() {
     
     log_test_start "$test_name" "Testing git worktree structure"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test/feature/e2e-test"
     
     cd "$workspace_dir"
     
@@ -186,7 +186,7 @@ test_sample_repository() {
     
     log_test_start "$test_name" "Testing sample repository integration"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/java-test/feature/e2e-test"
     
     # Check if sample repository was cloned
     if [[ -d "$workspace_dir/gs-spring-boot" ]]; then

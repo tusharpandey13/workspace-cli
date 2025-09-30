@@ -394,8 +394,8 @@ export function validateWorkspaceName(name: string | null | undefined): string {
   // Replace spaces with hyphens and convert to lowercase
   let sanitized = trimmed.toLowerCase().replace(/\s+/g, '-');
 
-  // Remove any remaining invalid characters (keep only alphanumeric, hyphens, and underscores)
-  sanitized = sanitized.replace(/[^a-zA-Z0-9-_]/g, '');
+  // Remove any remaining invalid characters (keep only alphanumeric, hyphens, underscores, and forward slashes)
+  sanitized = sanitized.replace(/[^a-zA-Z0-9-_/]/g, '');
 
   if (sanitized === '') {
     throw new Error('Workspace name contains no valid characters');

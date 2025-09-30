@@ -20,9 +20,9 @@ projects:
   auth0-spa-js:
     name: 'Auth0 Single Page App SDK'
     repo: 'https://github.com/auth0/auth0-spa-js.git'
-    sample_repo: 'https://github.com/auth0-samples/auth0-spa-js-samples.git'
+    sample_repo: 'https://github.com/tusharpandey13/auth0-spa-js-sample.git'
     env_file: 'auth0-spa.env.local'
-    post-init: 'cd auth0-spa-js && npm install && cd ../auth0-spa-js-samples/01-login && npm install'
+    post-init: 'cd auth0-spa-js && npm install && cd ../auth0-spa-js-samples && npm install'
 
   auth0-react:
     name: 'Auth0 React SDK'

@@ -7,11 +7,12 @@ import { logger, LogLevel } from '../utils/logger.js';
 import { validateDependencies } from '../utils/validation.js';
 import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
-import { SetupWizard } from '../services/setupWizard.js';
 import prompts from 'prompts';
 import { buildHelpText } from '../utils/help.js';
 import { setGlobalOptions } from '../utils/globalOptions.js';
 import { commandLoader } from '../utils/lazyLoader.js';
+import { getProjectsWithValidation, displayProjectsList } from '../utils/projectValidation.js';
+import { createSetupWizard, handleSetupResult, checkSetupNeeded } from '../utils/setupHelpers.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
@@ -64,25 +65,13 @@ async function executeListCommand(): Promise<void> {
  */
 async function executeProjectsCommand(): Promise<void> {
   try {
-    const projects = configManager.listProjects();
+    const projects = getProjectsWithValidation(false);
 
     if (projects.length === 0) {
-      logger.info('No projects configured.');
       return;
     }
 
-    console.log('\nAvailable projects:');
-
-    for (const projectKey of projects) {
-      const project = configManager.getProject(projectKey);
-      console.log(`  ${projectKey}: ${project.name}`);
-      console.log(`    Repo: ${project.repo}`);
-      console.log(`    Samples: ${project.sample_repo || 'N/A'}`);
-      if (project.github_org) {
-        console.log(`    GitHub Org: ${project.github_org}`);
-      }
-      console.log('');
-    }
+    displayProjectsList(projects);
 
     console.log('Usage:');
     console.log(`  space init <project> [github-ids...] <branch-name>`);
@@ -121,24 +110,15 @@ async function executeInteractiveInit(): Promise<void> {
  * Execute the setup command logic
  */
 async function executeSetupCommand(options: { force?: boolean } = {}): Promise<void> {
-  const { SetupWizard } = await import('../services/setupWizard.js');
-  const wizard = new SetupWizard();
+  const wizard = createSetupWizard();
 
   // Check if setup is needed, but allow force override for interactive mode
-  if (!wizard.isSetupNeeded({}) && !options.force) {
-    // For interactive menu usage, automatically proceed with force
-    // In CLI usage, require explicit --force flag
-    console.log('Configuration already exists. Proceeding with reconfiguration...');
-  }
+  checkSetupNeeded(wizard, options.force);
 
   // Run the setup wizard with force option
   const result = await wizard.run({ force: options.force || false });
 
-  if (result.completed) {
-    logger.info('Setup completed! You can now use space-cli commands.');
-  } else if (result.skipped) {
-    logger.info('Setup was skipped. Run "space setup" when you\'re ready.');
-  }
+  handleSetupResult(result);
 }
 
 /**
@@ -151,10 +131,9 @@ async function showCompactProjects(): Promise<void> {
       return;
     }
 
-    const projects = configManager.listProjects();
+    const projects = getProjectsWithValidation(true);
 
     if (projects.length === 0) {
-      console.log('No projects configured. Run "space setup" to add projects first.');
       return;
     }
 
@@ -267,7 +246,7 @@ program.action(async (options) => {
         }
 
         // No config exists - run setup wizard
-        const wizard = new SetupWizard();
+        const wizard = createSetupWizard();
         logger.info('Welcome to space-cli! It looks like this is your first time.');
         logger.info("Let's set up your space configuration.\n");
 

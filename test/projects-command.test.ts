@@ -176,7 +176,7 @@ describe('Projects Command', () => {
         env: { ...process.env, NODE_ENV: 'test' },
       });
 
-      expect(result).toContain('No projects configured.');
+      expect(result).toContain('Configuration file found, but no projects are configured.');
     });
 
     test('should handle missing configuration file gracefully', () => {

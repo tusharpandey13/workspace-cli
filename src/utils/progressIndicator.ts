@@ -66,12 +66,12 @@ export class ProgressIndicator {
     this.progressBar = new cliProgress.SingleBar(
       {
         format,
-        // barCompleteChar: '\u2588', // Lower five eighths block
-        // barIncompleteChar: '\u2591', // Light shade
+        barCompleteChar: '\u2588', // Lower five eighths block
+        barIncompleteChar: '\u2591', // Light shade
         barsize: 25, // Half the default size (was 50)
         hideCursor: true,
         stopOnComplete: true,
-        clearOnComplete: true,
+        clearOnComplete: false,
         gracefulExit: true,
         noTTYOutput: true,
         // Custom colors: bright green for filled, dark gray for incomplete
@@ -88,7 +88,7 @@ export class ProgressIndicator {
           return complete + incomplete;
         },
       },
-      cliProgress.Presets.rect,
+      // cliProgress.Presets.rect,
     );
 
     this.progressBar.start(this.totalSteps, 0, {

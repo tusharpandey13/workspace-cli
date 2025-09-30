@@ -1,0 +1,44 @@
+# Generic gitignore patterns for unknown tech stacks
+# Added by space-cli for sample repository
+
+# Common build artifacts
+dist/
+build/
+target/
+out/
+bin/
+obj/
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment files
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.cache

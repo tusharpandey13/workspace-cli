@@ -69,7 +69,7 @@ test_workspace_creation() {
     sleep 2
     
     # Verify workspace directory was created
-    local workspace_dir="src/workspaces/js-test/feature_e2e-test"
+    local workspace_dir="src/workspaces/js-test/feature/e2e-test"
     if [[ -d "$workspace_dir" ]]; then
         log_debug "✅ Workspace directory created: $workspace_dir"
         
@@ -95,7 +95,7 @@ test_environment_files() {
     
     log_test_start "$test_name" "Testing environment file copying"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature_e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature/e2e-test"
     local env_file="$workspace_dir/awesome/.env.local"
     
     if [[ -f "$env_file" ]]; then
@@ -123,7 +123,7 @@ test_post_init_execution() {
     
     log_test_start "$test_name" "Testing post-init command execution"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature_e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature/e2e-test"
     
     # Check if post-init command executed (simple validation)
     if [[ -f "$workspace_dir/is/package.json" ]]; then
@@ -143,7 +143,7 @@ test_git_worktree_structure() {
     
     log_test_start "$test_name" "Testing git worktree structure"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature_e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature/e2e-test"
     
     cd "$workspace_dir/is"
     
@@ -175,7 +175,7 @@ test_sample_repository() {
     
     log_test_start "$test_name" "Testing sample repository integration"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature_e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/js-test/feature/e2e-test"
     
     # Check if sample repository was cloned
     if [[ -d "$workspace_dir/awesome" ]]; then

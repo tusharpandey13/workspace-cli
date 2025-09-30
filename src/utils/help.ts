@@ -29,12 +29,15 @@ export function readHelpFile(filename: string): string {
 export function buildHelpText(): string {
   const globalOptions = readHelpFile('global-options.txt');
   const examples = readHelpFile('examples.txt');
+  const enhancedFeatures = readHelpFile('enhanced-features.txt');
   const gettingStarted = readHelpFile('getting-started.txt');
 
   return `
 ${globalOptions}
 
 ${examples}
+
+${enhancedFeatures}
 
 ${gettingStarted}`;
 }

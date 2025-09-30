@@ -1,6 +1,6 @@
-import { configManager } from '../utils/config.js';
 import { logger } from '../utils/logger.js';
 import { handleError } from '../utils/errors.js';
+import { getProjectsWithValidation, displayProjectsList } from '../utils/projectValidation.js';
 import type { Command } from 'commander';
 
 export function projectsCommand(program: Command): void {
@@ -35,25 +35,13 @@ Related commands:
     )
     .action(() => {
       try {
-        const projects = configManager.listProjects();
+        const projects = getProjectsWithValidation(false);
 
         if (projects.length === 0) {
-          logger.info('No projects configured.');
           return;
         }
 
-        console.log('\nAvailable projects:');
-
-        for (const projectKey of projects) {
-          const project = configManager.getProject(projectKey);
-          console.log(`  ${projectKey}: ${project.name}`);
-          console.log(`    Repo: ${project.repo}`);
-          console.log(`    Samples: ${project.sample_repo || 'N/A'}`);
-          if (project.github_org) {
-            console.log(`    GitHub Org: ${project.github_org}`);
-          }
-          console.log('');
-        }
+        displayProjectsList(projects);
 
         console.log('Usage:');
         console.log(`  space init <project> [github-ids...] <branch-name>`);

@@ -71,7 +71,7 @@ test_workspace_creation() {
     if timeout "$TIMEOUT_BUILD" "$SPACE_CLI" init go-test feature/e2e-test --config "$config_file" --non-interactive; then
         
         # Verify workspace directory was created
-        local workspace_dir="src/workspaces/go-test_feature-e2e-test"
+        local workspace_dir="src/workspaces/go-test/feature/e2e-test"
         if [[ -d "$workspace_dir" ]]; then
             log_debug "✅ Workspace directory created: $workspace_dir"
             
@@ -100,7 +100,7 @@ test_environment_files() {
     
     log_test_start "$test_name" "Testing environment file copying"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test/feature/e2e-test"
     local env_file="$workspace_dir/.env.local"
     
     if [[ -f "$env_file" ]]; then
@@ -127,7 +127,7 @@ test_post_init_execution() {
     
     log_test_start "$test_name" "Testing post-init command execution"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test/feature/e2e-test"
     
     # Check if go.mod exists and go mod download ran
     if [[ -f "$workspace_dir/example/go.mod" ]]; then
@@ -157,7 +157,7 @@ test_git_worktree_structure() {
     
     log_test_start "$test_name" "Testing git worktree structure"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test/feature/e2e-test"
     
     cd "$workspace_dir"
     
@@ -188,7 +188,7 @@ test_sample_repository() {
     
     log_test_start "$test_name" "Testing sample repository integration"
     
-    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test_feature-e2e-test"
+    local workspace_dir="$TEST_BASE_DIR/src/workspaces/go-test/feature/e2e-test"
     
     # For Go test, sample_repo is the same as main repo
     # Check if the repository structure is correct

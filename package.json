@@ -29,7 +29,8 @@
     "install-global": "pnpm run build && pnpm link --global && pnpm run test:install",
     "install-global:dev": "pnpm run build:dev && pnpm link --global && pnpm run test:install",
     "uninstall-global": "pnpm remove --global @tusharpandey13/space-cli 2>/dev/null || true",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "tmp": "tsx src/bin/workspace.ts init next tmp/invalid-header"
   },
   "keywords": [
     "cli",

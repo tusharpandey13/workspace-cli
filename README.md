@@ -4,195 +4,173 @@
 
 # Space CLI
 
-> **Stack-agnostic workspace CLI using git worktrees**
-
-Space CLI is a powerful development tool that automates multi-worktree workflows for any codebase. Create isolated development environments for different branches, features, or pull requests without the overhead of multiple repository clones.
-
 [![npm version](https://badge.fury.io/js/@tusharpandey13%2Fspace-cli.svg)](https://www.npmjs.com/package/@tusharpandey13/space-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
----
+> **End context switching pain in monorepos with automated git worktrees**
+
+- Isolated and configurable git-workree backed workspaces.
+- Ideal for monorepos and AI assited development.
+- Automatically fetches context from github issues and PRs
+- Feature-focused directory structure(`/src/next/feat/sso/nextjs-auth0`) instead of project-focused(`/src/nextjs-auth0`)
 
 ## 🚀 Quick Start
 
-### Installation
-
-**Global Installation (Recommended):**
-
 ```bash
 pnpm add -g @tusharpandey13/space-cli
-space --help
 ```
 
-**Alternative with npm:**
+**That's it!** You now have isolated directories for your main repo and samples, ready for development.  
+`space` comes **pre-configured** with popular auth0 SDK repos including web, mobile, server and cli repos. Please take a look at the **compatibility matrix** for more info
 
-```bash
-npm i -g @tusharpandey13/space-cli
-space --help
+You can now just run:
+
+```
+space init auth0-spa-js feat/dpop
 ```
 
-**One-time usage:**
-
-```bash
-npx @tusharpandey13/space-cli --help
-npx @tusharpandey13/space-cli init next feature/my-branch
-```
-
-### Your First Workspace
-
-```bash
-# 1. Set up space CLI (first time only)
-space setup
-
-# 2. See available projects
-space projects
-
-# 3. Create a workspace for a new feature
-space init next feature/auth-improvements
-
-# 4. Start developing in the created directories
-cd ~/src/workspaces/next_feature-auth-improvements
-```
-
----
+and it will create
 
 ## 💡 Core Concepts
 
-### What are Workspaces?
+### Workspaces = Isolated Development Environments
 
-A **workspace** is an isolated development environment that contains:
+Each workspace contains:
 
-- A main repository checked out to your target branch
-- Related sample/test repositories
-- Environment configuration files
-- Dedicated directory structure
+- **Main repo** on your target branch
+- **Sample repos** for testing (if configured)
+- **Environment files** ready to use
+- **Dedicated directory** that doesn't interfere with other work
 
-### Why Git Worktrees?
+### Git Worktrees: The Magic Behind It
 
-Instead of cloning repositories multiple times, Space CLI uses **git worktrees** to:
+Instead of multiple repo clones, Space CLI uses **git worktrees**:
 
-- 🚀 **Save disk space** - Share git objects between worktrees
-- ⚡ **Switch contexts faster** - No need to stash/commit/checkout
-- 🔄 **Work on multiple features** - Parallel development environments
-- 🧪 **Test different branches** - Isolated environments for each branch
-- 🎯 **Optimized performance** - ~195ms startup time, 12MB memory footprint
+- ✅ **Shared git history** - One `.git` folder, multiple working directories
+- ✅ **Instant branch switching** - No checkout delays
+- ✅ **Parallel work** - Multiple branches checked out simultaneously
+- ✅ **Disk space savings** - ~70% less storage vs separate clones
 
 ---
 
-## 📋 Commands
+## ✨ Key Features
 
-### Essential Commands
+### 🤖 AI-Powered Development
 
-#### `space init <project> [branch]`
+- **Auto Copilot setup** - Creates `.github/copilot-instructions.md` with project context
+- **Smart PR templates** - Structured review templates with security checklists
+- **Analysis templates** - Pre-built prompts for issue investigation
+- **Sample integration** - AI helps reproduce issues in sample apps
 
-Create a new workspace for the specified project and branch.
+### 🔧 Intelligent Automation
+
+- **Smart gitignore** - Auto-configures based on detected tech stack
+- **Environment handling** - Copies and manages env files automatically
+- **Post-init scripts** - Runs setup commands after workspace creation
+- **Progress tracking** - Visual feedback for long operations
+
+### � Performance Optimized
+
+- **Sub-200ms startup** - Cached config loading
+- **Lazy module loading** - Only loads what you need
+- **12MB memory footprint** - Lightweight and fast
+
+---
+
+## 📋 Essential Commands
+
+### Create Workspaces
 
 ```bash
-space init next feature/user-auth
-space init react bugfix/navbar-issue
-space --pr 123 init next  # Create workspace for PR #123
+space init <project> [branch]           # Create new workspace
+space init next feature/user-auth       # Example: NextJS project, auth feature
+space --pr 123 init react               # Create workspace for PR #123
 ```
 
-#### `space list`
-
-Show all existing workspaces across all projects.
+### Manage Workspaces
 
 ```bash
-space list
+space list                              # Show all workspaces
+space projects                          # Show available projects
+space info next feature_user-auth       # Get workspace details
+space clean next feature_user-auth      # Remove workspace
 ```
 
-#### `space projects`
-
-Display available projects from your configuration.
+### Setup & Configuration
 
 ```bash
-space projects
+space setup                             # Interactive setup wizard
+space validate                          # Check configuration and dependencies
 ```
 
-#### `space info <project> <workspace>`
+### Common Workflows
 
-Get detailed information about a specific workspace.
+**Feature Development:**
 
 ```bash
-space info next feature_user-auth
+space init myapp feature/new-login      # Create workspace
+cd ~/src/workspaces/myapp/feature/new-login/myapp
+# Work on your feature...
+space clean myapp feature/new-login     # Clean up when done
 ```
 
-#### `space clean <project> <workspace>`
-
-Remove a workspace completely.
+**Bug Investigation:**
 
 ```bash
-space clean next feature_user-auth
+space init myapp bugfix/timeout-issue   # Isolated environment for bug fixing
+cd ~/src/workspaces/myapp/bugfix/timeout-issue
+# Investigate and fix...
 ```
 
-### Management Commands
-
-#### `space setup`
-
-Interactive setup wizard to configure Space CLI.
+**PR Review:**
 
 ```bash
-space setup
-```
-
-#### `space validate`
-
-Validate your current configuration and dependencies.
-
-```bash
-space validate
+space --pr 456 init myapp               # Review someone's PR
+cd ~/src/workspaces/myapp/pr-456
+# Test their changes...
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-Space CLI uses a `config.yaml` file to define projects and global settings.
-
-### Basic Configuration
+Space CLI uses a simple `config.yaml` file. Run `space setup` for guided configuration, or create manually:
 
 ```yaml
 # config.yaml
 projects:
-  next:
-    name: 'Next.js Project'
+  nextjs-auth0:
+    name: 'NextJS Auth0 SDK'
     repo: 'https://github.com/auth0/nextjs-auth0.git'
     sample_repo: 'https://github.com/auth0-samples/auth0-nextjs-samples.git'
     env_file: 'next.env.local'
     post-init: 'cd nextjs-auth0 && pnpm i && cd ../auth0-nextjs-samples/Sample-01 && pnpm i'
 
-  react:
-    name: 'React SPA'
+  react-spa:
+    name: 'React SPA Auth0'
     repo: 'https://github.com/auth0/auth0-react.git'
     sample_repo: 'https://github.com/auth0-samples/auth0-react-samples.git'
     env_file: 'react.env.local'
 
 global:
-  src_dir: '~/src' # Base directory for all workspaces
-  workspace_base: 'workspaces' # Subdirectory name for workspaces
-  env_files_dir: './env-files' # Location of environment templates
-
-workflows:
-  branch_patterns:
-    - 'feature/**'
-    - 'bugfix/**'
-    - 'hotfix/**'
-    - 'explore/**'
+  src_dir: '~/src' # Where to create workspaces
+  workspace_base: 'workspaces' # Subdirectory name
+  env_files_dir: './env-files' # Environment templates location
 ```
 
 ### Project Properties
 
-| Property                  | Required | Description                                |
-| ------------------------- | -------- | ------------------------------------------ |
-| `name`                    | ✅       | Display name for the project               |
-| `repo`                    | ✅       | Main repository URL                        |
-| `sample_repo`             | ❌       | Additional repository for samples/examples |
-| `env_file`                | ❌       | Environment file template to copy          |
-| `post-init` / `post_init` | ❌       | Command to run after workspace creation    |
+| Property      | Required | Description                    |
+| ------------- | -------- | ------------------------------ |
+| `name`        | ✅       | Display name                   |
+| `repo`        | ✅       | Main repository URL            |
+| `sample_repo` | ❌       | Sample/test repository         |
+| `env_file`    | ❌       | Environment file to copy       |
+| `post-init`   | ❌       | Commands to run after creation |
 
 ### Environment Files
 
-Place environment templates in your configured `env_files_dir`:
+Create templates in your `env_files_dir`:
 
 ```bash
 env-files/
@@ -201,216 +179,73 @@ env-files/
 └── node.env.local
 ```
 
-These files are automatically copied to new workspaces and can contain project-specific environment variables.
+These are automatically copied to new workspaces.
 
 ---
 
-## 🔧 Advanced Features
+## �️ Quick Troubleshooting
 
-### Pull Request Workflows
-
-Create workspaces directly from GitHub pull requests:
+### Installation Issues
 
 ```bash
-# Create workspace for PR #123
-space --pr 123 init next
-
-# Space CLI will:
-# 1. Fetch the PR branch
-# 2. Create workspace with PR-specific naming
-# 3. Set up environment for testing the PR
-```
-
-### Post-Init Scripts
-
-Automate setup tasks after workspace creation:
-
-```yaml
-projects:
-  next:
-    post-init: |
-      cd nextjs-auth0 && pnpm install
-      cd ../samples && pnpm install
-      echo "✅ Dependencies installed"
-```
-
-### Custom Branch Patterns
-
-Configure which branch patterns are supported:
-
-```yaml
-workflows:
-  branch_patterns:
-    - 'feature/**' # feature/user-auth
-    - 'bugfix/**' # bugfix/login-issue
-    - 'hotfix/**' # hotfix/security-patch
-    - 'experiment/**' # experiment/new-api
-```
-
-### Non-Interactive Mode
-
-Run Space CLI in scripts and CI/CD:
-
-```bash
-space --non-interactive init next feature/my-branch
-```
-
----
-
-## 🎯 Development Workflows
-
-### Feature Development
-
-```bash
-# 1. Start new feature
-space init myapp feature/user-profiles
-
-# 2. Develop in dedicated environment
-cd ~/src/workspaces/myapp_feature-user-profiles/myapp
-# Make changes...
-
-# 3. Test with samples
-cd ../myapp-samples
-# Run tests against your changes...
-
-# 4. Clean up when done
-space clean myapp feature_user-profiles
-```
-
-### Bug Investigation
-
-```bash
-# Create workspace to investigate issue
-space init myapp bugfix/login-timeout
-
-# Work in isolation without affecting main development
-cd ~/src/workspaces/myapp_bugfix-login-timeout
-```
-
-### PR Review
-
-```bash
-# Review someone's pull request
-space --pr 456 init myapp
-
-# Test their changes in isolated environment
-cd ~/src/workspaces/myapp_pr-456
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-#### "No GitHub CLI token found"
-
-```bash
-# Login to GitHub CLI
-gh auth login
-```
-
-#### "Git worktree already exists"
-
-```bash
-# Clean up stale worktrees
-git worktree prune
-
-# Or remove specific workspace
-space clean <project> <workspace>
-```
-
-#### "Command not found: space"
-
-```bash
-# Reinstall globally
+# Command not found
 pnpm add -g @tusharpandey13/space-cli
-
-# Verify installation
 space --version
+
+# Permission errors
+sudo chown -R $(whoami) ~/.pnpm-global  # Fix pnpm permissions
 ```
 
-#### "Permission denied" errors
+### GitHub Issues
 
 ```bash
-# Check script permissions (development setup)
-scripts/troubleshoot.sh
+# No GitHub CLI token
+gh auth login
+
+# Git worktree conflicts
+git worktree prune                       # Clean stale worktrees
+space clean <project> <workspace>        # Remove specific workspace
 ```
 
-### Debug Mode
-
-Run commands with verbose logging:
+### Debug & Validation
 
 ```bash
-space --debug init next feature/my-branch
+space validate                           # Check setup
+space --debug init next test            # Verbose logging
 ```
 
-### Validation
-
-Check your setup and configuration:
-
-```bash
-space validate
-```
-
----
-
-## ⚡ Performance
-
-Space CLI is optimized for fast, responsive operation:
-
-- **Startup time**: ~195ms (3x faster than baseline)
-- **Memory usage**: 12MB footprint (76% improvement)
-- **Config loading**: Cached with 99.6% performance improvement
-- **Command loading**: Lazy-loaded with 500x better performance than targets
-
-### Environment Controls
-
-Disable optimizations for debugging:
-
-```bash
-# Disable configuration caching
-WORKSPACE_DISABLE_CACHE=1 space init next feature/test
-
-# Disable lazy module loading
-WORKSPACE_DISABLE_LAZY=1 space --help
-```
+**Need more help?** See the [full troubleshooting guide](docs/TROUBLESHOOTING.md) or [open an issue](https://github.com/tusharpandey13/workspace-cli/issues).
 
 ---
 
 ## ✅ Prerequisites
 
-- **Node.js** v18 or higher
-- **pnpm** (recommended) or npm for package management
-- **GitHub CLI** (`gh`) - [Installation guide](https://cli.github.com/)
+- **Node.js** v18+
+- **pnpm** (recommended) or npm
+- **GitHub CLI** - [Install guide](https://cli.github.com/)
 - **Git** v2.25+ (for worktree support)
 
-### System Compatibility
-
-- ✅ **macOS** (Primary support)
-- ✅ **Linux** (Tested)
-- ⚠️ **Windows** (Basic support, may require WSL)
+**Platform Support**: ✅ macOS, ✅ Linux, ⚠️ Windows (WSL recommended)
 
 ---
 
+## � Documentation
+
+- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[Configuration Guide](docs/CONFIGURATION.md)** - Detailed setup options
+- **[Features Overview](docs/FEATURES.md)** - Complete feature list
+- **[Development Report](docs/COMPREHENSIVE_DEVELOPMENT_REPORT.md)** - Architecture deep-dive
+
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+Contributions welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
-### Quick Development Setup
+**Development setup:**
 
 ```bash
 git clone https://github.com/tusharpandey13/workspace-cli.git
 cd workspace-cli
-pnpm install
-pnpm run install-global:dev  # Install development version
-```
-
-### Running Tests
-
-```bash
-pnpm test                # Unit tests
-pnpm run test:coverage   # With coverage
+pnpm install && pnpm run install-global:dev
 ```
 
 ---
@@ -418,7 +253,3 @@ pnpm run test:coverage   # With coverage
 ## 📄 License
 
 [MIT](./LICENSE) | [Issues](https://github.com/tusharpandey13/workspace-cli/issues) | [Discussions](https://github.com/tusharpandey13/workspace-cli/discussions)
-
-## 🎨 Attributions
-
-Galaxy icon by Yeni from <a href="https://thenounproject.com/browse/icons/term/galaxy/" target="_blank" title="Galaxy Icons">Noun Project</a> (CC BY 3.0)

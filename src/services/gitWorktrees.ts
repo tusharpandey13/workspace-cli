@@ -7,6 +7,7 @@ import { fileOps } from '../utils/init-helpers.js';
 import type { ProjectConfig, WorkspacePaths } from '../types/index.js';
 import { ConfigManager } from '../utils/config.js';
 import { ParallelGitOperations, type GitOperation } from '../utils/parallelGit.js';
+import { setupSampleRepoGitignore } from '../utils/gitignore.js';
 
 /**
  * Create a safe samples branch name from the original branch name
@@ -49,7 +50,7 @@ async function ensureRepositoryExists(
   }
 
   // Repository doesn't exist, clone it
-  logger.info(`📥 Repository ${repoName} not found locally, cloning from ${repoUrl}...`);
+  logger.verbose(`Repository ${repoName} not found locally, cloning from ${repoUrl}...`);
 
   // Ensure parent directory exists
   const parentDir = path.dirname(repoPath);
@@ -62,7 +63,7 @@ async function ensureRepositoryExists(
       throw new Error(`Git clone failed: ${result.stderr}`);
     }
 
-    logger.success(`✅ Successfully cloned ${repoName} to ${repoPath}`);
+    logger.verbose(`✅ Successfully cloned ${repoName} to ${repoPath}`);
   } catch (error) {
     throw new Error(
       `Failed to clone repository ${repoName} from ${repoUrl}: ${(error as Error).message}`,
@@ -256,6 +257,10 @@ export async function setupWorktrees(
   // Phase 2: Parallel Worktree Creation
   logger.verbose('🔀 Creating worktrees in parallel...');
   await executeParallelWorktreeSetup(parallelGit, project, paths, branchName, isDryRun);
+
+  // Phase 3: Post-Worktree Setup (gitignore, environment setup)
+  logger.verbose('⚙️  Configuring worktree environments...');
+  await executePostWorktreeSetup(project, paths, isDryRun);
 
   // Validate repository integrity after all operations
   if (!isDryRun) {
@@ -471,6 +476,26 @@ async function executeParallelWorktreeSetup(
 
   // Execute worktree creation in parallel
   await parallelGit.executeParallel(worktreeOperations);
+}
+
+/**
+ * Execute post-worktree setup operations (gitignore, environment setup)
+ */
+async function executePostWorktreeSetup(
+  project: ProjectConfig,
+  paths: WorkspacePaths,
+  isDryRun: boolean,
+): Promise<void> {
+  // Set up gitignore for sample repository if it exists
+  if (paths.destinationPath && project.sample_repo) {
+    logger.verbose('📋 Setting up sample repository gitignore patterns...');
+    await setupSampleRepoGitignore(paths.destinationPath, project, isDryRun);
+  }
+
+  // Future: Add other post-worktree setup tasks here
+  // - Environment file setup
+  // - IDE configuration
+  // - Project-specific setup commands
 }
 
 /**

@@ -1,10 +1,8 @@
 /**
- * Universal template selection utilities - simplified for MVP
+ * Universal template selection utilities with sample app support
  */
 
-/**
- * Universal template selection utilities - simplified for MVP
- */
+import type { ProjectConfig } from '../types/index.js';
 
 /**
  * Get universal template set for all workflows
@@ -15,13 +13,49 @@ function getDefaultTemplates(): string[] {
     'fix-and-test.prompt.md',
     'review-changes.prompt.md',
     'PR_DESCRIPTION_TEMPLATE.md',
+    'PR_REVIEW_INSTRUCTIONS.md',
+    'enhanced-analysis.prompt.md',
   ];
 }
 
 /**
- * Get template list (universal for all workflows)
+ * Get template set for workflows with sample app reproduction
  */
-export function getWorkflowTemplates(): string[] {
+function getSampleAppTemplates(): string[] {
+  return [
+    'analysis-with-sample.prompt.md',
+    'fix-and-test.prompt.md',
+    'review-changes.prompt.md',
+    'PR_DESCRIPTION_TEMPLATE.md',
+    'PR_REVIEW_INSTRUCTIONS.md',
+    'enhanced-analysis.prompt.md',
+  ];
+}
+
+/**
+ * Check if project has sample app configured
+ */
+export function hasSampleApp(project: ProjectConfig): boolean {
+  return !!(project.sample_repo && project.sample_repo.trim());
+}
+
+/**
+ * Get template list based on project configuration
+ */
+export function getWorkflowTemplates(project?: ProjectConfig): string[] {
+  if (project && hasSampleApp(project)) {
+    return getSampleAppTemplates();
+  }
+  return getDefaultTemplates();
+}
+
+/**
+ * Get template list based on project configuration and user choice
+ */
+export function getWorkflowTemplatesWithChoice(project?: ProjectConfig): string[] {
+  if (project && hasSampleApp(project)) {
+    return getSampleAppTemplates();
+  }
   return getDefaultTemplates();
 }
 
@@ -32,6 +66,8 @@ export function getWorkflowNextSteps(): string {
   return `**Next recommended prompt:**
 
 - Issue analysis: \`analysis.prompt.md\`
+- Enhanced analysis: \`enhanced-analysis.prompt.md\`
 - Implementation: \`fix-and-test.prompt.md\`
-- Review changes: \`review-changes.prompt.md\``;
+- Review changes: \`review-changes.prompt.md\`
+- PR review guide: \`PR_REVIEW_INSTRUCTIONS.md\``;
 }
