@@ -6,6 +6,34 @@ import { execSync } from 'child_process';
 import { ConfigManager } from '../src/utils/config.js';
 import { DummyRepoManager } from '../src/services/dummyRepoManager.js';
 
+/**
+ * Create a mock workspace directory with repository subdirectories
+ * that contain common repository indicators
+ */
+async function createMockWorkspace(
+  baseDir: string,
+  workspaceName: string,
+  repoNames: string[],
+): Promise<void> {
+  const workspaceDir = path.join(baseDir, workspaceName);
+  await fs.ensureDir(workspaceDir);
+
+  for (const repoName of repoNames) {
+    const repoDir = path.join(workspaceDir, repoName);
+    await fs.ensureDir(repoDir);
+
+    // Create common repository indicators
+    await fs.writeFile(path.join(repoDir, 'package.json'), '{"name": "test"}');
+    await fs.writeFile(path.join(repoDir, 'README.md'), '# Test Repository');
+    await fs.ensureDir(path.join(repoDir, 'src'));
+
+    // Create a minimal .git directory structure
+    const gitDir = path.join(repoDir, '.git');
+    await fs.ensureDir(gitDir);
+    await fs.writeFile(path.join(gitDir, 'HEAD'), 'ref: refs/heads/main');
+  }
+}
+
 describe('List Command', () => {
   let tempDir: string;
   let configManager: ConfigManager;
@@ -152,13 +180,14 @@ describe('List Command', () => {
     });
 
     test('should list workspaces when they exist', async () => {
-      // Create workspace directories
+      // Create workspace directories with repository content
       const project1BaseDir = configManager.getProjectBaseDir('test-project');
       const project2BaseDir = configManager.getProjectBaseDir('single-project');
 
-      await fs.ensureDir(path.join(project1BaseDir, 'feature_branch1'));
-      await fs.ensureDir(path.join(project1BaseDir, 'bugfix_issue123'));
-      await fs.ensureDir(path.join(project2BaseDir, 'hotfix_urgent'));
+      // Create realistic workspace structure with repository subdirectories
+      await createMockWorkspace(project1BaseDir, 'feature_branch1', ['main-repo', 'sample-repo']);
+      await createMockWorkspace(project1BaseDir, 'bugfix_issue123', ['main-repo']);
+      await createMockWorkspace(project2BaseDir, 'hotfix_urgent', ['single-repo']);
 
       const result = execSync(`node ${cliPath} list --config ${configPath}`, {
         encoding: 'utf8',
@@ -174,11 +203,11 @@ describe('List Command', () => {
     });
 
     test('should list specific project workspaces', async () => {
-      // Create workspace directories for one project
+      // Create workspace directories for one project with repository content
       const project1BaseDir = configManager.getProjectBaseDir('test-project');
 
-      await fs.ensureDir(path.join(project1BaseDir, 'feature_branch1'));
-      await fs.ensureDir(path.join(project1BaseDir, 'bugfix_issue123'));
+      await createMockWorkspace(project1BaseDir, 'feature_branch1', ['main-repo', 'sample-repo']);
+      await createMockWorkspace(project1BaseDir, 'bugfix_issue123', ['main-repo']);
 
       const result = execSync(`node ${cliPath} list test-project --config ${configPath}`, {
         encoding: 'utf8',
@@ -202,9 +231,9 @@ describe('List Command', () => {
     });
 
     test('should handle mixed scenarios (some projects with workspaces, some without)', async () => {
-      // Create workspaces for only one project
+      // Create workspaces for only one project with repository content
       const project1BaseDir = configManager.getProjectBaseDir('test-project');
-      await fs.ensureDir(path.join(project1BaseDir, 'feature_branch1'));
+      await createMockWorkspace(project1BaseDir, 'feature_branch1', ['main-repo']);
 
       // Don't create any workspaces for single-project
 
@@ -245,13 +274,13 @@ describe('List Command', () => {
     test('should not use hardcoded dummy values in workspace enumeration', async () => {
       // This test would have caught the original 'dummy' bug
 
-      // Create a workspace with a specific name
+      // Create a workspace with a specific name with repository content
       const realWorkspaceName = 'actual_workspace_name';
       const project1BaseDir = configManager.getProjectBaseDir('test-project');
-      await fs.ensureDir(path.join(project1BaseDir, realWorkspaceName));
+      await createMockWorkspace(project1BaseDir, realWorkspaceName, ['main-repo']);
 
       // Create a 'dummy' directory that shouldn't be treated specially
-      await fs.ensureDir(path.join(project1BaseDir, 'dummy'));
+      await createMockWorkspace(project1BaseDir, 'dummy', ['main-repo']);
 
       const result = execSync(`node ${cliPath} list --config ${configPath}`, {
         encoding: 'utf8',
@@ -282,7 +311,7 @@ describe('List Command', () => {
       ];
 
       for (const name of workspaceNames) {
-        await fs.ensureDir(path.join(project1BaseDir, name));
+        await createMockWorkspace(project1BaseDir, name, ['main-repo']);
       }
 
       const result = execSync(`node ${cliPath} list --config ${configPath}`, {

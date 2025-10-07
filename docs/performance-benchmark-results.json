@@ -3,38 +3,38 @@
   "results": [
     {
       "metric": "startup_time",
-      "value": 215.84475819999997,
+      "value": 198.77826659999997,
       "unit": "ms",
       "target": 220,
       "baseline": 200
     },
     {
       "metric": "memory_usage",
-      "value": 11.747589111328125,
+      "value": 11.716201782226562,
       "unit": "MB",
       "target": 15,
       "baseline": 50
     },
     {
       "metric": "config_loading_cold",
-      "value": 203.8420000000001,
+      "value": 185.9703750000001,
       "unit": "ms",
       "baseline": 100
     },
     {
       "metric": "config_loading_warm",
-      "value": 187.75479200000018,
+      "value": 182.52829199999996,
       "unit": "ms"
     },
     {
       "metric": "cli_help_command",
-      "value": 225.12037499999997,
+      "value": 200.7172089999999,
       "unit": "ms",
       "target": 200,
       "baseline": 1000
     }
   ],
-  "timestamp": "2025-09-30T13:43:42.037Z",
+  "timestamp": "2025-10-03T14:13:04.589Z",
   "environment": {
     "platform": "darwin arm64",
     "nodeVersion": "v22.12.0",

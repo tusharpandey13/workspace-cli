@@ -40,9 +40,24 @@ export function hasSampleApp(project: ProjectConfig): boolean {
 }
 
 /**
+ * Get minimal template set for when no GitHub context is available
+ */
+function getMinimalTemplates(): string[] {
+  return ['review-changes.prompt.md', 'PR_DESCRIPTION_TEMPLATE.md', 'PR_REVIEW_INSTRUCTIONS.md'];
+}
+
+/**
  * Get template list based on project configuration
  */
-export function getWorkflowTemplates(project?: ProjectConfig): string[] {
+export function getWorkflowTemplates(
+  project?: ProjectConfig,
+  hasGitHubContext: boolean = true,
+): string[] {
+  // If no GitHub context, return minimal template set
+  if (!hasGitHubContext) {
+    return getMinimalTemplates();
+  }
+
   if (project && hasSampleApp(project)) {
     return getSampleAppTemplates();
   }
@@ -52,7 +67,15 @@ export function getWorkflowTemplates(project?: ProjectConfig): string[] {
 /**
  * Get template list based on project configuration and user choice
  */
-export function getWorkflowTemplatesWithChoice(project?: ProjectConfig): string[] {
+export function getWorkflowTemplatesWithChoice(
+  project?: ProjectConfig,
+  hasGitHubContext: boolean = true,
+): string[] {
+  // If no GitHub context, return minimal template set
+  if (!hasGitHubContext) {
+    return getMinimalTemplates();
+  }
+
   if (project && hasSampleApp(project)) {
     return getSampleAppTemplates();
   }

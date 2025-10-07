@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { createRequire } from 'module';
-import fs from 'fs-extra';
+import chalk from 'chalk';
 import { loadEnv } from '../utils/env.js';
 import { logger, LogLevel } from '../utils/logger.js';
 import { validateDependencies } from '../utils/validation.js';
@@ -13,6 +13,7 @@ import { setGlobalOptions } from '../utils/globalOptions.js';
 import { commandLoader } from '../utils/lazyLoader.js';
 import { getProjectsWithValidation, displayProjectsList } from '../utils/projectValidation.js';
 import { createSetupWizard, handleSetupResult, checkSetupNeeded } from '../utils/setupHelpers.js';
+import { listAllWorkspaces } from '../commands/list.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
@@ -22,39 +23,7 @@ const pkg = require('../../package.json');
  */
 async function executeListCommand(): Promise<void> {
   try {
-    const projects = configManager.listProjects();
-    let hasAnyWorkspaces = false;
-
-    for (const projectKey of projects) {
-      try {
-        const project = configManager.getProject(projectKey);
-        const baseDir = configManager.getProjectBaseDir(projectKey);
-
-        if (fs.existsSync(baseDir)) {
-          const dirs = fs
-            .readdirSync(baseDir, { withFileTypes: true })
-            .filter((d) => d.isDirectory())
-            .map((d) => d.name);
-
-          if (dirs.length > 0) {
-            hasAnyWorkspaces = true;
-            console.log(`\n${project.name} (${projectKey}):`);
-            dirs.forEach((dir) => console.log(`  ${dir}`));
-          }
-        }
-      } catch (error) {
-        // Continue to next project if this one fails
-        continue;
-      }
-    }
-
-    if (!hasAnyWorkspaces) {
-      logger.info('No workspaces found for any project.');
-      console.log('\nTo create a workspace, use:');
-      console.log('  space init <project> <branch-name>');
-      console.log('\nTo see available projects, use:');
-      console.log('  space projects');
-    }
+    listAllWorkspaces();
   } catch (error) {
     handleError(error as Error, logger);
   }
@@ -140,7 +109,7 @@ async function showCompactProjects(): Promise<void> {
     console.log('\n📚 Available projects:');
     for (const projectKey of projects) {
       const project = configManager.getProject(projectKey);
-      console.log(`  ${projectKey} → ${project.name}`);
+      console.log(`  ${projectKey} ${chalk.gray('→')} ${chalk.gray(project.name)}`);
     }
     console.log('');
   } catch (error) {
@@ -161,12 +130,12 @@ async function showInteractiveMenu(): Promise<void> {
     name: 'action',
     message: 'What would you like to do?',
     choices: [
-      { title: '🚀 Create new workspace', value: 'init' },
-      { title: '📋 List existing workspaces', value: 'list' },
-      { title: '📖 View project details', value: 'projects' },
-      { title: '🧹 Clean up workspace', value: 'clean' },
-      { title: '⚙️  Settings', value: 'setup' },
-      { title: '❓ Help', value: 'help' },
+      { title: 'Create new workspace', value: 'init' },
+      { title: 'List existing workspaces', value: 'list' },
+      { title: 'List projects', value: 'projects' },
+      { title: 'Clean existing workspace', value: 'clean' },
+      { title: 'Run Initial Setup', value: 'setup' },
+      { title: 'Help', value: 'help' },
     ],
   });
 

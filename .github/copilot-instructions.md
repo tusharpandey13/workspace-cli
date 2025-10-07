@@ -134,6 +134,7 @@ e2e/
 4. **Security Assessment**: All changes require mandatory security validation
 5. **Evidence-Based**: Document what works/fails, never assume behavior
 6. **Claude Patterns**: Use structured validation with veto power
+7. **Conditional Logging**: Apply `if (options.isVerbose)` pattern for status messages to maintain clean default UX
 
 ## CLI Architecture (CRITICAL)
 
@@ -150,6 +151,7 @@ e2e/
 - Safe git operations with validation
 - **Structured Results**: Return result objects instead of throwing for better progress coordination
 - **Progress Safety**: Use try-catch blocks around progress steps to prevent UI corruption
+- **Conditional Logging**: Use `if (options.isVerbose)` pattern for non-essential status messages to reduce noise in default mode
 
 ### Template Integration
 - **6 Core Templates**: analysis, enhanced-analysis, analysis-with-sample, PR_REVIEW_INSTRUCTIONS, PR_DESCRIPTION_TEMPLATE, fix-and-test, review-changes

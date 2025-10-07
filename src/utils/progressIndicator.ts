@@ -61,7 +61,7 @@ export class ProgressIndicator {
     }
 
     // Format includes operation context to avoid separate console.log interference
-    const format = '{operation} [{bar}] {value}/{total}';
+    const format = '[{bar}] {value}/{total} : {operation}';
 
     this.progressBar = new cliProgress.SingleBar(
       {
@@ -70,7 +70,7 @@ export class ProgressIndicator {
         barIncompleteChar: '\u2591', // Light shade
         barsize: 25, // Half the default size (was 50)
         hideCursor: true,
-        stopOnComplete: true,
+        stopOnComplete: false, // Don't auto-stop so we can show "Complete" message
         clearOnComplete: false,
         gracefulExit: true,
         noTTYOutput: true,
@@ -209,11 +209,20 @@ export class ProgressIndicator {
    */
   complete(): void {
     if (this.progressBar && !this.isMultiBar) {
-      // TTY mode: Update to show completion and then stop
+      // TTY mode: Update to show completion
       this.progressBar.update(this.totalSteps, {
         operation: 'Complete',
       });
+
+      // Force the progress bar to render the final state and leave it on screen
+      // Set clearOnComplete to false to preserve the final line
       this.progressBar.stop();
+
+      // Print a newline to preserve the final progress line
+      if (process.stdout.isTTY) {
+        process.stdout.write('\n');
+      }
+
       this.progressBar = null;
     }
 

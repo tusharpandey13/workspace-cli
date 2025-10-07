@@ -74,7 +74,7 @@ projects:
 
   it('should handle successful post-init command correctly', async () => {
     const result = execSync(
-      `node ${cliPath} init test-postinit-success test-branch --dry-run --config ${testConfigPath}`,
+      `node ${cliPath} init test-postinit-success test-branch --config ${testConfigPath}`,
       {
         encoding: 'utf8',
         env: { ...process.env, WORKSPACE_DISABLE_PROGRESS: '1' },
@@ -87,7 +87,7 @@ projects:
 
   it('should handle post-init command failure with proper error flow', async () => {
     const result = execSync(
-      `node ${cliPath} init test-postinit-failure test-branch --dry-run --config ${testConfigPath}`,
+      `node ${cliPath} init test-postinit-failure test-branch --config ${testConfigPath} 2>&1`,
       {
         encoding: 'utf8',
         env: { ...process.env, WORKSPACE_DISABLE_PROGRESS: '1' },
@@ -95,14 +95,14 @@ projects:
     );
 
     expect(result).toContain('Workspace initialized, post init failed');
-    expect(result).toContain('Post-init command failed');
+    expect(result).toContain('❌ Post-init command failed:');
     expect(result).toContain('Exit Code: 1');
     expect(result).toContain('The workspace is still ready for development');
   });
 
   it('should not show "Workspace ready" when post-init fails', async () => {
     const result = execSync(
-      `node ${cliPath} init test-postinit-failure test-branch --dry-run --config ${testConfigPath}`,
+      `node ${cliPath} init test-postinit-failure test-branch --config ${testConfigPath}`,
       {
         encoding: 'utf8',
         env: { ...process.env, WORKSPACE_DISABLE_PROGRESS: '1' },

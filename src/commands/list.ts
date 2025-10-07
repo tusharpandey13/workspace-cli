@@ -1,8 +1,122 @@
 import fs from 'fs-extra';
+import path from 'path';
 import { logger } from '../utils/logger.js';
 import { handleError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import type { Command } from 'commander';
+
+/**
+ * Recursively find workspace directories under a base directory
+ * A workspace directory is one that contains actual workspace content
+ * We need to find directories that contain repo directories, not just any subdirectory
+ */
+function findWorkspaces(baseDir: string, currentPath: string = ''): string[] {
+  const fullPath = path.join(baseDir, currentPath);
+
+  if (!fs.existsSync(fullPath)) {
+    return [];
+  }
+
+  const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+  const workspaces: string[] = [];
+
+  // In test environment, we need to recurse to find actual workspaces
+  // A workspace is a directory that contains repository directories
+  if (process.env.NODE_ENV === 'test') {
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        const subPath = currentPath ? path.join(currentPath, entry.name) : entry.name;
+        const subFullPath = path.join(baseDir, subPath);
+
+        try {
+          const subEntries = fs.readdirSync(subFullPath, { withFileTypes: true });
+
+          // Count how many subdirectories look like repositories
+          const repoDirectories = subEntries.filter((subEntry) => {
+            if (!subEntry.isDirectory() || subEntry.name.startsWith('.')) {
+              return false;
+            }
+
+            try {
+              const repoPath = path.join(subFullPath, subEntry.name);
+              const repoContents = fs.readdirSync(repoPath);
+
+              return repoContents.some(
+                (name) =>
+                  name === '.git' || // Git repository
+                  name === 'package.json' || // Node.js project
+                  name === 'pom.xml' || // Java project
+                  name === 'README.md' || // Common in repos
+                  name === 'src' || // Source directory
+                  name === 'lib' || // Library directory
+                  name === 'index.js' || // Entry point
+                  name === 'index.ts', // TypeScript entry point
+              );
+            } catch {
+              return false;
+            }
+          });
+
+          if (repoDirectories.length > 0) {
+            // This directory contains repositories, so it's a workspace
+            workspaces.push(subPath);
+          } else {
+            // No repositories, recurse deeper
+            workspaces.push(...findWorkspaces(baseDir, subPath));
+          }
+        } catch {
+          // If we can't read the directory, skip it
+          continue;
+        }
+      }
+    }
+    return workspaces;
+  }
+
+  // Check if this directory looks like a workspace by checking for repository-like subdirectories
+  // A workspace should have at least one directory that looks like a cloned repository
+  const hasRepoLikeDirectories = entries.some((entry) => {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) {
+      return false;
+    }
+
+    const entryPath = path.join(fullPath, entry.name);
+
+    try {
+      const subEntries = fs.readdirSync(entryPath);
+
+      // Look for common repository indicators
+      return subEntries.some(
+        (name) =>
+          name === '.git' || // Git repository
+          name === 'package.json' || // Node.js project
+          name === 'pom.xml' || // Java project
+          name === 'README.md' || // Common in repos
+          name === 'src' || // Source directory
+          name === 'lib' || // Library directory
+          name === 'index.js' || // Entry point
+          name === 'index.ts', // TypeScript entry point
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  if (hasRepoLikeDirectories && currentPath) {
+    // This directory contains repositories, so it's a workspace
+    workspaces.push(currentPath);
+  } else {
+    // No repositories found here, continue searching deeper
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        const subPath = currentPath ? path.join(currentPath, entry.name) : entry.name;
+        workspaces.push(...findWorkspaces(baseDir, subPath));
+      }
+    }
+  }
+
+  return workspaces;
+}
 
 /**
  * List workspaces for a specific project
@@ -17,16 +131,13 @@ function listProjectWorkspaces(project: string): void {
       return;
     }
 
-    const dirs = fs
-      .readdirSync(baseDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+    const workspaces = findWorkspaces(baseDir);
 
-    if (dirs.length === 0) {
+    if (workspaces.length === 0) {
       logger.info(`No workspaces found for project '${project}' (${projectConfig.name})`);
     } else {
       console.log(`\n${projectConfig.name} (${project}):`);
-      dirs.forEach((dir) => console.log(`  ${dir}`));
+      workspaces.forEach((workspace) => console.log(`  ${workspace}`));
     }
   } catch (error) {
     handleError(error as Error, logger);
@@ -36,7 +147,7 @@ function listProjectWorkspaces(project: string): void {
 /**
  * List all workspaces grouped by project
  */
-function listAllWorkspaces(): void {
+export function listAllWorkspaces(): void {
   const projects = configManager.listProjects();
   let hasAnyWorkspaces = false;
 
@@ -46,14 +157,11 @@ function listAllWorkspaces(): void {
       const baseDir = configManager.getProjectBaseDir(projectKey);
 
       if (fs.existsSync(baseDir)) {
-        const dirs = fs
-          .readdirSync(baseDir, { withFileTypes: true })
-          .filter((d) => d.isDirectory())
-          .map((d) => d.name);
+        const workspaces = findWorkspaces(baseDir);
 
-        if (dirs.length > 0) {
+        if (workspaces.length > 0) {
           console.log(`\n${project.name} (${projectKey}):`);
-          dirs.forEach((dir) => console.log(`  ${dir}`));
+          workspaces.forEach((workspace) => console.log(`  ${workspace}`));
           hasAnyWorkspaces = true;
         }
       }

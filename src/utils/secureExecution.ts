@@ -35,12 +35,6 @@ export async function executeSecureCommand(
   try {
     logger.debug(`Executing secure command: ${command} with args: ${sanitizedArgs.join(' ')}`);
 
-    // Debug the execution environment
-    logger.debug(`Environment has ${Object.keys(secureOptions.env || {}).length} variables`);
-    logger.debug(
-      `PATH in environment: ${(secureOptions.env as any)?.PATH ? 'present' : 'missing'}`,
-    );
-
     const result = await execa(command, sanitizedArgs, secureOptions);
 
     return {
@@ -110,15 +104,51 @@ export async function executeShellCommand(
 
   // For shell commands, we bypass normal sanitization since we're using sh -c
   // The shell command itself may contain legitimate shell operators like && and |
+
+  // Ensure npm/pnpm/node from nvm takes precedence over shims for better subprocess compatibility
+  const enhancedEnv = { ...process.env, ...options.env };
+  if ((shellCommand.includes('npm') || shellCommand.includes('pnpm')) && enhancedEnv.NVM_BIN) {
+    // Put NVM_BIN at the front of PATH to ensure real npm/pnpm is used instead of shims
+    enhancedEnv.PATH = `${enhancedEnv.NVM_BIN}:${enhancedEnv.PATH}`;
+    const packageManager = shellCommand.includes('pnpm') ? 'pnpm' : 'npm';
+    logger.debug(
+      `Enhanced PATH for ${packageManager} command: ${enhancedEnv.PATH.split(':').slice(0, 3).join(', ')}...`,
+    );
+  }
+
   const secureOptions: Options = {
     ...options,
     shell: false, // We still use sh -c rather than shell: true
     timeout: options.timeout || 30000,
-    env: { ...process.env, ...options.env },
+    env: enhancedEnv,
   };
 
   try {
     logger.debug(`Executing shell command via sh -c: ${shellCommand}`);
+
+    // Verify critical executables are available before proceeding
+    if (shellCommand.includes('npm') || shellCommand.includes('pnpm')) {
+      // Check if the appropriate package manager is available in the PATH
+      const executable = shellCommand.includes('pnpm') ? 'pnpm' : 'npm';
+      logger.debug(`Validating ${executable} availability for command: ${shellCommand}`);
+
+      const executableCheck = await execa('which', [executable], {
+        env: secureOptions.env || process.env,
+        reject: false,
+      });
+      if (executableCheck.exitCode !== 0) {
+        logger.error(`${executable} executable not found in PATH for shell command execution`);
+        logger.debug(`PATH: ${secureOptions.env?.PATH}`);
+        logger.debug(`Shell command: ${shellCommand}`);
+        return {
+          stdout: '',
+          stderr: `${executable} executable not found in PATH. This may be an environment inheritance issue.`,
+          exitCode: 127,
+        };
+      } else {
+        logger.debug(`${executable} found at: ${executableCheck.stdout}`);
+      }
+    }
 
     const result = await execa('sh', ['-c', shellCommand], secureOptions);
 
@@ -128,9 +158,16 @@ export async function executeShellCommand(
       exitCode: result.exitCode || 0,
     };
   } catch (error: any) {
+    // Provide better error context for environment-related failures
+    if (error.exitCode === 127 && error.stderr?.includes('not found')) {
+      logger.error('Command execution failed due to missing executable');
+      logger.error(`Command: ${shellCommand}`);
+      logger.error(`PATH: ${secureOptions.env?.PATH}`);
+      logger.error('This may indicate an environment inheritance issue');
+    }
+
     // Error details are captured in return value for proper handling upstream
     // Avoid logging here to prevent interference with progress indicators
-
     return {
       stdout: error.stdout || '',
       stderr: error.stderr || error.message,
