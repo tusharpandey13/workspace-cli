@@ -55,9 +55,8 @@ export class ContextDataFetcher {
       }
     }
 
-    const githubData: GitHubIssueData[] = [];
-
-    for (const issueId of issueIds) {
+    // Process all issues in parallel for better performance
+    const issuePromises = issueIds.map(async (issueId) => {
       try {
         logger.verbose(`🔍 Fetching comprehensive data for #${issueId}...`);
 
@@ -65,13 +64,15 @@ export class ContextDataFetcher {
         const basicData = await this.fetchBasicGitHubItem(issueId, githubOrg, repoName, isDryRun);
         const extracted = this.extractBasicContent(basicData);
 
-        // Enhance with comprehensive context
-        await this.enhanceWithComments(extracted, githubOrg, repoName, isDryRun);
-        await this.enhanceWithLinkedIssues(extracted, githubOrg, repoName, isDryRun);
-        await this.enhanceWithFileChanges(extracted, githubOrg, repoName, isDryRun);
-        await this.enhanceWithAdditionalUrls(extracted, isDryRun);
+        // Enhance with comprehensive context in parallel
+        await Promise.all([
+          this.enhanceWithComments(extracted, githubOrg, repoName, isDryRun),
+          this.enhanceWithLinkedIssues(extracted, githubOrg, repoName, isDryRun),
+          this.enhanceWithFileChanges(extracted, githubOrg, repoName, isDryRun),
+          this.enhanceWithAdditionalUrls(extracted, isDryRun),
+        ]);
 
-        githubData.push(extracted);
+        return extracted;
       } catch (error) {
         // For critical errors (auth/installation), re-throw
         const errorMessage = (error as Error).message;
@@ -92,10 +93,15 @@ export class ContextDataFetcher {
 
         // For other errors, log and continue
         logger.warn(`Error processing GitHub ID "${issueId}": ${errorMessage}`);
+        return null;
       }
-    }
+    });
 
-    return githubData;
+    // Wait for all issues to be processed
+    const results = await Promise.all(issuePromises);
+
+    // Filter out null results (failed issues)
+    return results.filter((result): result is GitHubIssueData => result !== null);
   }
 
   /**
@@ -119,29 +125,73 @@ export class ContextDataFetcher {
   }
 
   /**
-   * Extract URLs from text content
+   * Trusted domains allowlist for URL fetching
+   * Only URLs from these specific domains will be fetched to prevent SSRF attacks
+   */
+  private static readonly TRUSTED_DOMAINS = new Set([
+    // GitHub and related
+    'github.com',
+    'raw.githubusercontent.com',
+    'gist.github.com',
+
+    // Auth0 official
+    'auth0.com',
+    'auth0-samples.github.io',
+
+    // Package registries
+    'npmjs.com',
+    'www.npmjs.com',
+    'pypi.org',
+    'maven.org',
+    'search.maven.org',
+    'crates.io',
+    'packagist.org',
+
+    // Documentation sites (specific, not wildcard)
+    'docs.github.com',
+    'docs.auth0.com',
+    'developer.auth0.com',
+    'docs.microsoft.com',
+    'docs.google.com',
+    'docs.python.org',
+    'docs.oracle.com',
+    'developer.mozilla.org',
+
+    // Stack Overflow
+    'stackoverflow.com',
+    'stackexchange.com',
+  ]);
+
+  /**
+   * Extract URLs from text content and validate against trusted domains
    */
   extractUrlsFromText(text: string): string[] {
     const urlRegex = /https?:\/\/[^\s)\]]+/g;
     const matches = text.match(urlRegex) || [];
 
-    // Filter for relevant URLs (documentation, Stack Overflow, GitHub, etc.)
-    return matches.filter((url) => {
-      const domain = new URL(url).hostname.toLowerCase();
-      return (
-        domain.includes('github.com') ||
-        domain.includes('auth0.com') ||
-        domain.includes('stackoverflow.com') ||
-        domain.includes('docs.') ||
-        domain.includes('developer.') ||
-        domain.includes('api.') ||
-        domain.includes('npmjs.com') ||
-        domain.includes('pypi.org') ||
-        domain.includes('maven.org') ||
-        domain.includes('crates.io') ||
-        domain.includes('packagist.org')
-      );
-    });
+    const validUrls: string[] = [];
+    const rejectedUrls: string[] = [];
+
+    for (const url of matches) {
+      try {
+        const domain = new URL(url).hostname.toLowerCase();
+
+        if (ContextDataFetcher.TRUSTED_DOMAINS.has(domain)) {
+          validUrls.push(url);
+        } else {
+          rejectedUrls.push(url);
+          logger.debug(`🚫 Rejected untrusted URL: ${url} (domain: ${domain})`);
+        }
+      } catch (error) {
+        logger.debug(`🚫 Rejected malformed URL: ${url}`);
+      }
+    }
+
+    if (rejectedUrls.length > 0) {
+      logger.verbose(`🔒 Security: Blocked ${rejectedUrls.length} untrusted URL(s) for safety`);
+    }
+
+    return validUrls;
   }
 
   /**
@@ -385,6 +435,18 @@ export class ContextDataFetcher {
       return this.cache.get(cacheKey).data;
     }
 
+    // Additional security check: Validate domain before fetching
+    try {
+      const domain = new URL(url).hostname.toLowerCase();
+      if (!ContextDataFetcher.TRUSTED_DOMAINS.has(domain)) {
+        logger.debug(`🚫 Security: Blocked fetch attempt to untrusted domain: ${domain}`);
+        return null;
+      }
+    } catch (error) {
+      logger.debug(`🚫 Security: Blocked fetch attempt to malformed URL: ${url}`);
+      return null;
+    }
+
     if (isDryRun) {
       return {
         url,
@@ -426,7 +488,9 @@ export class ContextDataFetcher {
       this.cache.set(cacheKey, { data: urlContent, timestamp: Date.now() });
       return urlContent;
     } catch (error) {
-      logger.warn(`Failed to fetch URL content from ${url}: ${(error as Error).message}`);
+      // More user-friendly warning for URL fetch failures
+      logger.verbose(`⚠️  Skipping external URL (unreachable): ${url}`);
+      logger.debug(`URL fetch error details: ${(error as Error).message}`);
       return null;
     }
   }

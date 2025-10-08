@@ -7,12 +7,326 @@ set -euo pipefail
 
 # Global configuration
 SPACE_CLI="$SCRIPT_DIR/../dist/bin/workspace.js"
+SPACE_CLI_PATH="$SPACE_CLI"
 if [[ -z "${TEST_BASE_DIR:-}" ]]; then
     readonly TEST_BASE_DIR="$HOME/tmp/space-e2e-tests"
 fi
 if [[ -z "${TEST_CONFIG_TEMPLATE:-}" ]]; then
     readonly TEST_CONFIG_TEMPLATE="/Users/tushar.pandey/src/workspace-cli/e2e/config-template.yaml"
 fi
+
+# Environment control for test isolation
+create_clean_test_environment() {
+    # Test-specific environment variables for optimal performance
+    export NODE_ENV="test"
+    export WORKSPACE_DISABLE_PROGRESS="1"  # Disable progress bars in tests
+    export WORKSPACE_DISABLE_CACHE="1"     # Disable caching for predictable tests
+    export CI="true"                       # Indicate this is a CI-like environment
+    export NO_COLOR="1"                    # Disable color output for logs
+    
+    # Git optimization environment variables
+    export GIT_TERMINAL_PROMPT="0"        # Disable git prompts
+    export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+    export GIT_CONFIG_NOSYSTEM="1"        # Don't read system git config
+    
+    # Clear potentially problematic environment variables
+    unset GITHUB_TOKEN 2>/dev/null || true
+    unset GH_TOKEN 2>/dev/null || true
+    unset NPM_CONFIG_PREFIX 2>/dev/null || true
+    unset NODE_EXTRA_CA_CERTS 2>/dev/null || true
+    unset EDITOR 2>/dev/null || true        # Prevent editor prompts
+    unset VISUAL 2>/dev/null || true        # Prevent editor prompts
+    unset BROWSER 2>/dev/null || true       # Prevent browser opening
+    unset GIT_EDITOR 2>/dev/null || true    # Prevent git editor prompts
+    
+    # Network optimizations for faster operations
+    export HTTP_TIMEOUT="30"
+    export HTTPS_TIMEOUT="30"
+    
+    log_debug "Test environment cleaned and controlled"
+}
+
+# Setup GitHub CLI mocking for tests
+setup_github_cli_mock() {
+    local mock_dir="$TEST_BASE_DIR/mocks"
+    mkdir -p "$mock_dir"
+    
+    # Create mock gh command
+    cat > "$mock_dir/gh" << 'EOF'
+#!/bin/bash
+# Mock GitHub CLI for e2e tests
+
+# Debug logging
+echo "Mock gh called with: $*" >> /tmp/gh-mock-debug.log
+echo "Mock gh PWD: $PWD" >> /tmp/gh-mock-debug.log
+echo "Mock gh PATH: $PATH" >> /tmp/gh-mock-debug.log
+
+case "$1" in
+    "auth")
+        case "$2" in
+            "status")
+                # gh auth status outputs to stderr when successful
+                cat << 'GHAUTH' >&2
+github.com
+  ✓ Logged in to github.com as testuser (oauth_token)
+  ✓ Git operations protocol: https
+  ✓ Token: gho_****
+GHAUTH
+                exit 0
+                ;;
+            *)
+                echo "Mock gh auth: Unknown subcommand: $2" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    "api")
+        # Parse all arguments to find the API endpoint
+        api_endpoint=""
+        has_jq=false
+        jq_filter=""
+        
+        # Parse arguments to extract endpoint and jq filter
+        for arg in "$@"; do
+            if [[ "$arg" == "--jq" ]]; then
+                has_jq=true
+                continue
+            elif [[ $has_jq == true && -z "$jq_filter" ]]; then
+                jq_filter="$arg"
+                has_jq=false
+                continue
+            elif [[ "$arg" == repos/* ]]; then
+                api_endpoint="$arg"
+            fi
+        done
+        
+        case "$api_endpoint" in
+            repos/*/issues/*)
+                # Extract issue number from API path
+                issue_number=$(echo "$api_endpoint" | grep -oE '[0-9]+$')
+                
+                # If --jq '.number' was specified, return just the number
+                if [[ "$jq_filter" == ".number" ]]; then
+                    echo "$issue_number"
+                else
+                    # Return full issue JSON
+                    cat << ISSUE_JSON
+{
+  "number": $issue_number,
+  "title": "Test Issue #$issue_number",
+  "body": "Mock issue for e2e testing",
+  "state": "open",
+  "user": {"login": "testuser"}
+}
+ISSUE_JSON
+                fi
+                exit 0
+                ;;
+            repos/*)
+                # Repository API call
+                echo '{"name": "test-repo", "full_name": "auth0/nextjs-auth0", "private": false}'
+                exit 0
+                ;;
+            *)
+                echo "Mock gh api: Unknown endpoint: $api_endpoint" >&2
+                echo "Full args: $*" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    "issue")
+        case "$2" in
+            "view")
+                issue_number="$3"
+                cat << GHISSUE
+{
+  "number": $issue_number,
+  "title": "Test Issue #$issue_number",
+  "body": "This is a mock issue for e2e testing purposes.",
+  "state": "open",
+  "user": {
+    "login": "testuser"
+  },
+  "html_url": "https://github.com/test/repo/issues/$issue_number"
+}
+GHISSUE
+                exit 0
+                ;;
+            *)
+                echo "Mock gh issue: Unknown subcommand: $2" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    "repo")
+        case "$2" in
+            "view")
+                # Handle any repository URL/name
+                repo_spec="${3:-testuser/test-repo}"
+                cat << GHREPO
+{
+  "name": "test-repo",
+  "full_name": "$repo_spec", 
+  "private": false,
+  "html_url": "https://github.com/$repo_spec",
+  "description": "Test repository for e2e testing"
+}
+GHREPO
+                exit 0
+                ;;
+            *)
+                echo "Mock gh repo: Unknown subcommand: $2" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    "--version")
+        echo "gh version 2.40.1 (mock)"
+        exit 0
+        ;;
+    *)
+        echo "Mock gh: Unknown command: $1" >&2
+        echo "Args: $*" >&2
+        exit 1
+        ;;
+esac
+EOF
+    
+    chmod +x "$mock_dir/gh"
+    export PATH="$mock_dir:$PATH"
+    
+    log_info "GitHub CLI mocking enabled"
+}
+
+# Optimized git operations for faster tests
+setup_git_optimizations() {
+    # Configure git for faster operations
+    git config --global init.defaultBranch main
+    git config --global user.name "E2E Test"
+    git config --global user.email "e2e@test.local"
+    git config --global advice.detachedHead false
+    git config --global gc.auto 0  # Disable automatic garbage collection
+    git config --global fetch.parallel 4  # Parallel fetch operations
+    git config --global clone.defaultRemoteName origin
+    git config --global core.preloadindex true  # Speed up git operations
+    git config --global core.fscache true  # File system caching (Windows/Mac)
+    git config --global pack.threads 0  # Use all available CPU cores
+    
+    # Configure shallow clone preferences for environment variables
+    export GIT_CLONE_OPTS="--depth 1 --single-branch --no-tags"
+    export GIT_FETCH_OPTS="--depth=1"
+    export GIT_CONFIG_NOSYSTEM=1  # Don't read system-wide config
+    
+    log_debug "Git optimizations configured"
+}
+
+# Fast git clone with error handling
+git_clone_fast() {
+    local repo_url="$1"
+    local target_dir="$2"
+    local branch="${3:-}"
+    local max_retries=3
+    local retry_count=0
+    
+    local clone_opts="--depth 1 --single-branch --no-tags"
+    if [[ -n "$branch" ]]; then
+        clone_opts="$clone_opts --branch $branch"
+    fi
+    
+    while [[ $retry_count -lt $max_retries ]]; do
+        if git clone $clone_opts "$repo_url" "$target_dir" 2>/dev/null; then
+            log_debug "Fast git clone successful: $repo_url"
+            return 0
+        fi
+        
+        retry_count=$((retry_count + 1))
+        log_warning "Git clone attempt $retry_count failed, retrying..."
+        rm -rf "$target_dir" 2>/dev/null || true
+        sleep 1
+    done
+    
+    log_error "Git clone failed after $max_retries attempts: $repo_url"
+    return 1
+}
+
+# Enhanced error handling and pre-flight checks
+validate_test_environment() {
+    local errors=0
+    
+    # Check disk space (require at least 1GB free)
+    local available_space
+    if command -v df >/dev/null 2>&1; then
+        available_space=$(df -h . | awk 'NR==2 {print $4}' | sed 's/[^0-9.]//g')
+        if (( $(echo "$available_space < 1" | bc -l) )); then
+            log_error "Insufficient disk space: ${available_space}GB available, need at least 1GB"
+            errors=$((errors + 1))
+        fi
+    fi
+    
+    # Check if we can create test directory
+    if ! mkdir -p "$TEST_BASE_DIR/test-write-check" 2>/dev/null; then
+        log_error "Cannot create test directory: $TEST_BASE_DIR"
+        errors=$((errors + 1))
+    else
+        rmdir "$TEST_BASE_DIR/test-write-check" 2>/dev/null || true
+    fi
+    
+    # Check required commands
+    local required_commands=("git" "node" "timeout" "bc")
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            log_error "Required command not found: $cmd"
+            errors=$((errors + 1))
+        fi
+    done
+    
+    # Check if CLI binary exists and is executable
+    if [[ ! -f "$SPACE_CLI_PATH" ]]; then
+        log_error "CLI binary not found: $SPACE_CLI_PATH"
+        errors=$((errors + 1))
+    elif [[ ! -x "$SPACE_CLI_PATH" ]]; then
+        log_error "CLI binary not executable: $SPACE_CLI_PATH"
+        errors=$((errors + 1))
+    fi
+    
+    if [[ $errors -gt 0 ]]; then
+        log_error "Environment validation failed with $errors errors"
+        return 1
+    fi
+    
+    log_success "Environment validation passed"
+    return 0
+}
+
+# Robust operation wrapper with retries and error handling
+safe_operation() {
+    local operation_name="$1"
+    local max_retries="${2:-3}"
+    local retry_delay="${3:-1}"
+    shift 3
+    local operation_cmd=("$@")
+    
+    local retry_count=0
+    local last_exit_code=0
+    
+    while [[ $retry_count -lt $max_retries ]]; do
+        if "${operation_cmd[@]}"; then
+            log_debug "Operation '$operation_name' succeeded on attempt $((retry_count + 1))"
+            return 0
+        fi
+        
+        last_exit_code=$?
+        retry_count=$((retry_count + 1))
+        
+        if [[ $retry_count -lt $max_retries ]]; then
+            log_warning "Operation '$operation_name' failed (attempt $retry_count/$max_retries), retrying in ${retry_delay}s..."
+            sleep "$retry_delay"
+        fi
+    done
+    
+    log_error "Operation '$operation_name' failed after $max_retries attempts (exit code: $last_exit_code)"
+    return $last_exit_code
+}
 
 # Colors for output
 if [[ -z "${RED:-}" ]]; then
@@ -77,25 +391,64 @@ test_failed() {
 
 # Setup test environment
 setup_test_environment() {
-    log_info "Setting up test environment in $TEST_BASE_DIR"
+    log_info "Setting up enhanced test environment in $TEST_BASE_DIR"
+    
+    # Validate environment before proceeding
+    if ! validate_test_environment; then
+        log_error "Environment validation failed, cannot proceed with tests"
+        exit 1
+    fi
+    
+    # Create clean test environment
+    create_clean_test_environment
+    
+    # Setup git optimizations
+    setup_git_optimizations
+    
+    # Backup existing user config before starting tests
+    if [[ -f "$HOME/.space-config.yaml" ]]; then
+        cp "$HOME/.space-config.yaml" "$HOME/.space-config.yaml.e2e-backup"
+        log_info "Backed up existing config to ~/.space-config.yaml.e2e-backup"
+    fi
     
     # Clean and create test directory
     if [[ -d "$TEST_BASE_DIR" ]]; then
         rm -rf "$TEST_BASE_DIR"
     fi
     
-    mkdir -p "$TEST_BASE_DIR"
+    safe_operation "create_test_directory" 3 1 mkdir -p "$TEST_BASE_DIR"
     cd "$TEST_BASE_DIR"
     
-    # Create subdirectories
-    mkdir -p src workspaces env-files configs logs
+    # Create subdirectories including isolated home and mocks
+    mkdir -p src workspaces env-files configs logs home mocks
     
-    log_success "Test environment created"
+    # Set up isolated HOME for config operations
+    export TEST_HOME="$TEST_BASE_DIR/home"
+    
+    # Setup GitHub CLI mocking for tests that need it
+    if [[ "${GH_MOCK:-1}" == "1" ]]; then
+        export GH_TOKEN="mock_token_for_tests"
+        setup_github_cli_mock
+    fi
+    
+    log_success "Enhanced test environment created with full isolation"
 }
 
 # Cleanup test environment
 cleanup_test_environment() {
     log_info "Cleaning up test environment"
+    
+    # Remove any config files that might have been created in user's home during tests
+    if [[ -f "$HOME/.space-config.yaml" ]] && [[ ! -f "$HOME/.space-config.yaml.e2e-backup" ]]; then
+        log_warning "Removing test-created config file from home directory"
+        rm -f "$HOME/.space-config.yaml"
+    fi
+    
+    # Restore user's original config if it was backed up
+    if [[ -f "$HOME/.space-config.yaml.e2e-backup" ]]; then
+        mv "$HOME/.space-config.yaml.e2e-backup" "$HOME/.space-config.yaml"
+        log_info "Restored original config from backup"
+    fi
     
     if [[ -d "$TEST_BASE_DIR" ]]; then
         # Force remove any git worktrees that might be stuck
@@ -104,6 +457,18 @@ cleanup_test_environment() {
     fi
     
     log_success "Test environment cleaned"
+}
+
+# Signal handlers for cleanup on exit/interruption
+cleanup_on_exit() {
+    log_info "Exit handler: ensuring cleanup"
+    cleanup_test_environment
+}
+
+cleanup_on_interrupt() {
+    log_warning "Test interrupted - cleaning up..."
+    cleanup_test_environment
+    exit 1
 }
 
 # Generate test configuration file
@@ -223,7 +588,25 @@ run_space_command() {
     local exit_code=0
     timeout "${timeout_duration}s" bash -c "
         cd '/Users/tushar.pandey/src/workspace-cli'
-        NODE_ENV=test node '$SPACE_CLI_PATH' $config_arg \"\$@\" >'$stdout_log' 2>'$stderr_log'
+        
+        # Set controlled environment for CLI execution
+        export HOME='$TEST_HOME'
+        export NODE_ENV=test
+        export WORKSPACE_DISABLE_PROGRESS=1
+        export WORKSPACE_DISABLE_CACHE=1
+        
+        # GitHub CLI mocking if enabled
+        if [[ '${GH_MOCK:-0}' == '1' ]]; then
+            export PATH='$TEST_BASE_DIR/mocks:$PATH'
+            export GH_TOKEN='mock_token_for_tests'
+        fi
+        
+        # Clear potentially problematic variables
+        unset GITHUB_TOKEN 2>/dev/null || true
+        unset NPM_CONFIG_PREFIX 2>/dev/null || true
+        unset NODE_EXTRA_CA_CERTS 2>/dev/null || true
+        
+        node '$SPACE_CLI_PATH' $config_arg \"\$@\" >'$stdout_log' 2>'$stderr_log'
     " -- "${args[@]}" || exit_code=$?
     
     # Check if command timed out
@@ -236,7 +619,7 @@ run_space_command() {
     echo "$exit_code|$stdout_log|$stderr_log"
 }
 
-# Run a test case with timeout protection
+# Run a test case with timeout protection and optional environment variables
 run_test_case() {
     local test_id="$1"
     local description="$2"
@@ -387,6 +770,10 @@ init_test_session() {
     log_info "CLI Path: $SPACE_CLI_PATH"
     log_info "Test Directory: $TEST_BASE_DIR"
     
+    # Set up signal handlers for cleanup on interruption
+    trap cleanup_on_exit EXIT
+    trap cleanup_on_interrupt INT TERM
+    
     # Verify CLI is built
     if [[ ! -f "$SPACE_CLI_PATH" ]]; then
         log_error "CLI binary not found at $SPACE_CLI_PATH"
@@ -455,7 +842,20 @@ run_interactive_test_case() {
     # Use printf to send input followed by the command
     timeout "${timeout_duration}s" bash -c "
         cd '/Users/tushar.pandey/src/workspace-cli'
-        printf '%s\n' '$user_input' | NODE_ENV=test node '$SPACE_CLI_PATH' $config_arg \"\$@\" >'$stdout_log' 2>'$stderr_log'
+        
+        # Set controlled environment for interactive CLI execution
+        export HOME='$TEST_HOME'
+        export NODE_ENV=test
+        export WORKSPACE_DISABLE_PROGRESS=1
+        export WORKSPACE_DISABLE_CACHE=1
+        
+        # GitHub CLI mocking if enabled
+        if [[ '${GH_MOCK:-0}' == '1' ]]; then
+            export PATH='$TEST_BASE_DIR/mocks:$PATH'
+            export GH_TOKEN='mock_token_for_tests'
+        fi
+        
+        printf '%s\n' '$user_input' | node '$SPACE_CLI_PATH' $config_arg \"\$@\" >'$stdout_log' 2>'$stderr_log'
     " -- "${command_args[@]}" || exit_code=$?
     
     # Check if command timed out

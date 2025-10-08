@@ -1,20 +1,17 @@
 import fs from 'fs-extra';
 import path from 'path';
-import os from 'os';
 import {
   validateBranchName,
   validateGitHubIds,
   validateGitHubIdsExistence,
+  validateWorkspaceName,
 } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
 import { handleError, ValidationError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { isNonInteractive } from '../utils/globalOptions.js';
-import {
-  executeGitCommand,
-  executeGhCommand,
-  executeShellCommand,
-} from '../utils/secureExecution.js';
+import { executeGitCommand, executeShellCommand } from '../utils/secureExecution.js';
+import { initCoordinator } from '../utils/asyncCoordinator.js';
 import { fileOps, createTestFileName } from '../utils/init-helpers.js';
 import { ContextDataFetcher } from '../services/contextData.js';
 import { progressIndicator, type ProgressStep } from '../utils/progressIndicator.js';
@@ -23,6 +20,11 @@ import { getWorkflowTemplatesWithChoice } from '../utils/workflow.js';
 import readline from 'node:readline/promises';
 import { setupWorktrees } from '../services/gitWorktrees.js';
 import { stdin as input, stdout as output } from 'node:process';
+import {
+  extractGitHubRepoInfo,
+  getCachedPullRequestInfo,
+  isGitHubCliAvailable,
+} from '../utils/githubUtils.js';
 import type { Command } from 'commander';
 import type {
   ProjectConfig,
@@ -82,6 +84,34 @@ function parseRepoInitArguments(args: string[]): { issueIds: number[]; branchNam
   const validatedIssueIds = validateGitHubIds(issueIds);
 
   return { issueIds: validatedIssueIds, branchName: validatedBranchName };
+}
+
+/**
+ * Extract workspace path from args array for PR mode
+ * In PR mode, the workspace path is typically the last argument (if provided)
+ * @param args - Array of command line arguments
+ * @returns The workspace path if found, undefined otherwise
+ */
+export function extractWorkspacePathFromArgs(args: string[]): string | undefined {
+  if (args.length === 0) {
+    return undefined;
+  }
+
+  // In PR mode, the last argument should be the workspace path
+  // We don't need to validate GitHub IDs here since we're in PR mode
+  const lastArg = args[args.length - 1];
+
+  // Basic validation - if it looks like a number, it's probably a GitHub ID, not a workspace path
+  if (/^\d+$/.test(lastArg)) {
+    return undefined;
+  }
+
+  // Apply workspace name validation
+  try {
+    return validateWorkspaceName(lastArg);
+  } catch (error) {
+    throw new Error(`Invalid workspace path "${lastArg}": ${(error as Error).message}`);
+  }
 }
 
 /**
@@ -161,89 +191,103 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
     });
   }
 
-  // Create workspace directories
+  // Setup parallel operations for independent tasks
+  initCoordinator.clear();
+
+  // Operation 1: Directory creation (critical - must complete first)
+  initCoordinator.addOperation({
+    id: 'directories',
+    description: 'Creating workspace directories',
+    priority: 'critical',
+    execute: async () => {
+      await fileOps.ensureDir(
+        paths.workspaceDir,
+        `workspace directory: ${paths.workspaceDir}`,
+        isDryRun,
+      );
+    },
+  });
+
+  // Operation 2: Context gathering (can run in parallel with worktrees)
+  initCoordinator.addOperation({
+    id: 'context',
+    description: 'Gathering GitHub context and data',
+    priority: 'normal',
+    execute: async () => {
+      return await gatherInitializationContext(project, issueIds, isDryRun, withContext);
+    },
+    dependencies: ['directories'],
+  });
+
+  // Operation 3: Git worktrees setup (can run in parallel with context)
+  initCoordinator.addOperation({
+    id: 'worktrees',
+    description: 'Setting up git worktrees',
+    priority: 'normal',
+    execute: async () => {
+      try {
+        await setupWorktrees(project, paths, branchName, isDryRun);
+        return { success: true };
+      } catch (error) {
+        // Gracefully handle worktree failures
+        const errorMessage = (error as Error).message;
+        if (
+          errorMessage.includes('already used by worktree') ||
+          errorMessage.includes('already checked out') ||
+          errorMessage.includes('worktree already exists') ||
+          errorMessage.includes('invalid reference') ||
+          errorMessage.includes('Failed to create new worktree branch') ||
+          errorMessage.includes('does not appear to be a git repository') ||
+          errorMessage.includes('No such remote')
+        ) {
+          if (options.isVerbose) {
+            console.log('\n🔄 Worktree creation failed due to branch conflicts.');
+            console.log('📁 Continuing with workspace-only mode (no git worktrees).');
+            console.log('💡 You can still use the workspace directory for development.\n');
+          }
+          logger.verbose(`Worktree setup failed: ${errorMessage}`);
+          logger.verbose('Falling back to workspace-only mode');
+          return { success: false, fallback: true };
+        }
+        throw error;
+      }
+    },
+    dependencies: ['directories'],
+  });
+
+  // Execute critical operations first, then parallel operations
   if (!isSilent) {
     progressIndicator.startStep('directories');
   }
 
-  await fileOps.ensureDir(
-    paths.workspaceDir,
-    `workspace directory: ${paths.workspaceDir}`,
-    isDryRun,
-  );
+  const directoryResult = await initCoordinator.executeInParallel(['directories']);
+  if (!directoryResult[0].success) {
+    throw directoryResult[0].error;
+  }
 
   progressIndicator.completeStep('directories');
 
-  // Setup git worktrees with graceful fallback
-  let worktreesCreated = false;
+  // Execute context and worktrees in parallel
   if (!isSilent) {
     progressIndicator.startStep('worktrees');
-  }
-
-  try {
-    await setupWorktrees(project, paths, branchName, isDryRun);
-    worktreesCreated = true;
-    progressIndicator.completeStep('worktrees');
-  } catch (error) {
-    // Gracefully handle worktree creation failures
-    const errorMessage = (error as Error).message;
-
-    if (
-      errorMessage.includes('already used by worktree') ||
-      errorMessage.includes('already checked out') ||
-      errorMessage.includes('worktree already exists') ||
-      errorMessage.includes('invalid reference') ||
-      errorMessage.includes('Failed to create new worktree branch') ||
-      errorMessage.includes('does not appear to be a git repository') ||
-      errorMessage.includes('No such remote')
-    ) {
-      // Complete the progress step even though we're falling back
-      progressIndicator.completeStep('worktrees');
-
-      if (options.isVerbose) {
-        console.log('\n🔄 Worktree creation failed due to branch conflicts.');
-        console.log('📁 Continuing with workspace-only mode (no git worktrees).');
-        console.log('💡 You can still use the workspace directory for development.\n');
-      }
-
-      logger.verbose(`Worktree setup failed: ${errorMessage}`);
-      logger.verbose('Falling back to workspace-only mode');
-      worktreesCreated = false;
-    } else {
-      // Re-throw unexpected errors
-      progressIndicator.completeStep('worktrees');
-      throw error;
-    }
-  }
-
-  // Gather context and generate templates (consolidated step)
-  if (!isSilent) {
     progressIndicator.startStep('context');
   }
 
-  // Sample app reproduction decision is now handled in the LLM template
+  const parallelResults = await initCoordinator.executeInParallel(['context', 'worktrees']);
 
-  // Collect additional context
-  logger.verbose('📊 Collecting additional context...');
-  const additionalContext = await collectAdditionalContext(!withContext);
+  const contextResult = parallelResults.find((r) => r.id === 'context');
+  const worktreeResult = parallelResults.find((r) => r.id === 'worktrees');
 
-  // Fetch GitHub data
-  logger.verbose('🔍 Fetching GitHub data...');
-  const contextFetcher = new ContextDataFetcher();
-
-  // Try to extract GitHub org and repo from repo URL if it's a GitHub URL
-  let githubOrg = 'unknown';
-  let repoName = path.basename(project.repo).replace(/\.git$/, ''); // Remove .git suffix
-
-  if (project.repo.includes('github.com')) {
-    const match = project.repo.match(/github\.com[/:]([^/]+)\/([^/.]+)\.git/);
-    if (match) {
-      githubOrg = match[1];
-      repoName = match[2];
-    }
+  if (!contextResult?.success) {
+    throw contextResult?.error || new Error('Context gathering failed');
   }
 
-  const githubData = await contextFetcher.fetchGitHubData(issueIds, githubOrg, repoName, isDryRun);
+  // Extract context data from result
+  const { githubData, additionalContext } = contextResult.result;
+  const worktreesCreated = worktreeResult?.success && !worktreeResult.result?.fallback;
+
+  progressIndicator.completeStep('worktrees');
+  progressIndicator.completeStep('context');
 
   // Generate templates and documentation
   logger.verbose('📝 Generating templates and documentation...');
@@ -258,64 +302,30 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
     isDryRun,
   });
 
-  progressIndicator.completeStep('context');
-
-  // Execute optional post-init command and track result
-  let postInitResult: PostInitResult | null = null;
+  // Execute optional post-init command in background (non-blocking)
+  let postInitPromise: Promise<PostInitResult | null> | null = null;
   if (project['post-init']) {
     if (!isSilent) {
       progressIndicator.startStep('postinit');
     }
-    try {
-      postInitResult = await executePostInitCommand(
-        project,
-        paths,
-        isDryRun,
-        worktreesCreated,
-        options,
-      );
-    } finally {
-      // Always complete the progress step, regardless of success/failure
-      if (!isSilent) {
-        progressIndicator.completeStep('postinit');
-      }
-    }
+
+    // Start post-init in background
+    postInitPromise = executePostInitCommand(project, paths, isDryRun, worktreesCreated, options);
   } else {
     logger.verbose('No post-init command configured, skipping post-init setup');
   }
 
-  // Complete progress bar first, before any status messages
+  // Complete progress bar immediately (don't wait for post-init)
   if (!isSilent) {
+    if (project['post-init']) {
+      progressIndicator.completeStep('postinit');
+    }
     progressIndicator.complete();
   }
 
-  // Show appropriate status message based on post-init result
-  if (postInitResult && !postInitResult.success) {
-    // Post-init failed
-    console.log('Workspace initialized, post init failed');
-
-    // Show detailed error output cleanly after progress completion
-    console.error(`\n❌ Post-init command failed:`);
-    if (postInitResult.output) {
-      if (postInitResult.output.stdout) {
-        console.error('STDOUT:', postInitResult.output.stdout);
-      }
-      if (postInitResult.output.stderr) {
-        console.error('STDERR:', postInitResult.output.stderr);
-      }
-      if (postInitResult.output.exitCode) {
-        console.error(`Exit Code: ${postInitResult.output.exitCode}`);
-      }
-    }
-    if (postInitResult.error) {
-      console.error('Error:', postInitResult.error.message);
-    }
-    console.error('\nNote: The workspace is still ready for development.');
-  } else {
-    // Success or no post-init
-    if (!isSilent) {
-      logger.info('Workspace ready');
-    }
+  // Show workspace ready message immediately
+  if (!isSilent) {
+    logger.info('Workspace ready');
   }
 
   if (isDryRun) {
@@ -323,6 +333,40 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   } else if (isSilent) {
     // Show brief success message even in silent/non-interactive mode
     console.log(`Workspace location: ${paths.workspaceDir}`);
+  }
+
+  // Wait for post-init completion in background and handle result
+  if (postInitPromise) {
+    postInitPromise
+      .then((postInitResult) => {
+        if (postInitResult && !postInitResult.success) {
+          // Post-init failed - show warning but don't fail the entire init
+          console.error(`\n⚠️  Post-init command failed (workspace is still ready):`);
+          if (postInitResult.output) {
+            if (postInitResult.output.stdout) {
+              console.error('STDOUT:', postInitResult.output.stdout);
+            }
+            if (postInitResult.output.stderr) {
+              console.error('STDERR:', postInitResult.output.stderr);
+            }
+            if (postInitResult.output.exitCode) {
+              console.error(`Exit Code: ${postInitResult.output.exitCode}`);
+            }
+          }
+          if (postInitResult.error) {
+            console.error('Error:', postInitResult.error.message);
+          }
+          console.error('Note: The workspace is still ready for development.');
+        }
+      })
+      .catch((error) => {
+        // Handle unexpected post-init errors
+        console.error(
+          `\n⚠️  Post-init command encountered an unexpected error (workspace is still ready):`,
+        );
+        console.error('Error:', (error as Error).message);
+        console.error('Note: The workspace is still ready for development.');
+      });
   }
 }
 
@@ -359,27 +403,13 @@ async function initializeAnalysisOnlyWorkspace(options: AnalysisOnlyOptions): Pr
 
   // Sample app analysis handled automatically by templates
 
-  // Collect additional context
-  logger.verbose('📊 Collecting additional context...');
-  const additionalContext = await collectAdditionalContext(!withContext);
-
-  // Fetch GitHub data
-  logger.verbose('🔍 Fetching GitHub data...');
-  const contextFetcher = new ContextDataFetcher();
-
-  // Try to extract GitHub org and repo from repo URL if it's a GitHub URL
-  let githubOrg = 'unknown';
-  let repoName = path.basename(project.repo).replace(/\.git$/, ''); // Remove .git suffix
-
-  if (project.repo.includes('github.com')) {
-    const match = project.repo.match(/github\.com[/:]([^/]+)\/([^/.]+)\.git/);
-    if (match) {
-      githubOrg = match[1];
-      repoName = match[2];
-    }
-  }
-
-  const githubData = await contextFetcher.fetchGitHubData(issueIds, githubOrg, repoName, isDryRun);
+  // Use shared context gathering to eliminate duplication
+  const { githubData, additionalContext } = await gatherInitializationContext(
+    project,
+    issueIds,
+    isDryRun,
+    withContext,
+  );
 
   // Generate templates and documentation (using mock paths for key files)
   logger.verbose('📝 Generating analysis templates...');
@@ -675,8 +705,38 @@ async function handleExistingWorkspace(
 }
 
 /**
- * Collect additional context from user
+ * Shared context gathering for both workspace modes
+ * Eliminates duplicate context collection and GitHub data fetching
  */
+async function gatherInitializationContext(
+  project: ProjectConfig,
+  issueIds: number[],
+  isDryRun: boolean,
+  withContext: boolean,
+): Promise<{
+  repoInfo: ReturnType<typeof extractGitHubRepoInfo>;
+  githubData: GitHubIssueData[];
+  additionalContext: string[];
+}> {
+  // Collect additional context (only once)
+  logger.verbose('📊 Collecting additional context...');
+  const additionalContext = await collectAdditionalContext(!withContext);
+
+  // Extract GitHub org and repo using cached utility (only once)
+  const repoInfo = extractGitHubRepoInfo(project.repo);
+
+  // Fetch GitHub data
+  logger.verbose('🔍 Fetching GitHub data...');
+  const contextFetcher = new ContextDataFetcher();
+  const githubData = await contextFetcher.fetchGitHubData(
+    issueIds,
+    repoInfo.org,
+    repoInfo.repo,
+    isDryRun,
+  );
+
+  return { repoInfo, githubData, additionalContext };
+}
 async function collectAdditionalContext(skipContextCollection: boolean = true): Promise<string[]> {
   if (skipContextCollection || isNonInteractive()) {
     if (isNonInteractive()) {
@@ -1444,6 +1504,7 @@ async function handlePRInitialization(
   prIdStr: string,
   options: { verbose?: boolean; dryRun?: boolean; analyse?: boolean; silent?: boolean },
   isSilent: boolean,
+  workspacePath?: string,
 ): Promise<void> {
   const isVerbose = options.verbose || options.dryRun;
   const isDryRun = options.dryRun || false;
@@ -1461,35 +1522,28 @@ async function handlePRInitialization(
   // Get project configuration
   const { project } = configManager.findProject(projectKey);
 
-  // Check if gh CLI is available for GitHub repos
-  let useGhCli = false;
-  if (project.repo.includes('github.com')) {
+  // Extract GitHub repository information
+  const repoInfo = extractGitHubRepoInfo(project.repo);
+
+  // Use GitHub API for PR identification if available (replaces git clone)
+  if (repoInfo.isGitHub) {
     try {
-      const result = await executeGhCommand(['--version'], {});
-
-      if (result.exitCode === 0) {
-        useGhCli = true;
-        logger.verbose('GitHub CLI detected - will use for PR checkout');
-      } else {
-        throw new Error(`GitHub CLI check failed: ${result.stderr}`);
+      const isCliAvailable = await isGitHubCliAvailable();
+      if (!isCliAvailable) {
+        throw new Error('GitHub CLI is required for PR initialization but is not available');
       }
-    } catch {
-      logger.warn('GitHub CLI not found - using manual git commands');
-    }
-  }
 
-  // Create temporary directory to check out PR and get branch name
-  const tempDir = path.join(os.tmpdir(), `workspace-pr-${prId}-${Date.now()}`);
+      logger.verbose(`🔍 Fetching PR #${prId} information via GitHub API...`);
 
-  try {
-    if (isDryRun) {
-      logger.info(`[DRY RUN] Would checkout PR #${prId} to determine branch name`);
-      // Use a default branch name for dry run
+      // Get PR information directly from GitHub API (no clone needed)
+      const prInfo = await getCachedPullRequestInfo(prId, repoInfo.org, repoInfo.repo, isDryRun);
+
       const issueIds = [prId];
-      const branchName = `pr-${prId}`;
-      const workspaceName = `${project.name}-pr-${prId}`;
+      const branchName = prInfo.branchName;
+      const workspaceName = workspacePath || branchName;
+      const paths = configManager.getWorkspacePaths(project.key, workspaceName);
 
-      const paths = configManager.getWorkspacePaths(project.key, branchName);
+      logger.success(`PR #${prId} branch identified: ${branchName}`);
 
       if (isAnalyseMode) {
         await initializeAnalysisOnlyWorkspace({
@@ -1519,109 +1573,34 @@ async function handlePRInitialization(
         });
       }
       return;
-    }
+    } catch (error) {
+      // Enhanced error handling with better user guidance
+      const errorMessage = (error as Error).message;
 
-    // Clone repository to temp directory
-    logger.verbose(`Cloning ${project.repo} to temporary directory...`);
-    const result = await executeGitCommand(['clone', project.repo, tempDir], {});
-
-    if (result.exitCode !== 0) {
-      throw new Error(`Git clone failed: ${result.stderr}`);
-    }
-
-    let branchName: string;
-
-    if (useGhCli) {
-      // Use GitHub CLI to checkout PR
-      logger.verbose(`Checking out PR #${prId} using GitHub CLI...`);
-      const result = await executeGhCommand(['pr', 'checkout', prIdStr], { cwd: tempDir });
-
-      if (result.exitCode !== 0) {
-        throw new Error(`GitHub CLI PR checkout failed: ${result.stderr}`);
-      }
-
-      // Get the branch name that was checked out
-      const branchResult = await executeGitCommand(['branch', '--show-current'], { cwd: tempDir });
-
-      if (branchResult.exitCode !== 0) {
-        throw new Error(`Git branch command failed: ${branchResult.stderr}`);
-      }
-
-      branchName = branchResult.stdout.trim();
-    } else {
-      // Manual PR checkout for non-GitHub repos or when gh CLI is not available
-      logger.verbose(`Fetching PR #${prId} manually...`);
-
-      if (project.repo.includes('github.com')) {
-        // GitHub without gh CLI
-        const result = await executeGitCommand(
-          ['fetch', 'origin', `pull/${prId}/head:pr-${prId}`],
-          { cwd: tempDir },
-        );
-
-        if (result.exitCode !== 0) {
-          throw new Error(`Git fetch PR failed: ${result.stderr}`);
-        }
-
-        branchName = `pr-${prId}`;
-
-        const checkoutResult = await executeGitCommand(['checkout', branchName], { cwd: tempDir });
-
-        if (checkoutResult.exitCode !== 0) {
-          throw new Error(`Git checkout failed: ${checkoutResult.stderr}`);
-        }
-      } else {
-        // Generic git repo - try common PR patterns
+      if (errorMessage.includes('GitHub CLI is not available')) {
         throw new Error(
-          'PR checkout not supported for non-GitHub repositories without specific configuration. ' +
-            'Please use regular init command with the branch name.',
+          `GitHub CLI is required for PR initialization but is not installed.\n` +
+            `Please install GitHub CLI: https://cli.github.com/`,
         );
       }
+
+      if (errorMessage.includes('not found in') || errorMessage.includes('Access denied to')) {
+        throw new Error(
+          `PR #${prId} not found or access denied.\n` +
+            `Please verify the PR exists and you have access to ${project.repo}`,
+        );
+      }
+
+      if (!project.repo.includes('github.com')) {
+        throw new Error(
+          `PR initialization is only supported for GitHub repositories.\n` +
+            `For non-GitHub repos, please use: space init ${projectKey} ${prIdStr} <branch-name>`,
+        );
+      }
+
+      // Re-throw with enhanced context
+      throw new Error(`PR #${prId} initialization failed: ${errorMessage}`);
     }
-
-    logger.success(`Successfully identified PR #${prId} branch: ${branchName}`);
-
-    // Clean up temp directory
-    await fs.remove(tempDir);
-
-    // Now initialize workspace with the PR branch
-    const issueIds = [prId];
-    const workspaceName = `${project.name}-pr-${prId}`;
-    const paths = configManager.getWorkspacePaths(project.key, branchName);
-
-    if (isAnalyseMode) {
-      await initializeAnalysisOnlyWorkspace({
-        project,
-        projectKey,
-        issueIds,
-        branchName,
-        workspaceName,
-        paths,
-        isDryRun,
-        isVerbose: isVerbose || false,
-        isSilent,
-        withContext: false,
-      });
-    } else {
-      await initializeWorkspace({
-        project,
-        projectKey,
-        issueIds,
-        branchName,
-        workspaceName,
-        paths,
-        isDryRun,
-        isVerbose: isVerbose || false,
-        isSilent,
-        withContext: false,
-      });
-    }
-  } catch (error) {
-    // Clean up temp directory on error
-    if (fs.existsSync(tempDir)) {
-      await fs.remove(tempDir);
-    }
-    throw error;
   }
 }
 
@@ -1665,7 +1644,10 @@ Examples:
     Initialize space for java project for GitHub issues 123 & 456
 
   $ space init nextjs-auth0 --pr 789
-    Initialize space using repo name for pull request #789 (uses global --pr option)
+    Initialize space using repo name for pull request #789 (uses detected branch name)
+
+  $ space init nextjs-auth0 --pr 789 review/feature-branch
+    Initialize space for PR #789 with custom workspace path
 
   $ space init spa feature/test --dry-run
     Preview what would be done without making changes
@@ -1778,6 +1760,28 @@ Related commands:
             console.log(`\n⚡ Creating workspace: ${projectIdentifier} ${args.join(' ')}\n`);
           }
 
+          // Calculate common options first
+          const isVerbose = options.verbose || options.dryRun;
+          const isDryRun = options.dryRun || false;
+          const isAnalyseMode = options.analyse || false;
+          const isSilent = options.silent || isNonInteractive() || isDryRun || false;
+
+          // Check if --pr option was used globally FIRST (before interactive mode checks)
+          const globalOpts = program.opts();
+          if (globalOpts.pr) {
+            // Handle PR initialization - use new findProject method for better resolution
+            const { projectKey } = configManager.findProject(projectIdentifier!);
+            // Extract workspace path from args if provided
+            const workspacePath = extractWorkspacePathFromArgs(args);
+            return await handlePRInitialization(
+              projectKey,
+              globalOpts.pr,
+              options,
+              isSilent,
+              workspacePath,
+            );
+          }
+
           // If no args provided but project identifier exists, go to interactive mode for args
           if (projectIdentifier && (!args || args.length === 0)) {
             if (isNonInteractive()) {
@@ -1826,20 +1830,6 @@ Related commands:
             args.push(initResponse.branchName);
 
             console.log(`\n⚡ Creating workspace: ${projectIdentifier} ${args.join(' ')}\n`);
-          }
-
-          // Calculate common options first
-          const isVerbose = options.verbose || options.dryRun;
-          const isDryRun = options.dryRun || false;
-          const isAnalyseMode = options.analyse || false;
-          const isSilent = options.silent || isNonInteractive() || isDryRun || false;
-
-          // Check if --pr option was used globally
-          const globalOpts = program.opts();
-          if (globalOpts.pr) {
-            // Handle PR initialization - use new findProject method for better resolution
-            const { projectKey } = configManager.findProject(projectIdentifier!);
-            return await handlePRInitialization(projectKey, globalOpts.pr, options, isSilent);
           }
 
           // Find project by repo name or project key using improved resolution

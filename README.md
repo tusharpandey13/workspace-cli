@@ -23,28 +23,31 @@ pnpm add -g @tusharpandey13/space-cli
 **That's it!** You now have isolated directories for your main repo and samples, ready for development.  
 `space` comes **pre-configured** with popular auth0 SDK repos including web, mobile, server and cli repos. Please take a look at the **compatibility matrix** for more info
 
+// make a table here of supported repos and example repos
+
 You can now just run:
 
 ```
-space init auth0-spa-js feat/dpop
+space init auth0-spa-js feat/something
 ```
 
 and it will create
+
+// add a sample directory tree here of an example usecase for high-level inference
 
 ## 💡 Core Concepts
 
 ### Workspaces = Isolated Development Environments
 
-Each workspace contains:
+Each workspace is a dedicated directory that doesn't interfere with other work and contains:
 
-- **Main repo** on your target branch
-- **Sample repos** for testing (if configured)
+- **Project repo** on your target branch
+- **Sample repo** for testing (if configured)
 - **Environment files** ready to use
-- **Dedicated directory** that doesn't interfere with other work
 
-### Git Worktrees: The Magic Behind It
+### Git Worktrees
 
-Instead of multiple repo clones, Space CLI uses **git worktrees**:
+Instead of multiple repo clones, Space CLI uses git worktrees:
 
 - ✅ **Shared git history** - One `.git` folder, multiple working directories
 - ✅ **Instant branch switching** - No checkout delays
@@ -55,21 +58,21 @@ Instead of multiple repo clones, Space CLI uses **git worktrees**:
 
 ## ✨ Key Features
 
-### 🤖 AI-Powered Development
+### AI-Powered Development
 
 - **Auto Copilot setup** - Creates `.github/copilot-instructions.md` with project context
 - **Smart PR templates** - Structured review templates with security checklists
 - **Analysis templates** - Pre-built prompts for issue investigation
 - **Sample integration** - AI helps reproduce issues in sample apps
 
-### 🔧 Intelligent Automation
+### Intelligent Automation
 
 - **Smart gitignore** - Auto-configures based on detected tech stack
 - **Environment handling** - Copies and manages env files automatically
 - **Post-init scripts** - Runs setup commands after workspace creation
 - **Progress tracking** - Visual feedback for long operations
 
-### � Performance Optimized
+### Performance Optimized
 
 - **Sub-200ms startup** - Cached config loading
 - **Lazy module loading** - Only loads what you need

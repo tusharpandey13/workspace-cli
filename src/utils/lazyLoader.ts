@@ -67,6 +67,12 @@ export class CommandLoader {
       registrationFunction: 'setupCommand',
       isCommandObject: true,
     },
+    {
+      name: 'restore-config',
+      description: 'Restore default configuration file',
+      modulePath: '../commands/restore-config.js',
+      registrationFunction: 'restoreConfigCommand',
+    },
   ];
 
   /**

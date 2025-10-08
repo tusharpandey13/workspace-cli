@@ -51,9 +51,12 @@ run_happy_path_tests() {
     run_test_case "HAPPY-07" "Clean existing workspace" 0 "cleaned" "$config_file" \
         clean test "feature/test-branch" --force --non-interactive
     
-    # HAPPY-08: Init with GitHub issue IDs
-    run_test_case "HAPPY-08" "Init with GitHub issue IDs" 0 "Workspace location" "$config_file" \
+    # HAPPY-08: Init with GitHub issue IDs (use mocking for reliable tests)
+    # Enable GitHub CLI mocking for this test
+    export GH_MOCK=1
+    run_test_case "HAPPY-08" "Init with GitHub issue IDs (with mocking)" 0 "Workspace location" "$config_file" \
         init test 123 456 bugfix/issue-123 --non-interactive
+    unset GH_MOCK
     
     # Clean up for next test
     run_space_command "$config_file" clean test "bugfix/issue-123" --force --non-interactive >/dev/null 2>&1 || true
@@ -189,9 +192,11 @@ EOF
     # Clean up
     run_space_command "$config_file" clean nextjs-auth0-project "feature/repo-name-test" --force --non-interactive >/dev/null 2>&1 || true
     
-    # EDGE-03: Multiple GitHub issue IDs
+    # EDGE-03: Multiple GitHub issue IDs (use mocking for reliability)
+    export GH_MOCK=1
     run_test_case "EDGE-03" "Multiple GitHub issue IDs" 0 "Workspace location" "$config_file" \
         init test 123 456 789 feature/multi-issues --non-interactive
+    unset GH_MOCK
     
     # Clean up
     run_space_command "$config_file" clean test "feature/multi-issues" --force --non-interactive >/dev/null 2>&1
@@ -273,18 +278,17 @@ run_verification_tests() {
     run_space_command "" setup --non-interactive --src-dir "$TEST_BASE_DIR/src" \
         --add-project "verify:Verify:https://github.com/auth0/nextjs-auth0.git" >/dev/null 2>&1 || true
     
-    # Check for generated config in default location (first priority location)
-    local default_config="$HOME/.space-config.yaml"
-    if [[ -f "$default_config" ]]; then
-        if verify_file_exists "$default_config" "VERIFY-03"; then
+    # Check for generated config in isolated test home directory
+    local test_config="$TEST_BASE_DIR/home/.space-config.yaml"
+    if [[ -f "$test_config" ]]; then
+        if verify_file_exists "$test_config" "VERIFY-03"; then
             TESTS_PASSED=$((TESTS_PASSED + 1))
         else
             TESTS_FAILED=$((TESTS_FAILED + 1))
         fi
-        # Clean up
-        rm -f "$default_config"
+        # Config will be cleaned up with test environment
     else
-        log_warning "VERIFY-03: Default config location needs investigation"
+        log_warning "VERIFY-03: Config not created in isolated test environment"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     TESTS_TOTAL=$((TESTS_TOTAL + 1))

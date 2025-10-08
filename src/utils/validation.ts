@@ -1,6 +1,6 @@
 import path from 'path';
-import { execa } from 'execa';
 import { logger } from './logger.js';
+import { executeGhCommand } from './secureExecution.js';
 
 /**
  * Allowed Git hosting providers for security
@@ -259,13 +259,14 @@ export async function validateGitHubIdsExistence(
       const apiUrl = `repos/${githubOrg}/${repoName}/issues/${issueId}`;
       logger.verbose(`Checking issue #${issueId}...`);
 
-      const result = await execa('gh', ['api', apiUrl, '--jq', '.number'], {
-        stdio: 'pipe',
+      const result = await executeGhCommand(['api', apiUrl, '--jq', '.number'], {
         timeout: 10000, // 10 second timeout to prevent hanging
       });
 
       if (result.exitCode !== 0) {
-        throw new Error(`Failed to fetch issue #${issueId}`);
+        const error = new Error(`Failed to fetch issue #${issueId}`);
+        (error as any).stderr = result.stderr;
+        throw error;
       }
 
       const returnedId = parseInt(result.stdout.trim(), 10);
