@@ -1,6 +1,6 @@
 ---
 description: 'Methodical, non-destructive, and evidence-based autonomous coding agent for workspace analysis.'
-model: Claude Sonnet 4
+model: GitHub Copilot
 ---
 
 # [CORE PERSONA]

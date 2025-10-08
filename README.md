@@ -21,19 +21,33 @@ pnpm add -g @tusharpandey13/space-cli
 ```
 
 **That's it!** You now have isolated directories for your main repo and samples, ready for development.  
-`space` comes **pre-configured** with popular auth0 SDK repos including web, mobile, server and cli repos. Please take a look at the **compatibility matrix** for more info
-
-// make a table here of supported repos and example repos
+`space` comes **pre-configured** with popular auth0 SDK repos including web, mobile, server and cli repos. Please take a look at the [compatibility matrix](#-compatibility-matrix) for more info.
 
 You can now just run:
 
-```
+```bash
 space init auth0-spa-js feat/something
 ```
 
-and it will create
+and it will create:
 
-// add a sample directory tree here of an example usecase for high-level inference
+```
+~/src/workspaces/auth0-spa-js/feat/something/
+├── auth0-spa-js/               # Main SDK repository worktree, checked out to your branch
+│   ├── src/
+│   └── ...
+├── auth0-spa-js-sample/        # Sample app repository worktree, checked out to your branch
+│   ├── 01-Login/
+│   └── ...
+├── .env.local                  # Environment configuration (copied from templates)
+├── analysis.prompt.md          # Analysis prompt
+├── fix-and-test.prompt.md      # Fix and test prompt (project repo and sample repo feedback loop)
+├── review-changes.prompt.md    # Review changes done in this branch using this prompt
+├── PR_DESCRIPTION_TEMPLATE.md  # use this to create PR description for your changes
+└── CONTEXT.md                  # Workspace context
+```
+
+The highlight here is the `CONTEXT.MD` file that contains all context from the github ids specified when running `init`. This includes details and comments from issues and PRs. It also contains data from any linked pages in the github ids (from a list of safe domains only).
 
 ## 💡 Core Concepts
 
@@ -56,91 +70,14 @@ Instead of multiple repo clones, Space CLI uses git worktrees:
 
 ---
 
-## ✨ Key Features
-
-### AI-Powered Development
-
-- **Auto Copilot setup** - Creates `.github/copilot-instructions.md` with project context
-- **Smart PR templates** - Structured review templates with security checklists
-- **Analysis templates** - Pre-built prompts for issue investigation
-- **Sample integration** - AI helps reproduce issues in sample apps
-
-### Intelligent Automation
-
-- **Smart gitignore** - Auto-configures based on detected tech stack
-- **Environment handling** - Copies and manages env files automatically
-- **Post-init scripts** - Runs setup commands after workspace creation
-- **Progress tracking** - Visual feedback for long operations
-
-### Performance Optimized
-
-- **Sub-200ms startup** - Cached config loading
-- **Lazy module loading** - Only loads what you need
-- **12MB memory footprint** - Lightweight and fast
-
----
-
-## 📋 Essential Commands
-
-### Create Workspaces
-
-```bash
-space init <project> [branch]           # Create new workspace
-space init next feature/user-auth       # Example: NextJS project, auth feature
-space --pr 123 init react               # Create workspace for PR #123
-```
-
-### Manage Workspaces
-
-```bash
-space list                              # Show all workspaces
-space projects                          # Show available projects
-space info next feature_user-auth       # Get workspace details
-space clean next feature_user-auth      # Remove workspace
-```
-
-### Setup & Configuration
-
-```bash
-space setup                             # Interactive setup wizard
-space validate                          # Check configuration and dependencies
-```
-
-### Common Workflows
-
-**Feature Development:**
-
-```bash
-space init myapp feature/new-login      # Create workspace
-cd ~/src/workspaces/myapp/feature/new-login/myapp
-# Work on your feature...
-space clean myapp feature/new-login     # Clean up when done
-```
-
-**Bug Investigation:**
-
-```bash
-space init myapp bugfix/timeout-issue   # Isolated environment for bug fixing
-cd ~/src/workspaces/myapp/bugfix/timeout-issue
-# Investigate and fix...
-```
-
-**PR Review:**
-
-```bash
-space --pr 456 init myapp               # Review someone's PR
-cd ~/src/workspaces/myapp/pr-456
-# Test their changes...
-```
-
----
-
 ## ⚙️ Configuration
 
-Space CLI uses a simple `config.yaml` file. Run `space setup` for guided configuration, or create manually:
+Space CLI uses `~/.space-config.yaml` as source of truth. Run `space setup` for guided configuration, or create manually.
+
+A sample config is provided below:
 
 ```yaml
-# config.yaml
+# ~/.space-config.yaml
 projects:
   nextjs-auth0:
     name: 'NextJS Auth0 SDK'
@@ -149,11 +86,12 @@ projects:
     env_file: 'next.env.local'
     post-init: 'cd nextjs-auth0 && pnpm i && cd ../auth0-nextjs-samples/Sample-01 && pnpm i'
 
-  react-spa:
-    name: 'React SPA Auth0'
-    repo: 'https://github.com/auth0/auth0-react.git'
-    sample_repo: 'https://github.com/auth0-samples/auth0-react-samples.git'
-    env_file: 'react.env.local'
+  auth0-java:
+    name: 'Auth0 Java Management SDK'
+    repo: 'https://github.com/auth0/auth0-java.git'
+    sample_repo: 'https://github.com/auth0-samples/auth0-spring-security-mvc-sample.git'
+    env_file: 'auth0-java.env.local'
+    post-init: 'cd auth0-java && ./gradlew build && cd ../auth0-spring-security-mvc-sample && ./gradlew build'
 
 global:
   src_dir: '~/src' # Where to create workspaces
@@ -183,6 +121,97 @@ env-files/
 ```
 
 These are automatically copied to new workspaces.
+
+## 📊 Compatibility Matrix
+
+These projects come configured out-of-the-box with `space-cli` and dont need much configuration changes. You can of course, add more or edit these:
+
+| Category           | Project Key                | Repository                                                                    | Sample Repository                                                                      | Tech Stack   |
+| ------------------ | -------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------ |
+| **Web SDKs**       | `auth0-spa-js`             | [auth0-spa-js](https://github.com/auth0/auth0-spa-js)                         | [spa-js-samples](https://github.com/tusharpandey13/auth0-spa-js-sample)                | Vanilla JS   |
+|                    | `auth0-react`              | [auth0-react](https://github.com/auth0/auth0-react)                           | [react-samples](https://github.com/auth0-samples/auth0-react-samples)                  | React        |
+|                    | `nextjs-auth0`             | [nextjs-auth0](https://github.com/auth0/nextjs-auth0)                         | [nextjs-samples](https://github.com/auth0-samples/auth0-nextjs-samples)                | Next.js      |
+|                    | `auth0-angular`            | [auth0-angular](https://github.com/auth0/auth0-angular)                       | [angular-samples](https://github.com/auth0-samples/auth0-angular-samples)              | Angular      |
+|                    | `auth0-vue`                | [auth0-vue](https://github.com/auth0/auth0-vue)                               | [vue-samples](https://github.com/auth0-samples/auth0-vue-samples)                      | Vue.js       |
+|                    | `lock`                     | [lock](https://github.com/auth0/lock)                                         | [javascript-samples](https://github.com/auth0-samples/auth0-javascript-samples)        | JavaScript   |
+| **Server SDKs**    | `node-auth0`               | [node-auth0](https://github.com/auth0/node-auth0)                             | [nodejs-samples](https://github.com/auth0-samples/auth0-nodejs-samples)                | Node.js      |
+|                    | `express-openid-connect`   | [express-openid-connect](https://github.com/auth0/express-openid-connect)     | [express-samples](https://github.com/auth0-samples/auth0-express-webapp-sample)        | Express.js   |
+|                    | `auth0-java`               | [auth0-java](https://github.com/auth0/auth0-java)                             | [spring-mvc-sample](https://github.com/auth0-samples/auth0-spring-security-mvc-sample) | Java         |
+|                    | `java-jwt`                 | [java-jwt](https://github.com/auth0/java-jwt)                                 | [java-samples](https://github.com/auth0-samples/auth0-java-samples)                    | Java JWT     |
+|                    | `jwks-rsa-java`            | [jwks-rsa-java](https://github.com/auth0/jwks-rsa-java)                       | [spring-mvc-sample](https://github.com/auth0-samples/auth0-spring-security-mvc-sample) | Java JWKS    |
+| **Mobile SDKs**    | `react-native-auth0`       | [react-native-auth0](https://github.com/auth0/react-native-auth0)             | [react-native-sample](https://github.com/auth0-samples/auth0-react-native-sample)      | React Native |
+| **Infrastructure** | `terraform-provider-auth0` | [terraform-provider-auth0](https://github.com/auth0/terraform-provider-auth0) | [terraform-provider-auth0](https://github.com/auth0/terraform-provider-auth0)          | Terraform    |
+|                    | `wordpress`                | [wordpress](https://github.com/auth0/wordpress)                               | [wordpress](https://github.com/auth0/wordpress)                                        | WordPress    |
+
+---
+
+## ✨ Key Features
+
+### AI-Powered Development Workflow
+
+Space CLI transforms your development process with **context-intelligent automation**.
+
+#### **Context Intelligence & Auto-Fetching**
+
+- **Smart CONTEXT.md generation** - Automatically fetches GitHub issue/PR data, comments, and linked documentation from trusted domains
+- **Cross-reference detection** - Discovers and includes related issues, PRs, and external documentation
+- **Security-validated URL fetching** - Only fetches from pre-approved safe domains to prevent security issues
+
+#### **Structured Development Templates**
+
+**4 workflow templates** that guide development from analysis to deployment:
+
+- **Analysis Templates** - Structured problem analysis with validation questions that prevent unnecessary work
+- **Implementation Templates** - Step-by-step development workflow with testing guidance and best practices
+- **Review Templates** - Code review process with structured feedback and GitHub integration
+- **PR Templates** - Enhanced pull request descriptions with validation requirements
+
+#### **Intelligent Automation**
+
+- **Auto Copilot setup** - Creates project-specific `.github/copilot-instructions.md` with architecture patterns and development guidelines
+- **Conditional template selection** - Smart template selection based on project configuration and GitHub context
+- **Dynamic placeholder substitution** - Customizes templates with project-specific information and context
+
+### Intelligent Automation
+
+- **Smart gitignore** - Auto-configures based on detected tech stack
+- **Environment handling** - Copies and manages env files automatically
+- **Post-init scripts** - Runs setup commands after workspace creation
+- **Progress tracking** - Visual feedback for long operations
+
+### Performance Optimized
+
+- Sub-200ms startup
+- Lazy module loading
+- Async operation
+
+---
+
+## 📋 Essential Commands
+
+### Create Workspaces
+
+```bash
+space init <project> [branch]           # Create new workspace
+space init next feature/user-auth       # Example: NextJS project, auth feature
+space init react --pr 123               # Create workspace for PR #123 (auto-infer branch name)
+```
+
+### Manage Workspaces
+
+```bash
+space list                              # Show all workspaces
+space projects                          # Show available projects
+space info next feature_user-auth       # Get workspace details
+space clean next feature_user-auth      # Remove workspace
+```
+
+### Setup & Configuration
+
+```bash
+space setup                             # Interactive setup wizard
+space validate                          # Check configuration and dependencies
+```
 
 ---
 
@@ -231,13 +260,6 @@ space --debug init next test            # Verbose logging
 **Platform Support**: ✅ macOS, ✅ Linux, ⚠️ Windows (WSL recommended)
 
 ---
-
-## � Documentation
-
-- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in 5 minutes
-- **[Configuration Guide](docs/CONFIGURATION.md)** - Detailed setup options
-- **[Features Overview](docs/FEATURES.md)** - Complete feature list
-- **[Development Report](docs/COMPREHENSIVE_DEVELOPMENT_REPORT.md)** - Architecture deep-dive
 
 ## 🤝 Contributing
 

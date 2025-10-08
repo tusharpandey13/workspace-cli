@@ -17,11 +17,7 @@ describe('Conditional Template Copying', () => {
     it('should return minimal templates when no GitHub context is available', () => {
       const templates = getWorkflowTemplates(mockProject, false);
 
-      expect(templates).toEqual([
-        'review-changes.prompt.md',
-        'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-      ]);
+      expect(templates).toEqual(['review-changes.prompt.md', 'PR_DESCRIPTION_TEMPLATE.md']);
     });
 
     it('should return full templates when GitHub context is available', () => {
@@ -32,8 +28,6 @@ describe('Conditional Template Copying', () => {
         'fix-and-test.prompt.md',
         'review-changes.prompt.md',
         'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-        'enhanced-analysis.prompt.md',
       ]);
     });
 
@@ -46,12 +40,10 @@ describe('Conditional Template Copying', () => {
       const templates = getWorkflowTemplates(projectWithSample, true);
 
       expect(templates).toEqual([
-        'analysis-with-sample.prompt.md',
+        'analysis.prompt.md',
         'fix-and-test.prompt.md',
         'review-changes.prompt.md',
         'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-        'enhanced-analysis.prompt.md',
       ]);
     });
 
@@ -63,11 +55,7 @@ describe('Conditional Template Copying', () => {
 
       const templates = getWorkflowTemplates(projectWithSample, false);
 
-      expect(templates).toEqual([
-        'review-changes.prompt.md',
-        'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-      ]);
+      expect(templates).toEqual(['review-changes.prompt.md', 'PR_DESCRIPTION_TEMPLATE.md']);
     });
 
     it('should default to full templates when hasGitHubContext parameter is not provided', () => {
@@ -78,8 +66,6 @@ describe('Conditional Template Copying', () => {
         'fix-and-test.prompt.md',
         'review-changes.prompt.md',
         'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-        'enhanced-analysis.prompt.md',
       ]);
     });
   });
@@ -88,11 +74,7 @@ describe('Conditional Template Copying', () => {
     it('should return minimal templates when no GitHub context is available', () => {
       const templates = getWorkflowTemplatesWithChoice(mockProject, false);
 
-      expect(templates).toEqual([
-        'review-changes.prompt.md',
-        'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-      ]);
+      expect(templates).toEqual(['review-changes.prompt.md', 'PR_DESCRIPTION_TEMPLATE.md']);
     });
 
     it('should return full templates when GitHub context is available', () => {
@@ -103,8 +85,6 @@ describe('Conditional Template Copying', () => {
         'fix-and-test.prompt.md',
         'review-changes.prompt.md',
         'PR_DESCRIPTION_TEMPLATE.md',
-        'PR_REVIEW_INSTRUCTIONS.md',
-        'enhanced-analysis.prompt.md',
       ]);
     });
   });

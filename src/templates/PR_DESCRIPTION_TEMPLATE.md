@@ -1,6 +1,6 @@
 # 🚨 MANDATORY PR DESCRIPTION REQUIREMENTS
 
-> **⚠️ CRITICAL**: This template uses Claude-inspired validation patterns. **ALL** sections marked as MANDATORY must be completed thoroughly. Incomplete descriptions will be rejected.
+> **⚠️ CRITICAL**: This template uses structured validation patterns. **ALL** sections marked as MANDATORY must be completed thoroughly. Incomplete descriptions will be rejected.
 
 ---
 

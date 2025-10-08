@@ -34,7 +34,7 @@ global: { src_dir: '~/src', workspace_base: 'workspaces', env_files_dir: './env-
 
 ### Template System Architecture (NEW)
 - **Template-First Approach**: Prefer template-based solutions over CLI prompting for better UX
-- **Claude-Inspired Patterns**: Use strong emphasis (🚨, ⚠️, 🛑) and mandatory validation sections
+- **Structured Patterns**: Use strong emphasis (🚨, ⚠️, 🛑) and mandatory validation sections
 - **Conditional Selection**: Templates selected based on project configuration (`sample_repo`, tech stack)
 - **Placeholder Substitution**: `{{PROJECT_NAME}}`, `{{BRANCH_NAME}}`, `{{REPO_URL}}`, etc.
 - **Security Validation**: All templates include security assessment patterns
@@ -53,7 +53,7 @@ pnpm run lint:fix      # Fix linting
 - **Selective Mocking**: Mock externals (GitHub CLI), allow internals (git)
 - **Test Names**: Match CLI expectations with `basename()` logic
 - **Helper Functions**: `setMockGitHubResponse()`, `createTestEnvironment()`
-- **Template Validation**: Test for Claude patterns, strong emphasis, security sections
+- **Template Validation**: Test for structured patterns, strong emphasis, security sections
 
 ### E2E Framework
 ```bash
@@ -71,7 +71,7 @@ e2e/
 2. **Template-First**: Use template-based solutions over CLI interactions for better DX
 3. **Strong Emphasis**: Critical requirements use visual indicators (🚨, ⚠️, 🛑) that cannot be missed
 4. **Security Validation**: All changes include mandatory security assessment with stop gates
-5. **Claude Patterns**: Structured validation with veto power for inadequate submissions
+5. **Structured Patterns**: Structured validation with veto power for inadequate submissions
 
 ### Git Worktree Management
 - **Branch Scenarios**: local-only/remote-only/non-existent handling
@@ -133,7 +133,7 @@ e2e/
 3. **Strong Emphasis**: Critical sections need visual indicators that cannot be missed
 4. **Security Assessment**: All changes require mandatory security validation
 5. **Evidence-Based**: Document what works/fails, never assume behavior
-6. **Claude Patterns**: Use structured validation with veto power
+6. **Structured Patterns**: Use structured validation with veto power
 7. **Conditional Logging**: Apply `if (options.isVerbose)` pattern for status messages to maintain clean default UX
 
 ## CLI Architecture (CRITICAL)
@@ -192,7 +192,7 @@ e2e/
 ## Key Files & Functions
 - `src/commands/init.ts`, `src/utils/config.ts`, `config.yaml`
 - `src/utils/workflow.ts` - Template selection (6 templates)
-- `src/templates/` - Claude-inspired templates with strong emphasis
+- `src/templates/` - Structured templates with strong emphasis
 - `configManager.findProject()`, `setupWorktrees()`, `DummyRepoManager.createTestEnvironment()`
 
 ---

@@ -13,8 +13,6 @@ function getDefaultTemplates(): string[] {
     'fix-and-test.prompt.md',
     'review-changes.prompt.md',
     'PR_DESCRIPTION_TEMPLATE.md',
-    'PR_REVIEW_INSTRUCTIONS.md',
-    'enhanced-analysis.prompt.md',
   ];
 }
 
@@ -23,12 +21,10 @@ function getDefaultTemplates(): string[] {
  */
 function getSampleAppTemplates(): string[] {
   return [
-    'analysis-with-sample.prompt.md',
+    'analysis.prompt.md',
     'fix-and-test.prompt.md',
     'review-changes.prompt.md',
     'PR_DESCRIPTION_TEMPLATE.md',
-    'PR_REVIEW_INSTRUCTIONS.md',
-    'enhanced-analysis.prompt.md',
   ];
 }
 
@@ -43,7 +39,7 @@ export function hasSampleApp(project: ProjectConfig): boolean {
  * Get minimal template set for when no GitHub context is available
  */
 function getMinimalTemplates(): string[] {
-  return ['review-changes.prompt.md', 'PR_DESCRIPTION_TEMPLATE.md', 'PR_REVIEW_INSTRUCTIONS.md'];
+  return ['review-changes.prompt.md', 'PR_DESCRIPTION_TEMPLATE.md'];
 }
 
 /**
@@ -89,8 +85,6 @@ export function getWorkflowNextSteps(): string {
   return `**Next recommended prompt:**
 
 - Issue analysis: \`analysis.prompt.md\`
-- Enhanced analysis: \`enhanced-analysis.prompt.md\`
 - Implementation: \`fix-and-test.prompt.md\`
-- Review changes: \`review-changes.prompt.md\`
-- PR review guide: \`PR_REVIEW_INSTRUCTIONS.md\``;
+- Review changes: \`review-changes.prompt.md\``;
 }

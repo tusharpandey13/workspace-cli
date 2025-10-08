@@ -29,8 +29,7 @@
     "install-global": "pnpm run build && npm config set prefix ~/.npm-global && npm install -g . && pnpm run test:install",
     "install-global:dev": "pnpm run build:dev && npm config set prefix ~/.npm-global && npm install -g . && pnpm run test:install",
     "uninstall-global": "npm config set prefix ~/.npm-global && npm uninstall -g @tusharpandey13/space-cli 2>/dev/null || true",
-    "prepublishOnly": "npm run clean && npm run build",
-    "tmp": "tsx src/bin/workspace.ts init next tmp/invalid-header"
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "cli",
