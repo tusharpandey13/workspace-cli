@@ -4,12 +4,12 @@
   "description": "Stack-agnostic CLI tool to automate multi-worktree development workflows for any codebase.",
   "preferGlobal": true,
   "bin": {
-    "space": "dist/bin/workspace.js"
+    "space": "space-wrapper.sh"
   },
   "type": "module",
   "scripts": {
-    "build": "tsc && chmod +x dist/bin/workspace.js",
-    "build:dev": "tsc -p tsconfig.dev.json && chmod +x dist/bin/workspace.js",
+    "build": "tsc && chmod +x dist/bin/workspace.js && chmod +x space-wrapper.sh",
+    "build:dev": "tsc -p tsconfig.dev.json && chmod +x dist/bin/workspace.js && chmod +x space-wrapper.sh",
     "dev": "tsx src/bin/workspace.ts --help",
     "start": "node dist/bin/workspace.js --help",
     "test": "env NODE_OPTIONS=\"\" SKIP_PERFORMANCE_TESTS=true vitest --run",
