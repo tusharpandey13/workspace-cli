@@ -88,11 +88,12 @@ export class ContextDataFetcher {
 
         return extracted;
       } catch (error) {
-        // For critical errors (auth/installation), re-throw
+        // For critical errors (auth/API access), re-throw
         const errorMessage = (error as Error).message;
         if (
-          errorMessage.includes('GitHub CLI is not installed') ||
-          errorMessage.includes('GitHub CLI is not authenticated')
+          errorMessage.includes('GitHub API authentication required') ||
+          errorMessage.includes('GITHUB_TOKEN') ||
+          errorMessage.includes('authentication failed')
         ) {
           throw error;
         }
