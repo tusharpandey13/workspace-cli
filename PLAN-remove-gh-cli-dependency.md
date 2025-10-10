@@ -276,17 +276,26 @@ The codebase already demonstrates:
   - [x] Rewrite `getCachedPullRequestInfo` tests with fetch mocks
   - [x] All 15 tests passing
 
-### Phase 4: Update Validation Utils
+### Phase 4: Update Validation Utils ✅ COMPLETE
 
-- [ ] Refactor `src/utils/validation.ts`:
-  - [ ] Remove `executeGhCommand` import
-  - [ ] Add `GitHubApiClient` import
-  - [ ] Update `validateGitHubIdsExistence()`:
-    - [ ] Replace gh command with `apiClient.validateExists()`
-  - [ ] Update error messages for new error types
-- [ ] Update tests in `test/early-validation.test.ts`:
-  - [ ] Mock fetch instead of gh
-  - [ ] Test validation with/without token
+- [x] Refactor `src/utils/validation.ts`:
+  - [x] Remove `executeGhCommand` import
+  - [x] Add `GitHubApiClient` import
+  - [x] Update `validateGitHubIdsExistence()`:
+    - [x] Replace executeGhCommand(['api', ...]) with `apiClient.getIssue()`
+    - [x] Simplified logic - direct API call instead of subprocess + jq parsing
+    - [x] Remove timeout parameter (handled by API client's retry logic)
+  - [x] Update error messages:
+    - [x] "GitHub CLI authentication" → "GITHUB_TOKEN"
+    - [x] "gh: command not found" → "GITHUB_TOKEN is not set"
+    - [x] Updated all error handling for GitHubApiClient error types
+- [x] Update tests in `test/early-validation.test.ts`:
+  - [x] Remove executeGhCommand mocks
+  - [x] Mock global.fetch in beforeEach/afterEach
+  - [x] Rewrite all 8 test cases with fetch mocks
+  - [x] Test missing GITHUB_TOKEN scenario
+  - [x] Test network error scenario
+  - [x] All 8 tests passing
 
 ### Phase 5: Remove GitHub CLI Service
 

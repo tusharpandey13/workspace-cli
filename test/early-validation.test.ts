@@ -1,10 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { validateGitHubIdsExistence } from '../src/utils/validation.js';
-
-// Mock executeGhCommand instead of execa directly
-vi.mock('../src/utils/secureExecution.js', () => ({
-  executeGhCommand: vi.fn(),
-}));
 
 // Mock logger
 vi.mock('../src/utils/logger.js', () => ({
@@ -21,57 +16,68 @@ vi.mock('../src/utils/logger.js', () => ({
 }));
 
 describe('validateGitHubIdsExistence', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    originalEnv = { ...process.env };
+    process.env.GITHUB_TOKEN = 'test-token';
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
   });
 
   it('should skip validation when no issue IDs provided', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-
     await validateGitHubIdsExistence([], 'auth0', 'nextjs-auth0');
 
-    expect(executeGhCommand).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('should validate single issue ID successfully', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand.mockResolvedValue({
-      exitCode: 0,
-      stdout: '123',
-      stderr: '',
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ number: 123, title: 'Test Issue', state: 'open' }),
     });
 
     await validateGitHubIdsExistence([123], 'auth0', 'nextjs-auth0');
 
-    expect(mockedExecuteGhCommand).toHaveBeenCalledWith(
-      ['api', 'repos/auth0/nextjs-auth0/issues/123', '--jq', '.number'],
-      { timeout: 10000 },
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.github.com/repos/auth0/nextjs-auth0/issues/123',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      }),
     );
   });
 
   it('should validate multiple issue IDs successfully', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '123', stderr: '' })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '456', stderr: '' });
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ number: 123, title: 'Test Issue 1', state: 'open' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ number: 456, title: 'Test Issue 2', state: 'open' }),
+      });
 
     await validateGitHubIdsExistence([123, 456], 'auth0', 'nextjs-auth0');
 
-    expect(mockedExecuteGhCommand).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('should throw error for non-existent issue (404)', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand.mockResolvedValue({
-      exitCode: 1,
-      stdout: '',
-      stderr: 'Not Found',
+    (global.fetch as any).mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ message: 'Not Found' }),
     });
 
     await expect(validateGitHubIdsExistence([999], 'auth0', 'nextjs-auth0')).rejects.toThrow(
@@ -80,13 +86,10 @@ describe('validateGitHubIdsExistence', () => {
   });
 
   it('should throw error for unauthorized access (401)', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand.mockResolvedValue({
-      exitCode: 1,
-      stdout: '',
-      stderr: 'Unauthorized',
+    (global.fetch as any).mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: 'Unauthorized' }),
     });
 
     await expect(validateGitHubIdsExistence([123], 'auth0', 'nextjs-auth0')).rejects.toThrow(
@@ -94,29 +97,19 @@ describe('validateGitHubIdsExistence', () => {
     );
   });
 
-  it('should throw error for missing GitHub CLI', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand.mockResolvedValue({
-      exitCode: 1,
-      stdout: '',
-      stderr: 'gh: command not found',
-    });
+  it('should throw error for missing GITHUB_TOKEN', async () => {
+    delete process.env.GITHUB_TOKEN;
 
     await expect(validateGitHubIdsExistence([123], 'auth0', 'nextjs-auth0')).rejects.toThrow(
-      '❌ GitHub CLI is not installed',
+      'GITHUB_TOKEN environment variable is required',
     );
   });
 
   it('should throw error for ID mismatch', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand.mockResolvedValue({
-      exitCode: 0,
-      stdout: '456', // Different ID than requested
-      stderr: '',
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ number: 456, title: 'Test Issue', state: 'open' }), // Different ID
     });
 
     await expect(validateGitHubIdsExistence([123], 'auth0', 'nextjs-auth0')).rejects.toThrow(
@@ -124,18 +117,11 @@ describe('validateGitHubIdsExistence', () => {
     );
   });
 
-  it('should throw error for non-zero exit code', async () => {
-    const { executeGhCommand } = await import('../src/utils/secureExecution.js');
-    const mockedExecuteGhCommand = vi.mocked(executeGhCommand);
-
-    mockedExecuteGhCommand.mockResolvedValue({
-      exitCode: 1,
-      stdout: '',
-      stderr: 'Failed to fetch',
-    });
+  it('should throw error for network/fetch failure', async () => {
+    (global.fetch as any).mockRejectedValue(new Error('Network error'));
 
     await expect(validateGitHubIdsExistence([123], 'auth0', 'nextjs-auth0')).rejects.toThrow(
-      '❌ Failed to validate issue #123: Failed to fetch',
+      '❌ GitHub API request failed for issue #123',
     );
   });
 });

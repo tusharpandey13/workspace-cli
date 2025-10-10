@@ -1,6 +1,6 @@
 import path from 'path';
 import { logger } from './logger.js';
-import { GitHubApiClient } from '../services/githubApiClient.js';
+import { executeGhCommand } from './secureExecution.js';
 
 /**
  * Allowed Git hosting providers for security
@@ -253,56 +253,56 @@ export async function validateGitHubIdsExistence(
 
   logger.verbose(`🔍 Validating GitHub issues exist in ${githubOrg}/${repoName}...`);
 
-  // Create API client instance
-  const apiClient = new GitHubApiClient();
-
   // Check each issue ID exists
   for (const issueId of issueIds) {
     try {
+      const apiUrl = `repos/${githubOrg}/${repoName}/issues/${issueId}`;
       logger.verbose(`Checking issue #${issueId}...`);
 
-      // Fetch the issue using the API client
-      const issue = await apiClient.getIssue(githubOrg, repoName, issueId);
+      const result = await executeGhCommand(['api', apiUrl, '--jq', '.number'], {
+        timeout: 10000, // 10 second timeout to prevent hanging
+      });
 
-      // Verify the returned issue number matches
-      if (issue.number !== issueId) {
-        throw new Error(`Issue ID mismatch: expected ${issueId}, got ${issue.number}`);
+      if (result.exitCode !== 0) {
+        const error = new Error(`Failed to fetch issue #${issueId}`);
+        (error as any).stderr = result.stderr;
+        throw error;
+      }
+
+      const returnedId = parseInt(result.stdout.trim(), 10);
+      if (returnedId !== issueId) {
+        throw new Error(`Issue ID mismatch: expected ${issueId}, got ${returnedId}`);
       }
 
       logger.verbose(`✅ Issue #${issueId} exists`);
     } catch (error) {
-      const errorMessage = (error as Error).message;
+      const errorMessage = (error as any).stderr || (error as Error).message;
 
-      // Handle timeout/network errors
-      if (errorMessage.includes('Network error') || errorMessage.includes('timeout')) {
+      // Handle timeout errors specifically
+      if ((error as any).timedOut || errorMessage.includes('timed out')) {
         throw new Error(
-          `❌ GitHub API request failed for issue #${issueId}. Please check your network connection and try again.`,
+          `❌ GitHub API request timed out for issue #${issueId}. Please check your network connection and try again.`,
         );
       }
 
-      if (
-        errorMessage.includes('Not Found') ||
-        errorMessage.includes('not found') ||
-        errorMessage.includes('404')
-      ) {
+      if (errorMessage.includes('Not Found') || errorMessage.includes('404')) {
         throw new Error(
           `❌ Issue #${issueId} not found in ${githubOrg}/${repoName}. Please verify the issue exists and you have access to the repository.`,
         );
       }
 
-      if (
-        errorMessage.includes('Unauthorized') ||
-        errorMessage.includes('authentication') ||
-        errorMessage.includes('401')
-      ) {
+      if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
         throw new Error(
-          `❌ Access denied to ${githubOrg}/${repoName}. Please ensure GITHUB_TOKEN is set with appropriate permissions.`,
+          `❌ Access denied to ${githubOrg}/${repoName}. Please check your GitHub CLI authentication and repository permissions.`,
         );
       }
 
-      if (errorMessage.includes('GITHUB_TOKEN')) {
+      if (
+        errorMessage.includes('gh: command not found') ||
+        errorMessage.includes('GitHub CLI is not installed')
+      ) {
         throw new Error(
-          `❌ GITHUB_TOKEN is not set. Please set it as an environment variable with appropriate permissions.`,
+          `❌ GitHub CLI is not installed. Please install it from https://cli.github.com/`,
         );
       }
 
