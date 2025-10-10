@@ -23,7 +23,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import {
   extractGitHubRepoInfo,
   getCachedPullRequestInfo,
-  isGitHubCliAvailable,
+  isGitHubApiAvailable,
 } from '../utils/githubUtils.js';
 import type { Command } from 'commander';
 import type {
@@ -1557,9 +1557,9 @@ async function handlePRInitialization(
   // Use GitHub API for PR identification if available (replaces git clone)
   if (repoInfo.isGitHub) {
     try {
-      const isCliAvailable = await isGitHubCliAvailable();
-      if (!isCliAvailable) {
-        throw new Error('GitHub CLI is required for PR initialization but is not available');
+      const isApiAvailable = isGitHubApiAvailable();
+      if (!isApiAvailable) {
+        throw new Error('GITHUB_TOKEN is required for PR initialization but is not set');
       }
 
       logger.verbose(`🔍 Fetching PR #${prId} information via GitHub API...`);

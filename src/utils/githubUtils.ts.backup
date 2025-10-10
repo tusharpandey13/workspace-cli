@@ -1,6 +1,5 @@
 import { logger } from './logger.js';
-import { GitHubApiClient } from '../services/githubApiClient.js';
-import type { GitHubPullRequest } from '../services/githubApiClient.js';
+import { executeGhCommand } from './secureExecution.js';
 
 /**
  * GitHub repository information extracted from URL
@@ -84,21 +83,6 @@ class SessionCache<T> {
 }
 
 const repoInfoCache = new SessionCache<GitHubRepoInfo>();
-
-/**
- * Lazy-initialized GitHub API client
- */
-let apiClient: GitHubApiClient | null = null;
-
-/**
- * Get or create the GitHub API client instance
- */
-function getApiClient(): GitHubApiClient {
-  if (!apiClient) {
-    apiClient = new GitHubApiClient();
-  }
-  return apiClient;
-}
 
 /**
  * Cache management utilities for debugging and maintenance
@@ -235,9 +219,17 @@ export async function fetchPullRequestInfo(
   try {
     logger.verbose(`🔍 Fetching PR #${prId} metadata from GitHub API...`);
 
-    // Use GitHub API client to get PR information
-    const client = getApiClient();
-    const prData: GitHubPullRequest = await client.getPullRequest(githubOrg, repoName, prId);
+    // Use GitHub CLI to get PR information
+    const result = await executeGhCommand(
+      ['api', `repos/${githubOrg}/${repoName}/pulls/${prId}`],
+      {},
+    );
+
+    if (result.exitCode !== 0) {
+      throw new Error(`GitHub API call failed: ${result.stderr}`);
+    }
+
+    const prData = JSON.parse(result.stdout);
 
     // Extract branch name from head reference
     const branchName = prData.head?.ref;
@@ -259,23 +251,15 @@ export async function fetchPullRequestInfo(
     const errorMessage = (error as Error).message;
 
     // Provide specific error messages for common issues
-    if (
-      errorMessage.includes('Not Found') ||
-      errorMessage.includes('not found') ||
-      errorMessage.includes('404')
-    ) {
+    if (errorMessage.includes('Not Found') || errorMessage.includes('404')) {
       throw new Error(
         `PR #${prId} not found in ${githubOrg}/${repoName}. Please verify the PR exists and you have access.`,
       );
     }
 
-    if (
-      errorMessage.includes('Unauthorized') ||
-      errorMessage.includes('authentication') ||
-      errorMessage.includes('401')
-    ) {
+    if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
       throw new Error(
-        `Access denied to ${githubOrg}/${repoName}. Please ensure GITHUB_TOKEN is set with appropriate permissions.`,
+        `Access denied to ${githubOrg}/${repoName}. Please check your GitHub CLI authentication.`,
       );
     }
 
@@ -284,13 +268,18 @@ export async function fetchPullRequestInfo(
 }
 
 /**
- * Check if GitHub API is available (GITHUB_TOKEN is set)
+ * Check if GitHub CLI is available and authenticated
  * Used to determine if we can use API-based PR identification
  *
- * @returns Availability status
+ * @returns Promise resolving to availability status
  */
-export function isGitHubApiAvailable(): boolean {
-  return GitHubApiClient.isTokenAvailable();
+export async function isGitHubCliAvailable(): Promise<boolean> {
+  try {
+    const result = await executeGhCommand(['--version'], {});
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**

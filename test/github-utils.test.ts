@@ -1,16 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   extractGitHubRepoInfo,
   fetchPullRequestInfo,
   getCachedPullRequestInfo,
-  isGitHubCliAvailable,
+  isGitHubApiAvailable,
 } from '../src/utils/githubUtils.js';
-import { executeGhCommand } from '../src/utils/secureExecution.js';
 
-// Mock dependencies
-vi.mock('../src/utils/secureExecution.js', () => ({
-  executeGhCommand: vi.fn(),
-}));
+// Don't mock GitHubApiClient - we'll mock fetch instead which is what it uses
 
 vi.mock('../src/utils/logger.js', () => ({
   logger: {
@@ -24,10 +20,18 @@ vi.mock('../src/utils/logger.js', () => ({
 }));
 
 describe('GitHub Utils', () => {
-  const mockExecuteGhCommand = vi.mocked(executeGhCommand);
+  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalEnv = { ...process.env };
+    // Mock fetch globally
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
   });
 
   describe('extractGitHubRepoInfo', () => {
@@ -82,39 +86,34 @@ describe('GitHub Utils', () => {
     });
   });
 
-  describe('isGitHubCliAvailable', () => {
-    it('should return true when GitHub CLI is available', async () => {
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 0,
-        stdout: 'gh version 2.40.1',
-        stderr: '',
-      });
+  describe('isGitHubApiAvailable', () => {
+    it('should return true when GITHUB_TOKEN is set', () => {
+      process.env.GITHUB_TOKEN = 'test-token';
 
-      const result = await isGitHubCliAvailable();
+      const result = isGitHubApiAvailable();
       expect(result).toBe(true);
-      expect(mockExecuteGhCommand).toHaveBeenCalledWith(['--version'], {});
     });
 
-    it('should return false when GitHub CLI is not available', async () => {
-      mockExecuteGhCommand.mockRejectedValue(new Error('gh not found'));
+    it('should return false when GITHUB_TOKEN is not set', () => {
+      delete process.env.GITHUB_TOKEN;
 
-      const result = await isGitHubCliAvailable();
+      const result = isGitHubApiAvailable();
       expect(result).toBe(false);
     });
 
-    it('should return false when GitHub CLI returns error', async () => {
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 1,
-        stdout: '',
-        stderr: 'command not found',
-      });
+    it('should return false when GITHUB_TOKEN is empty', () => {
+      process.env.GITHUB_TOKEN = '';
 
-      const result = await isGitHubCliAvailable();
+      const result = isGitHubApiAvailable();
       expect(result).toBe(false);
     });
   });
 
   describe('fetchPullRequestInfo', () => {
+    beforeEach(() => {
+      process.env.GITHUB_TOKEN = 'test-token';
+    });
+
     it('should fetch PR information successfully', async () => {
       const mockPrData = {
         number: 2344,
@@ -126,10 +125,10 @@ describe('GitHub Utils', () => {
         },
       };
 
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 0,
-        stdout: JSON.stringify(mockPrData),
-        stderr: '',
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockPrData,
       });
 
       const result = await fetchPullRequestInfo(2344, 'auth0', 'nextjs-auth0', false);
@@ -142,9 +141,13 @@ describe('GitHub Utils', () => {
         headSha: 'abc123def456',
       });
 
-      expect(mockExecuteGhCommand).toHaveBeenCalledWith(
-        ['api', 'repos/auth0/nextjs-auth0/pulls/2344'],
-        {},
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.github.com/repos/auth0/nextjs-auth0/pulls/2344',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token',
+          }),
+        }),
       );
     });
 
@@ -159,14 +162,14 @@ describe('GitHub Utils', () => {
         headSha: '1234567890abcdef',
       });
 
-      expect(mockExecuteGhCommand).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should throw specific error for 404 Not Found', async () => {
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 1,
-        stdout: '',
-        stderr: 'Not Found',
+      (global.fetch as any).mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ message: 'Not Found' }),
       });
 
       await expect(fetchPullRequestInfo(999, 'auth0', 'nextjs-auth0', false)).rejects.toThrow(
@@ -175,16 +178,16 @@ describe('GitHub Utils', () => {
     });
 
     it('should throw specific error for 401 Unauthorized', async () => {
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 1,
-        stdout: '',
-        stderr: 'Unauthorized',
+      (global.fetch as any).mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({ message: 'Unauthorized' }),
       });
 
       await expect(
         fetchPullRequestInfo(2344, 'private-org', 'private-repo', false),
       ).rejects.toThrow(
-        'Access denied to private-org/private-repo. Please check your GitHub CLI authentication.',
+        'Access denied to private-org/private-repo. Please ensure GITHUB_TOKEN is set with appropriate permissions.',
       );
     });
 
@@ -199,10 +202,10 @@ describe('GitHub Utils', () => {
         },
       };
 
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 0,
-        stdout: JSON.stringify(mockPrDataNoBranch),
-        stderr: '',
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockPrDataNoBranch,
       });
 
       await expect(fetchPullRequestInfo(2344, 'auth0', 'nextjs-auth0', false)).rejects.toThrow(
@@ -212,6 +215,10 @@ describe('GitHub Utils', () => {
   });
 
   describe('getCachedPullRequestInfo', () => {
+    beforeEach(() => {
+      process.env.GITHUB_TOKEN = 'test-token';
+    });
+
     it('should fetch and cache PR information on first call', async () => {
       const mockPrData = {
         number: 2344,
@@ -223,16 +230,16 @@ describe('GitHub Utils', () => {
         },
       };
 
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 0,
-        stdout: JSON.stringify(mockPrData),
-        stderr: '',
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockPrData,
       });
 
       const result = await getCachedPullRequestInfo(2344, 'auth0', 'nextjs-auth0', false);
 
       expect(result.branchName).toBe('feature/auth-fix');
-      expect(mockExecuteGhCommand).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('should return cached data on subsequent calls', async () => {
@@ -249,24 +256,24 @@ describe('GitHub Utils', () => {
         },
       };
 
-      mockExecuteGhCommand.mockResolvedValue({
-        exitCode: 0,
-        stdout: JSON.stringify(mockPrData),
-        stderr: '',
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockPrData,
       });
 
       // First call - should make API request
       const result1 = await getCachedPullRequestInfo(uniquePrId, 'auth0', 'nextjs-auth0', false);
-      expect(mockExecuteGhCommand).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
 
       // Reset mock to ensure no additional calls
-      mockExecuteGhCommand.mockClear();
+      vi.clearAllMocks();
 
       // Second call - should use cache
       const result2 = await getCachedPullRequestInfo(uniquePrId, 'auth0', 'nextjs-auth0', false);
 
       expect(result1).toEqual(result2);
-      expect(mockExecuteGhCommand).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 });

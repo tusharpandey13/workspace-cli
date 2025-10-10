@@ -250,21 +250,31 @@ The codebase already demonstrates:
   - [ ] Test authenticated private repo access
   - [ ] Test rate limit scenarios
 
-### Phase 3: Update GitHub Utils
+### Phase 3: Update GitHub Utils ✅ COMPLETE
 
-- [ ] Refactor `src/utils/githubUtils.ts`:
-  - [ ] Remove `executeGhCommand` import
-  - [ ] Add `GitHubApiClient` import
-  - [ ] Update `fetchPullRequestInfo()`:
-    - [ ] Replace gh command with `apiClient.fetchPullRequest()`
-  - [ ] Update `isGitHubCliAvailable()`:
-    - [ ] Rename to `isGitHubApiAvailable()`
-    - [ ] Check if token exists OR return true for public repo mode
-  - [ ] Keep existing cache logic unchanged
-- [ ] Update tests in `test/github-utils.test.ts`:
-  - [ ] Remove gh CLI mocks
-  - [ ] Mock fetch responses
-  - [ ] Verify caching still works
+- [x] Refactor `src/utils/githubUtils.ts`:
+  - [x] Remove `executeGhCommand` import
+  - [x] Add `GitHubApiClient` import
+  - [x] Add lazy initialization of API client with `getApiClient()`
+  - [x] Update `fetchPullRequestInfo()`:
+    - [x] Replace gh command with `apiClient.getPullRequest()`
+    - [x] Update error handling to catch "not found" and "authentication" errors
+  - [x] Update `isGitHubCliAvailable()`:
+    - [x] Rename to `isGitHubApiAvailable()`
+    - [x] Use `GitHubApiClient.isTokenAvailable()` static method
+    - [x] Made synchronous (no longer async)
+  - [x] Keep existing cache logic unchanged
+- [x] Update `src/commands/init.ts`:
+  - [x] Replace `isGitHubCliAvailable` import with `isGitHubApiAvailable`
+  - [x] Update function calls (removed await)
+  - [x] Update error messages to reference GITHUB_TOKEN
+- [x] Update tests in `test/github-utils.test.ts`:
+  - [x] Remove gh CLI mocks
+  - [x] Mock fetch globally in beforeEach/afterEach
+  - [x] Rewrite `isGitHubApiAvailable` tests for synchronous behavior
+  - [x] Rewrite `fetchPullRequestInfo` tests with fetch mocks
+  - [x] Rewrite `getCachedPullRequestInfo` tests with fetch mocks
+  - [x] All 15 tests passing
 
 ### Phase 4: Update Validation Utils
 
