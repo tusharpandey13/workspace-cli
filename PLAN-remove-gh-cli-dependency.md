@@ -297,18 +297,32 @@ The codebase already demonstrates:
   - [x] Test network error scenario
   - [x] All 8 tests passing
 
-### Phase 5: Remove GitHub CLI Service
+### Phase 5: Remove GitHub CLI Service ✅ COMPLETE
 
-- [ ] **DELETE** `src/services/gitHubCli.ts`
-- [ ] **DELETE** `test/github-cli.test.ts`
-- [ ] Update `src/services/setupWizard.ts`:
-  - [ ] Remove `gitHubCli` import
-  - [ ] Remove `checkGitHubCli()` method
-  - [ ] Add new `checkGitHubToken()` method:
-    - [ ] Check for `GITHUB_TOKEN` env var
-    - [ ] Provide guidance on creating PAT
-    - [ ] Make it optional, warn if missing
-  - [ ] Update setup flow to skip gh check
+- [x] **DELETED** `src/services/gitHubCli.ts` (166 lines removed)
+- [x] **DELETED** `test/github-cli.test.ts` (137 lines removed)
+- [x] Update `src/services/setupWizard.ts`:
+  - [x] Remove `gitHubCli` import, add `GitHubApiClient` import
+  - [x] Rename `checkGitHubCli()` → `checkGitHubToken()` method
+  - [x] Implemented `checkGitHubToken()` method:
+    - [x] Check for `GITHUB_TOKEN` env var
+    - [x] Provide step-by-step guidance on creating PAT
+    - [x] Make it optional, warn if missing
+    - [x] Allow user to continue setup without token
+  - [x] Updated method call at line 87
+  - [x] Fixed unused variable lint error
+- [x] Update `test/context-data-parallel.test.ts`:
+  - [x] Removed GitHub CLI service import
+  - [x] Removed `checkStatus()` mocks
+  - [x] Updated to use global.fetch mocking
+  - [x] Removed authentication error tests (now handled by API client)
+  - [x] Updated tests to check for GITHUB_TOKEN instead of gh CLI
+  - [x] All 6 tests passing
+
+**Commit**: 6fc70dd "Phase 5: Remove GitHub CLI service and refactor setupWizard"
+**Tests**: ✅ 6/6 passing
+**Build**: ✅ Success
+**Lint**: ✅ Clean
 
 ### Phase 6: Update Secure Execution
 

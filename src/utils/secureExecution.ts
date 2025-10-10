@@ -81,16 +81,6 @@ export async function executeGitCommand(
 }
 
 /**
- * Execute GitHub CLI command with enhanced security
- */
-export async function executeGhCommand(
-  args: string[],
-  options: SecureExecutionOptions = {},
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  return executeSecureCommand('gh', args, options);
-}
-
-/**
  * Execute shell command with enhanced security - use with extreme caution
  */
 export async function executeShellCommand(

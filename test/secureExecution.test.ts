@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { execa } from 'execa';
-import {
-  executeSecureCommand,
-  executeGitCommand,
-  executeGhCommand,
-} from '../src/utils/secureExecution.js';
+import { executeSecureCommand, executeGitCommand } from '../src/utils/secureExecution.js';
 
 // Mock execa
 vi.mock('execa');
@@ -126,24 +122,6 @@ describe('Secure Command Execution', () => {
         ['status'],
         expect.objectContaining({
           cwd: '/repo',
-          shell: false,
-        }),
-      );
-    });
-  });
-
-  describe('executeGhCommand', () => {
-    it('should execute GitHub CLI commands', async () => {
-      const mockResult = { stdout: 'gh output', stderr: '', exitCode: 0 };
-      vi.mocked(execa).mockResolvedValue(mockResult as any);
-
-      const result = await executeGhCommand(['--version']);
-
-      expect(result.stdout).toBe('gh output');
-      expect(execa).toHaveBeenCalledWith(
-        'gh',
-        ['--version'],
-        expect.objectContaining({
           shell: false,
         }),
       );
