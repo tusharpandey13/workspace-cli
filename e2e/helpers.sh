@@ -30,8 +30,8 @@ create_clean_test_environment() {
     export GIT_CONFIG_NOSYSTEM="1"        # Don't read system git config
     
     # Clear potentially problematic environment variables
-    unset GITHUB_TOKEN 2>/dev/null || true
-    unset GH_TOKEN 2>/dev/null || true
+    # Note: GITHUB_TOKEN should be set by test runner if GitHub API access is needed
+    unset GH_TOKEN 2>/dev/null || true  # Old GitHub CLI token, no longer used
     unset NPM_CONFIG_PREFIX 2>/dev/null || true
     unset NODE_EXTRA_CA_CERTS 2>/dev/null || true
     unset EDITOR 2>/dev/null || true        # Prevent editor prompts
@@ -47,6 +47,8 @@ create_clean_test_environment() {
 }
 
 # Setup GitHub CLI mocking for tests
+# DEPRECATED: This function is kept for backward compatibility only
+# New tests should use GITHUB_TOKEN environment variable for GitHub API access
 setup_github_cli_mock() {
     local mock_dir="$TEST_BASE_DIR/mocks"
     mkdir -p "$mock_dir"
@@ -425,9 +427,18 @@ setup_test_environment() {
     # Set up isolated HOME for config operations
     export TEST_HOME="$TEST_BASE_DIR/home"
     
-    # Setup GitHub CLI mocking for tests that need it
-    if [[ "${GH_MOCK:-1}" == "1" ]]; then
-        export GH_TOKEN="mock_token_for_tests"
+    # Setup GitHub API access for tests
+    # For tests that need GitHub API access, set GITHUB_TOKEN
+    # For tests that should skip API calls, use --dry-run flag
+    if [[ "${GITHUB_TOKEN:-}" == "" ]]; then
+        log_debug "No GITHUB_TOKEN set - tests will use dry-run mode or skip API calls"
+    else
+        log_debug "GITHUB_TOKEN available for GitHub API access"
+    fi
+    
+    # Legacy: Keep GitHub CLI mock for backward compatibility if explicitly enabled
+    if [[ "${GH_MOCK:-0}" == "1" ]]; then
+        log_warn "GitHub CLI mocking is deprecated - use GITHUB_TOKEN instead"
         setup_github_cli_mock
     fi
     
