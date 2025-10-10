@@ -14,6 +14,44 @@
 - Automatically fetches context from github issues and PRs
 - Feature-focused directory structure(`/src/next/feat/sso/nextjs-auth0`) instead of project-focused(`/src/nextjs-auth0`)
 
+---
+
+## ⚠️ **BREAKING CHANGE (v0.2.0+)**
+
+**🔴 GitHub CLI is no longer required or used**
+
+Space CLI now uses **direct GitHub REST API** calls instead of the GitHub CLI (`gh`).
+
+### What Changed:
+
+- ❌ **Removed**: GitHub CLI (`gh`) dependency and `gh auth login` authentication
+- ✅ **Added**: Direct GitHub REST API v3 integration via native `fetch()`
+- 🔑 **New**: `GITHUB_TOKEN` environment variable for authentication
+
+### Migration Required:
+
+For **private repositories** or higher rate limits, you must now set a `GITHUB_TOKEN`:
+
+```bash
+# 1. Create a Personal Access Token at https://github.com/settings/tokens
+# 2. Select scopes: 'repo' (private repos) or 'public_repo' (public only)
+# 3. Export the token:
+export GITHUB_TOKEN="ghp_your_token_here"
+
+# 4. Add to your shell profile (~/.zshrc, ~/.bashrc):
+echo 'export GITHUB_TOKEN="ghp_your_token_here"' >> ~/.zshrc
+```
+
+### What Still Works:
+
+- ✅ **Public repositories** work without a token (60 requests/hour GitHub rate limit)
+- ✅ **All existing commands** work the same way
+- ✅ **Dry-run mode** (`--dry-run`) works without authentication
+
+📖 **Full migration guide**: See [MIGRATION.md](docs/MIGRATION.md) for detailed instructions.
+
+---
+
 ## 🚀 Quick Start
 
 ```bash
@@ -228,11 +266,14 @@ space --version
 sudo chown -R $(whoami) ~/.pnpm-global  # Fix pnpm permissions
 ```
 
-### GitHub Issues
+### GitHub API Issues
 
 ```bash
-# No GitHub CLI token
-gh auth login
+# No GitHub token (for private repos or higher rate limits)
+export GITHUB_TOKEN="ghp_your_token_here"
+
+# Rate limit errors (public repos without token)
+export GITHUB_TOKEN="ghp_your_token_here"  # Get 5,000 req/hour instead of 60
 
 # Git worktree conflicts
 git worktree prune                       # Clean stale worktrees
@@ -252,10 +293,39 @@ space --debug init next test            # Verbose logging
 
 ## ✅ Prerequisites
 
-- **Node.js** v18+
+- **Node.js** v18+ (required for native `fetch()` support)
 - **pnpm** (recommended) or npm
-- **GitHub CLI** - [Install guide](https://cli.github.com/)
 - **Git** v2.25+ (for worktree support)
+- **GitHub Token** (optional, see below)
+
+### GitHub Token (Optional but Recommended)
+
+A GitHub Personal Access Token is **required for**:
+
+- ✅ Private repository access
+- ✅ Higher API rate limits (5,000 vs 60 requests/hour)
+- ✅ Fetching issue/PR context during workspace creation
+
+**Public repositories** work without a token (60 requests/hour limit).
+
+**How to create a token:**
+
+1. Visit [github.com/settings/tokens](https://github.com/settings/tokens)
+2. Click **"Generate new token (classic)"**
+3. Select scopes:
+   - `repo` (full control of private repositories)
+   - OR `public_repo` (access public repositories only)
+4. Copy the token (starts with `ghp_`)
+5. Set as environment variable:
+
+```bash
+# One-time use:
+export GITHUB_TOKEN="ghp_your_token_here"
+
+# Permanent (add to ~/.zshrc or ~/.bashrc):
+echo 'export GITHUB_TOKEN="ghp_your_token_here"' >> ~/.zshrc
+source ~/.zshrc
+```
 
 **Platform Support**: ✅ macOS, ✅ Linux, ⚠️ Windows (WSL recommended)
 

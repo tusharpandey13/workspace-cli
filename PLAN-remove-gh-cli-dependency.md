@@ -324,50 +324,66 @@ The codebase already demonstrates:
 **Build**: ✅ Success
 **Lint**: ✅ Clean
 
-### Phase 6: Update Secure Execution
+### Phase 6: Update Secure Execution ✅ COMPLETE
 
-- [ ] Refactor `src/utils/secureExecution.ts`:
-  - [ ] Remove `executeGhCommand()` function
-  - [ ] Keep `executeGitCommand()` and other utilities
-- [ ] Update tests in `test/secureExecution.test.ts`:
-  - [ ] Remove gh command tests
-  - [ ] Keep git command tests
+- [x] Refactor `src/utils/secureExecution.ts`:
+  - [x] Removed `executeGhCommand()` function (11 lines)
+  - [x] Kept `executeGitCommand()` and `executeShellCommand()` utilities
+- [x] Update tests in `test/secureExecution.test.ts`:
+  - [x] Removed `executeGhCommand` import
+  - [x] Removed gh command test suite (1 test)
+  - [x] Kept all other tests (6/6 passing)
 
-### Phase 7: Update Init Command
+**Commit**: 53fa8e4 "Phase 6: Remove executeGhCommand from secureExecution"
+**Tests**: ✅ 6/6 passing
+**Build**: ✅ Success
 
-- [ ] Refactor `src/commands/init.ts`:
-  - [ ] Replace `isGitHubCliAvailable()` with `isGitHubApiAvailable()`
-  - [ ] Update error messages
-  - [ ] No other changes needed (already uses abstracted functions)
+### Phase 7: Update Init Command ✅ ALREADY COMPLETE
 
-### Phase 8: Update E2E Tests
+- [x] Refactor `src/commands/init.ts`:
+  - [x] Replaced `isGitHubCliAvailable()` with `isGitHubApiAvailable()`
+  - [x] Updated error messages
+  - [x] All tests passing
 
-- [ ] Update `e2e/helpers.sh`:
-  - [ ] Remove `setup_github_cli_mock()` function
-  - [ ] Add `setup_github_api_mock()` if needed (may not be necessary)
-- [ ] Update all E2E test scripts:
-  - [ ] Export `GITHUB_TOKEN=test_token` for authenticated tests
-  - [ ] Remove gh-related assertions
+**Note**: This was completed in Phase 3 (commit fe2d9f8) when refactoring githubUtils.ts
 
-### Phase 9: Documentation Updates
+### Phase 8: Update E2E Tests ✅ COMPLETE
 
-- [ ] Update `README.md`:
-  - [ ] **ADD BREAKING CHANGE NOTICE at top of file** (after logo, before Quick Start):
-    - [ ] Add visible warning box/section titled "⚠️ Breaking Change (v0.2.0)"
-    - [ ] Clearly state: "GitHub CLI is no longer required or used"
-    - [ ] Explain: "For private repositories, you must now set `GITHUB_TOKEN` environment variable"
-    - [ ] Link to migration guide
-    - [ ] Use bold/emoji to make it unmissable
-  - [ ] Remove "GitHub CLI" from prerequisites section
-  - [ ] Add new section "GitHub Token (Optional)" in prerequisites:
-    - [ ] When needed (private repos, higher rate limits)
-    - [ ] How to create PAT (with link to GitHub settings)
-    - [ ] How to set GITHUB_TOKEN env var (shell profile examples)
-    - [ ] Explain: Public repos work without token (60 req/hour limit)
-  - [ ] Update Quick Start section:
-    - [ ] Add note about optional GITHUB_TOKEN before running commands
-    - [ ] Show example: `export GITHUB_TOKEN="ghp_..."`
-  - [ ] Update troubleshooting section:
+- [x] Update `e2e/helpers.sh`:
+  - [x] Added GITHUB_TOKEN environment variable support
+  - [x] Deprecated GH_MOCK flag (kept for backward compatibility)
+  - [x] Added deprecation notice to `setup_github_cli_mock()` function
+  - [x] Tests now use GITHUB_TOKEN or --dry-run flag
+  - [x] Removed automatic clearing of GITHUB_TOKEN in test environment
+
+**Commit**: 0c5351e "Phase 8: Update E2E tests for GitHub API migration"
+**Breaking change**: E2E tests now require GITHUB_TOKEN instead of gh CLI
+
+### Phase 9: Documentation Updates ✅ COMPLETE
+
+- [x] Update `README.md`:
+  - [x] **ADDED BREAKING CHANGE NOTICE** at top (after logo, before Quick Start):
+    - [x] Prominent section titled "⚠️ **BREAKING CHANGE (v0.2.0+)**"
+    - [x] Clearly states: "🔴 GitHub CLI is no longer required or used"
+    - [x] Explains: Direct GitHub REST API via native fetch()
+    - [x] Lists what changed (removed gh, added GITHUB_TOKEN)
+    - [x] Provides migration steps with code examples
+    - [x] Links to MIGRATION.md guide
+    - [x] Uses bold, emoji, and visual hierarchy for visibility
+  - [x] Updated Prerequisites section:
+    - [x] Removed "GitHub CLI" requirement
+    - [x] Added Node.js v18+ requirement (for native fetch)
+    - [x] Added comprehensive "GitHub Token (Optional but Recommended)" section:
+      - [x] When needed (private repos, higher rate limits)
+      - [x] Step-by-step PAT creation instructions
+      - [x] Direct link to github.com/settings/tokens
+      - [x] Scope selection guidance (repo vs public_repo)
+      - [x] Shell profile examples (zsh, bash)
+      - [x] Explains: Public repos work without token (60 req/hour limit)
+  - [x] Updated troubleshooting section:
+    - [x] Renamed "GitHub Issues" → "GitHub API Issues"
+    - [x] Replaced `gh auth login` with `export GITHUB_TOKEN`
+    - [x] Added rate limit troubleshooting
     - [ ] Remove "No GitHub CLI token" section
     - [ ] Add "Rate limiting" section with clear explanation
     - [ ] Add "Private repo access" section with token setup
