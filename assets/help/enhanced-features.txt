@@ -2,7 +2,7 @@ Enhanced Features:
   🤖 AI Development Tools
     • Auto-generated Copilot instructions with project context
     • Smart analysis templates with validation questions
-    • Claude-inspired PR review system with structured feedback
+    • Structured PR review system with guided feedback
 
   🔧 Intelligent Automation
     • Smart gitignore setup for sample repositories

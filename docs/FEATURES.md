@@ -30,7 +30,7 @@ Smart analysis templates with pre-validation questions that can veto unnecessary
 **Templates available:**
 
 - `analysis.prompt.md` - Standard analysis with 5 mandatory validation questions
-- `enhanced-analysis.prompt.md` - Advanced analysis with Claude-inspired assessment patterns
+- `enhanced-analysis.prompt.md` - Advanced analysis with structured assessment patterns
 - `analysis-with-sample.prompt.md` - Specialized template for sample app reproduction scenarios
 
 **Validation questions include:**
@@ -41,7 +41,7 @@ Smart analysis templates with pre-validation questions that can veto unnecessary
 4. Are you targeting the correct repository and branch for this analysis?
 5. Have you gathered sufficient context about the problem before requesting analysis?
 
-### Claude-Inspired PR Review System
+### Structured PR Review System
 
 Comprehensive PR management with enhanced description templates and structured review instructions.
 
@@ -52,12 +52,12 @@ Comprehensive PR management with enhanced description templates and structured r
 - **Stop Gates**: Clear "STOP" points that prevent submission of inadequate PRs
 - **Structured Review Process**: Intent analysis framework for understanding PR purpose
 - **GitHub Suggestion Formatting**: Actionable feedback with proper formatting
-- **Claude-Inspired Patterns**: Validation patterns based on Claude's structured review methodology
+- **Structured Patterns**: Validation patterns based on structured review methodology
 
 **Templates:**
 
 - `PR_DESCRIPTION_TEMPLATE.md` - Enhanced PR descriptions with mandatory validation and strong emphasis
-- `PR_REVIEW_INSTRUCTIONS.md` - Comprehensive review guide with Claude's structured approach
+- `PR_REVIEW_INSTRUCTIONS.md` - Comprehensive review guide with structured approach
 
 ## 🔧 Intelligent Automation
 

@@ -108,6 +108,15 @@ export interface GitHubComment {
   html_url: string;
 }
 
+export interface GitHubFileChange {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+}
+
 export interface GitHubApiClientOptions {
   token?: string;
   baseUrl?: string;
@@ -253,6 +262,13 @@ export class GitHubApiClient {
    */
   async getComments(owner: string, repo: string, issueNumber: number): Promise<GitHubComment[]> {
     return this.request<GitHubComment[]>(`/repos/${owner}/${repo}/issues/${issueNumber}/comments`);
+  }
+
+  /**
+   * Get file changes for a pull request
+   */
+  async getFileChanges(owner: string, repo: string, prNumber: number): Promise<GitHubFileChange[]> {
+    return this.request<GitHubFileChange[]>(`/repos/${owner}/${repo}/pulls/${prNumber}/files`);
   }
 
   /**

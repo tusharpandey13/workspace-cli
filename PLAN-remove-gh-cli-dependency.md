@@ -211,15 +211,33 @@ The codebase already demonstrates:
   - [x] Test token availability checks
   - [x] **RESULT**: All 27 tests passed ✅
 
-### Phase 2: Update Context Data Fetcher
+### Phase 2: Update Context Data Fetcher ✅ **COMPLETE**
 
-- [ ] **BACKUP**: Copy current `src/services/contextData.ts` to `contextData.ts.backup`
-- [ ] Refactor `src/services/contextData.ts`:
-  - [ ] Remove `gitHubCliService` import
-  - [ ] Add `GitHubApiClient` import
-  - [ ] Update `fetchGitHubData()`:
-    - [ ] Remove gh CLI status check
-    - [ ] Replace with try-catch for API client
+- [x] **BACKUP**: Copy current `src/services/contextData.ts` to `contextData.ts.backup`
+- [x] Refactor `src/services/contextData.ts`:
+  - [x] Remove `gitHubCliService` import (kept `execa` for curl commands)
+  - [x] Add `GitHubApiClient` import
+  - [x] Add private `apiClient` field and `getApiClient()` lazy initialization method
+  - [x] Replace authentication check with API client initialization
+  - [x] Update `fetchBasicGitHubItem()` to use `apiClient.getIssue()` instead of `execa('gh', ['api', ...])`
+  - [x] Update `enhanceWithComments()` to use `apiClient.getComments()`
+  - [x] Update `enhanceWithFileChanges()` to use `apiClient.getFileChanges()` (new method added)
+  - [x] Keep `enhanceWithLinkedIssues()` as-is (uses `fetchBasicGitHubItem` internally)
+  - [x] Keep `execa` import for non-GitHub curl commands (URL fetching)
+  - [x] Update error handling to use new error classes (GitHubAuthError, GitHubNotFoundError)
+- [x] Add `getFileChanges()` method to `GitHubApiClient`:
+  - [x] New interface `GitHubFileChange` with filename, status, additions, deletions, changes, patch
+  - [x] Method `getFileChanges(owner, repo, prNumber)` calling `/repos/.../pulls/.../files`
+- [x] **BUILD VERIFICATION**: Build succeeded with no compilation errors
+- [x] Update test file `test/context-data-github-cli.test.ts`:
+  - [x] Rename to `test/context-data.test.ts`
+  - [x] Replace `execa` mocks with `global.fetch` mocks
+  - [x] Test authenticated vs unauthenticated scenarios
+  - [x] Test error handling with new error classes
+- [x] Run tests and verify all pass (7/7 tests passing in updated file)
+- [x] **RESULT**: 507/534 tests passing overall. Note: 4 failures in `test/context-data-parallel.test.ts` need updating (Phase 3 scope)
+  - [ ] Remove gh CLI status check
+  - [ ] Replace with try-catch for API client
   - [ ] Update `fetchBasicGitHubItem()`:
     - [ ] Replace `execa('gh', ['api', ...])` with `apiClient.fetchIssue()`
   - [ ] Add new method `fetchComments()` using API client

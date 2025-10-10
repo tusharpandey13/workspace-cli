@@ -302,24 +302,54 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
     isDryRun,
   });
 
-  // Execute optional post-init command in background (non-blocking)
-  let postInitPromise: Promise<PostInitResult | null> | null = null;
+  // Execute optional post-init command as part of main flow (synchronous)
   if (project['post-init']) {
     if (!isSilent) {
       progressIndicator.startStep('postinit');
     }
 
-    // Start post-init in background
-    postInitPromise = executePostInitCommand(project, paths, isDryRun, worktreesCreated, options);
-  } else {
-    logger.verbose('No post-init command configured, skipping post-init setup');
-  }
+    // Execute post-init synchronously as part of main initialization
+    const postInitResult = await executePostInitCommand(
+      project,
+      paths,
+      isDryRun,
+      worktreesCreated,
+      options,
+    );
 
-  // Complete progress bar immediately (don't wait for post-init)
-  if (!isSilent) {
-    if (project['post-init']) {
+    if (!postInitResult.success) {
+      // Post-init failed - show error but continue
+      console.error(`\n⚠️  Post-init command failed:`);
+      if (postInitResult.output) {
+        if (postInitResult.output.stdout) {
+          console.error('STDOUT:', postInitResult.output.stdout);
+        }
+        if (postInitResult.output.stderr) {
+          console.error('STDERR:', postInitResult.output.stderr);
+        }
+        if (postInitResult.output.exitCode) {
+          console.error(`Exit Code: ${postInitResult.output.exitCode}`);
+        }
+      }
+      if (postInitResult.error) {
+        console.error('Error:', postInitResult.error.message);
+      }
+      console.error('Workspace creation will continue despite post-init failure.');
+    }
+
+    if (!isSilent) {
       progressIndicator.completeStep('postinit');
     }
+  } else {
+    logger.verbose('No post-init command configured, skipping post-init setup');
+    // Still need to complete the step for progress tracking
+    if (!isSilent) {
+      progressIndicator.completeStep('postinit');
+    }
+  }
+
+  // Complete progress bar after all steps including post-init
+  if (!isSilent) {
     progressIndicator.complete();
   }
 
@@ -333,40 +363,6 @@ async function initializeWorkspace(options: InitializeWorkspaceOptions): Promise
   } else if (isSilent) {
     // Show brief success message even in silent/non-interactive mode
     console.log(`Workspace location: ${paths.workspaceDir}`);
-  }
-
-  // Wait for post-init completion in background and handle result
-  if (postInitPromise) {
-    postInitPromise
-      .then((postInitResult) => {
-        if (postInitResult && !postInitResult.success) {
-          // Post-init failed - show warning but don't fail the entire init
-          console.error(`\n⚠️  Post-init command failed (workspace is still ready):`);
-          if (postInitResult.output) {
-            if (postInitResult.output.stdout) {
-              console.error('STDOUT:', postInitResult.output.stdout);
-            }
-            if (postInitResult.output.stderr) {
-              console.error('STDERR:', postInitResult.output.stderr);
-            }
-            if (postInitResult.output.exitCode) {
-              console.error(`Exit Code: ${postInitResult.output.exitCode}`);
-            }
-          }
-          if (postInitResult.error) {
-            console.error('Error:', postInitResult.error.message);
-          }
-          console.error('Note: The workspace is still ready for development.');
-        }
-      })
-      .catch((error) => {
-        // Handle unexpected post-init errors
-        console.error(
-          `\n⚠️  Post-init command encountered an unexpected error (workspace is still ready):`,
-        );
-        console.error('Error:', (error as Error).message);
-        console.error('Note: The workspace is still ready for development.');
-      });
   }
 }
 
@@ -877,14 +873,39 @@ async function executePostInitCommand(
   }
 
   try {
+    // Clear NODE_OPTIONS to prevent VS Code debugger from attaching to npm/pnpm processes
+    const postInitEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (key !== 'NODE_OPTIONS' && value !== undefined) {
+        postInitEnv[key] = value;
+      }
+    }
+
+    if (options.isVerbose) {
+      logger.verbose('🚫 Clearing NODE_OPTIONS to prevent debugger attachment during post-init');
+      logger.verbose(`⚡ Executing post-init command: ${project['post-init']}`);
+    }
+
+    const startTime = Date.now();
+
     // Capture output instead of inheriting stdio - buffer all output
     const result = await executeShellCommand(project['post-init'], {
       cwd: paths.workspaceDir,
       stdio: 'pipe', // Capture output instead of inheriting,
       timeout: 3 * 60 * 1000, // TODO: make this configurable
+      env: postInitEnv, // Use environment with NODE_OPTIONS cleared
     });
 
+    const duration = Date.now() - startTime;
+    const durationStr = `${(duration / 1000).toFixed(1)}s`;
+
     if (result.exitCode !== 0) {
+      if (options.isVerbose) {
+        logger.verbose(`❌ Post-init command failed after ${durationStr}`);
+        if (result.stdout) {
+          logger.verbose(`STDOUT: ${result.stdout}`);
+        }
+      }
       return {
         success: false,
         output: {
@@ -893,6 +914,14 @@ async function executePostInitCommand(
           exitCode: result.exitCode,
         },
       };
+    }
+
+    // Success: log completion in verbose mode
+    if (options.isVerbose) {
+      logger.verbose(`✅ Post-init completed successfully (${durationStr})`);
+      if (result.stdout) {
+        logger.verbose(`Post-init output: ${result.stdout}`);
+      }
     }
 
     // Success: return success result

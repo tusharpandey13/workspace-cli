@@ -1,26 +1,15 @@
-import { logger } from '../utils/logger.js';
-import { GitHubApiClient, GitHubAuthError, GitHubNotFoundError } from './githubApiClient.js';
-import type { GitHubIssueData, UrlContent } from '../types/index.js';
 import { execa } from 'execa';
+import { logger } from '../utils/logger.js';
+import { gitHubCliService } from './gitHubCli.js';
+import type { GitHubIssueData, UrlContent } from '../types/index.js';
 
 /**
  * Enhanced context data fetcher for GitHub and external URL content
- * Uses GitHub REST API v3 directly via GitHubApiClient (no gh CLI dependency)
+ * Implements Phase 1 requirements from the improvement plan
  */
 export class ContextDataFetcher {
   private cache = new Map<string, any>();
   private readonly maxCacheAge = 5 * 60 * 1000; // 5 minutes
-  private apiClient: GitHubApiClient | null = null;
-
-  /**
-   * Initialize GitHub API client (lazy initialization)
-   */
-  private getApiClient(): GitHubApiClient {
-    if (!this.apiClient) {
-      this.apiClient = new GitHubApiClient();
-    }
-    return this.apiClient;
-  }
 
   /**
    * Fetch comprehensive GitHub data including linked issues, comments, and file changes
@@ -53,19 +42,16 @@ export class ContextDataFetcher {
       }));
     }
 
-    // Initialize GitHub API client for any issues requiring API access
+    // Check GitHub CLI availability first for any issues requiring API access
     if (issueIds.length > 0) {
-      try {
-        // This will throw GitHubAuthError if GITHUB_TOKEN is missing
-        this.getApiClient();
-      } catch (error) {
-        if (error instanceof GitHubAuthError) {
-          throw new Error(
-            'GitHub API authentication required. Please set GITHUB_TOKEN environment variable.\n' +
-              GitHubApiClient.getMissingTokenMessage(),
-          );
-        }
-        throw error;
+      const cliStatus = await gitHubCliService.checkStatus();
+
+      if (!cliStatus.isInstalled) {
+        throw new Error('GitHub CLI is not installed');
+      }
+
+      if (!cliStatus.isAuthenticated) {
+        throw new Error('GitHub CLI is not authenticated');
       }
     }
 
@@ -209,7 +195,7 @@ export class ContextDataFetcher {
   }
 
   /**
-   * Fetch basic GitHub issue/PR data using GitHub API client
+   * Fetch basic GitHub issue/PR data
    */
   private async fetchBasicGitHubItem(
     issueId: number,
@@ -229,29 +215,30 @@ export class ContextDataFetcher {
     }
 
     try {
-      logger.verbose(`🔍 Fetching data for #${issueId} via GitHub API...`);
-      const apiClient = this.getApiClient();
-
-      // Try to fetch as issue first (GitHub API treats PRs as issues for this endpoint)
-      const data = await apiClient.getIssue(githubOrg, repoName, issueId);
+      const apiUrl = `repos/${githubOrg}/${repoName}/issues/${issueId}`;
+      logger.verbose(`DEBUG: Making GitHub API call: gh api ${apiUrl}`);
+      const result = await execa('gh', ['api', apiUrl], { stdio: 'pipe' });
+      const data = JSON.parse(result.stdout);
 
       this.cache.set(cacheKey, { data, timestamp: Date.now() });
       return data;
     } catch (error) {
       // Provide more specific error messages for common GitHub API errors
-      if (error instanceof GitHubNotFoundError) {
+      const errorMessage = (error as any).stderr || (error as Error).message;
+
+      if (errorMessage.includes('Not Found') || errorMessage.includes('404')) {
         throw new Error(
           `Issue #${issueId} not found in ${githubOrg}/${repoName}. Please verify the issue exists and you have access to the repository.`,
         );
       }
 
-      if (error instanceof GitHubAuthError) {
+      if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
         throw new Error(
-          `Access denied to ${githubOrg}/${repoName}. Please check your GITHUB_TOKEN has required permissions.`,
+          `Access denied to ${githubOrg}/${repoName}. Please check your GitHub CLI authentication and repository permissions.`,
         );
       }
 
-      throw new Error(`Failed to fetch GitHub item #${issueId}: ${(error as Error).message}`);
+      throw new Error(`Failed to fetch GitHub item #${issueId}: ${errorMessage}`);
     }
   }
 
@@ -279,7 +266,7 @@ export class ContextDataFetcher {
   }
 
   /**
-   * Enhance with comments data using GitHub API client
+   * Enhance with comments data
    */
   private async enhanceWithComments(
     extracted: GitHubIssueData,
@@ -302,8 +289,12 @@ export class ContextDataFetcher {
         return;
       }
 
-      const apiClient = this.getApiClient();
-      const comments = await apiClient.getComments(githubOrg, repoName, extracted.id);
+      const result = await execa(
+        'gh',
+        ['api', `repos/${githubOrg}/${repoName}/issues/${extracted.id}/comments`],
+        { stdio: 'pipe' },
+      );
+      const comments = JSON.parse(result.stdout);
 
       extracted.comments = comments.map((comment: any) => ({
         author: comment.user?.login || 'unknown',
@@ -365,7 +356,7 @@ export class ContextDataFetcher {
   }
 
   /**
-   * Enhance with file changes (for PRs) using GitHub API client
+   * Enhance with file changes (for PRs)
    */
   private async enhanceWithFileChanges(
     extracted: GitHubIssueData,
@@ -389,8 +380,12 @@ export class ContextDataFetcher {
         return;
       }
 
-      const apiClient = this.getApiClient();
-      const files = await apiClient.getFileChanges(githubOrg, repoName, extracted.id);
+      const result = await execa(
+        'gh',
+        ['api', `repos/${githubOrg}/${repoName}/pulls/${extracted.id}/files`],
+        { stdio: 'pipe' },
+      );
+      const files = JSON.parse(result.stdout);
 
       extracted.fileChanges = files.map((file: any) => ({
         filename: file.filename,

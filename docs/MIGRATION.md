@@ -10,7 +10,7 @@ Space CLI now includes powerful AI-driven development tools and intelligent auto
 
 - **Copilot Instructions**: Auto-generated project context files
 - **Enhanced Analysis**: Smart templates with validation questions
-- **Claude-Inspired Reviews**: Structured PR review system
+- **Structured Reviews**: Structured PR review system
 
 ### 🔧 Intelligent Automation
 
@@ -87,7 +87,7 @@ space init react feature/component-library
 Analysis templates include validation questions that can prevent unnecessary analysis:
 
 - **Standard analysis**: Pre-validation with 5 key questions
-- **Enhanced analysis**: Claude-inspired patterns with security focus
+- **Enhanced analysis**: Structured patterns with security focus
 - **Sample app analysis**: Specialized for reproduction scenarios
 
 **Validation questions prevent analysis when:**
