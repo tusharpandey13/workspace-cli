@@ -1,13 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ContextDataFetcher } from '../src/services/contextData.js';
-import { gitHubCliService } from '../src/services/gitHubCli.js';
 
-// Mock dependencies
-vi.mock('../src/services/gitHubCli.js', () => ({
-  gitHubCliService: {
-    checkStatus: vi.fn(),
-  },
-}));
+// Mock global fetch
+global.fetch = vi.fn();
 
 vi.mock('../src/utils/logger.js', () => ({
   logger: {
@@ -22,25 +17,13 @@ vi.mock('../src/utils/logger.js', () => ({
   },
 }));
 
-vi.mock('execa', () => ({
-  execa: vi.fn(),
-}));
-
 describe('ContextDataFetcher - Parallel Processing', () => {
   let contextFetcher: ContextDataFetcher;
-  const mockCheckStatus = vi.mocked(gitHubCliService.checkStatus);
 
   beforeEach(() => {
     contextFetcher = new ContextDataFetcher();
     vi.clearAllMocks();
-
-    // Mock GitHub CLI as available and authenticated
-    mockCheckStatus.mockResolvedValue({
-      isInstalled: true,
-      isAuthenticated: true,
-      hostname: 'github.com',
-      account: 'testuser',
-    });
+    delete process.env.GITHUB_TOKEN;
   });
 
   it('should return mock data for dry-run mode without API calls', async () => {
@@ -53,35 +36,14 @@ describe('ContextDataFetcher - Parallel Processing', () => {
     expect(result[1].title).toContain('Issue #5678');
 
     // No API calls should be made in dry-run mode
-    const { execa } = await import('execa');
-    expect(execa).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('should handle authentication errors properly', async () => {
-    // Mock GitHub CLI as not authenticated
-    mockCheckStatus.mockResolvedValue({
-      isInstalled: true,
-      isAuthenticated: false,
-      hostname: 'github.com',
-      account: undefined,
-    });
+  it('should handle missing GitHub token gracefully', async () => {
+    delete process.env.GITHUB_TOKEN;
 
     await expect(contextFetcher.fetchGitHubData([1234], 'test', 'repo', false)).rejects.toThrow(
-      'GitHub CLI is not authenticated',
-    );
-  });
-
-  it('should handle missing GitHub CLI gracefully', async () => {
-    // Mock GitHub CLI as not installed
-    mockCheckStatus.mockResolvedValue({
-      isInstalled: false,
-      isAuthenticated: false,
-      hostname: undefined,
-      account: undefined,
-    });
-
-    await expect(contextFetcher.fetchGitHubData([1234], 'test', 'repo', false)).rejects.toThrow(
-      'GitHub CLI is not installed',
+      'GitHub API authentication required',
     );
   });
 
@@ -101,14 +63,12 @@ describe('ContextDataFetcher - Parallel Processing', () => {
 
     // Should complete quickly since it's all mock data
     expect(endTime - startTime).toBeLessThan(100);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('should validate parallel promise structure', async () => {
-    // This test validates that the implementation uses Promise.all correctly
-    // by checking the structure of the returned promises
-
-    const { execa } = await import('execa');
-    const mockExeca = vi.mocked(execa);
+  it('should fetch issues in parallel using GitHub API', async () => {
+    process.env.GITHUB_TOKEN = 'test-token';
+    const mockFetch = vi.mocked(global.fetch);
 
     const mockIssue = {
       number: 1234,
@@ -122,23 +82,30 @@ describe('ContextDataFetcher - Parallel Processing', () => {
       assignees: [],
     };
 
-    // Mock successful responses
-    mockExeca.mockResolvedValue({
-      stdout: JSON.stringify(mockIssue),
-      stderr: '',
-      exitCode: 0,
-    } as any);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockIssue,
+    } as Response);
 
     const result = await contextFetcher.fetchGitHubData([1234], 'test', 'repo', false);
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(1234);
     expect(result[0].title).toBe('Test Issue');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.github.com/repos/test/repo/issues/1234',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      }),
+    );
   });
 
   it('should handle single issue processing correctly', async () => {
-    const { execa } = await import('execa');
-    const mockExeca = vi.mocked(execa);
+    process.env.GITHUB_TOKEN = 'test-token';
+    const mockFetch = vi.mocked(global.fetch);
 
     const mockIssue = {
       number: 999,
@@ -152,12 +119,11 @@ describe('ContextDataFetcher - Parallel Processing', () => {
       assignees: [{ login: 'developer' }],
     };
 
-    // Mock the issue fetch and enhancement calls
-    mockExeca.mockResolvedValue({
-      stdout: JSON.stringify(mockIssue),
-      stderr: '',
-      exitCode: 0,
-    } as any);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockIssue,
+    } as Response);
 
     const result = await contextFetcher.fetchGitHubData([999], 'test', 'repo', false);
 

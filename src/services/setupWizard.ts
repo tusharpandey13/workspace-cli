@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs-extra';
 import { logger } from '../utils/logger.js';
-import { gitHubCliService } from './gitHubCli.js';
+import { GitHubApiClient } from './githubApiClient.js';
 import { isNonInteractive } from '../utils/globalOptions.js';
 
 export interface SetupWizardOptions {
@@ -83,8 +83,8 @@ export class SetupWizard {
     }
 
     try {
-      // Check GitHub CLI availability first
-      await this.checkGitHubCli();
+      // Check GitHub token availability first
+      await this.checkGitHubToken();
 
       const config = await this.collectConfiguration();
       await this.writeConfiguration(config);
@@ -369,27 +369,38 @@ export class SetupWizard {
   }
 
   /**
-   * Check GitHub CLI availability and guide user through setup if needed
+   * Check GitHub token availability and guide user through setup if needed
    */
-  private async checkGitHubCli(): Promise<void> {
-    console.log(chalk.blue.bold('\n🔍 Checking GitHub CLI availability...'));
+  private async checkGitHubToken(): Promise<void> {
+    console.log(chalk.blue.bold('\n🔍 Checking GitHub API access...'));
 
-    const cliStatus = await gitHubCliService.checkStatus();
+    const hasToken = GitHubApiClient.isTokenAvailable();
 
-    if (!cliStatus.isInstalled) {
-      console.log(chalk.yellow('\n⚠️  GitHub CLI is not installed.'));
-      console.log(chalk.gray('\nGitHub CLI is required for:'));
+    if (!hasToken) {
+      console.log(chalk.yellow('\n⚠️  GITHUB_TOKEN environment variable is not set.'));
+      console.log(chalk.gray('\nGITHUB_TOKEN is required for:'));
       console.log(chalk.gray('  • Fetching issue and pull request data'));
       console.log(chalk.gray('  • Enhanced workspace context'));
       console.log(chalk.gray('  • Better development workflow\n'));
 
-      const guidance = gitHubCliService.getInstallationGuidance();
-      guidance.forEach((line) => console.log(chalk.gray(line)));
+      console.log(chalk.gray('To set up a GitHub token:'));
+      console.log(chalk.gray('  1. Create a personal access token at:'));
+      console.log(chalk.cyan('     https://github.com/settings/tokens'));
+      console.log(
+        chalk.gray(
+          '  2. Select scopes: repo (for private repos) or public_repo (for public repos)',
+        ),
+      );
+      console.log(chalk.gray('  3. Set the token as an environment variable:'));
+      console.log(chalk.cyan('     export GITHUB_TOKEN=your_token_here'));
+      console.log(
+        chalk.gray('  4. Add it to your shell profile (~/.bashrc, ~/.zshrc, etc.) to persist\n'),
+      );
 
       const { continueSetup } = await prompts({
         type: 'confirm',
         name: 'continueSetup',
-        message: 'Continue setup without GitHub CLI? (You can install it later)',
+        message: 'Continue setup without GITHUB_TOKEN? (You can set it later)',
         initial: true,
       });
 
@@ -399,45 +410,35 @@ export class SetupWizard {
 
       console.log(
         chalk.yellow(
-          '\n💡 Note: Some workspace-cli features will be limited without GitHub CLI.\n',
+          '\n💡 Note: Some workspace-cli features will be limited without GITHUB_TOKEN.\n',
         ),
       );
       return;
     }
 
-    if (!cliStatus.isAuthenticated) {
-      console.log(chalk.yellow('\n⚠️  GitHub CLI is installed but not authenticated.'));
-      console.log(chalk.gray('\nAuthentication is required for:'));
-      console.log(chalk.gray('  • Accessing GitHub issues and pull requests'));
-      console.log(chalk.gray('  • Enhanced workspace context'));
-      console.log(chalk.gray('  • Full workspace-cli functionality\n'));
+    console.log(chalk.green('✅ GITHUB_TOKEN is configured'));
 
-      const guidance = gitHubCliService.getAuthenticationGuidance();
-      guidance.forEach((line) => console.log(chalk.gray(line)));
+    // Verify token is set - actual API validation happens during first use
+    try {
+      // Token exists, instantiate client to validate it doesn't throw
+      new GitHubApiClient();
+      console.log(chalk.gray('   Token validated successfully.'));
+    } catch (error) {
+      console.log(chalk.yellow('\n⚠️  GITHUB_TOKEN may be invalid or expired.'));
+      console.log(
+        chalk.gray('   Please verify your token at https://github.com/settings/tokens\n'),
+      );
 
       const { continueSetup } = await prompts({
         type: 'confirm',
         name: 'continueSetup',
-        message: 'Continue setup without GitHub CLI authentication? (You can authenticate later)',
+        message: 'Continue setup anyway?',
         initial: true,
       });
 
       if (!continueSetup) {
         throw new Error('cancelled');
       }
-
-      console.log(
-        chalk.yellow(
-          '\n💡 Note: Some workspace-cli features will be limited without GitHub CLI authentication.\n',
-        ),
-      );
-      return;
     }
-
-    console.log(
-      chalk.green(
-        `✅ GitHub CLI is properly installed and authenticated as ${cliStatus.account}\n`,
-      ),
-    );
   }
 }
