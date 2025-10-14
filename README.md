@@ -16,42 +16,6 @@
 
 ---
 
-## ⚠️ **BREAKING CHANGE (v0.2.0+)**
-
-**🔴 GitHub CLI is no longer required or used**
-
-Space CLI now uses **direct GitHub REST API** calls instead of the GitHub CLI (`gh`).
-
-### What Changed:
-
-- ❌ **Removed**: GitHub CLI (`gh`) dependency and `gh auth login` authentication
-- ✅ **Added**: Direct GitHub REST API v3 integration via native `fetch()`
-- 🔑 **New**: `GITHUB_TOKEN` environment variable for authentication
-
-### Migration Required:
-
-For **private repositories** or higher rate limits, you must now set a `GITHUB_TOKEN`:
-
-```bash
-# 1. Create a Personal Access Token at https://github.com/settings/tokens
-# 2. Select scopes: 'repo' (private repos) or 'public_repo' (public only)
-# 3. Export the token:
-export GITHUB_TOKEN="ghp_your_token_here"
-
-# 4. Add to your shell profile (~/.zshrc, ~/.bashrc):
-echo 'export GITHUB_TOKEN="ghp_your_token_here"' >> ~/.zshrc
-```
-
-### What Still Works:
-
-- ✅ **Public repositories** work without a token (60 requests/hour GitHub rate limit)
-- ✅ **All existing commands** work the same way
-- ✅ **Dry-run mode** (`--dry-run`) works without authentication
-
-📖 **Full migration guide**: See [MIGRATION.md](docs/MIGRATION.md) for detailed instructions.
-
----
-
 ## 🚀 Quick Start
 
 ```bash
@@ -304,7 +268,6 @@ A GitHub Personal Access Token is **required for**:
 
 - ✅ Private repository access
 - ✅ Higher API rate limits (5,000 vs 60 requests/hour)
-- ✅ Fetching issue/PR context during workspace creation
 
 **Public repositories** work without a token (60 requests/hour limit).
 
