@@ -142,13 +142,8 @@ export class GitHubApiClient {
     // Get token from options or environment variable
     this.token = options.token || process.env.GITHUB_TOKEN || '';
 
-    // Validate token for private repo access
-    if (!this.token) {
-      throw new GitHubAuthError(
-        'GITHUB_TOKEN environment variable is required. ' +
-          'Create a personal access token at https://github.com/settings/tokens',
-      );
-    }
+    // Token is optional - unauthenticated requests work for public repos (60/hour limit)
+    // Authenticated requests have higher limits (5000/hour) and can access private repos
 
     this.baseUrl = options.baseUrl || 'https://api.github.com';
     this.maxRetries = options.maxRetries || 3;
@@ -160,12 +155,16 @@ export class GitHubApiClient {
    */
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
+    const headers: HeadersInit = {
       Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${this.token}`,
       'X-GitHub-Api-Version': '2022-11-28',
       ...options.headers,
     };
+
+    // Only add Authorization header if token is available
+    if (this.token) {
+      (headers as Record<string, string>).Authorization = `Bearer ${this.token}`;
+    }
 
     let lastError: Error | null = null;
 
@@ -189,9 +188,11 @@ export class GitHubApiClient {
 
         // Handle authentication errors
         if (response.status === 401 || response.status === 403) {
-          throw new GitHubAuthError(
-            'GitHub authentication failed. Please check your GITHUB_TOKEN is valid and has required permissions.',
-          );
+          const message = this.token
+            ? 'GitHub authentication failed. Please check your GITHUB_TOKEN is valid and has required permissions.'
+            : 'Access denied. This resource may be private or you may have exceeded the unauthenticated rate limit (60/hour). ' +
+              'Set GITHUB_TOKEN for higher limits (5000/hour) and private repo access.';
+          throw new GitHubAuthError(message);
         }
 
         // Handle not found errors
@@ -322,6 +323,22 @@ export class GitHubApiClient {
     }
 
     return null;
+  }
+
+  /**
+   * Check if this client instance is authenticated
+   */
+  isAuthenticated(): boolean {
+    return !!this.token;
+  }
+
+  /**
+   * Get current rate limit information based on authentication status
+   */
+  getRateLimitInfo(): { limit: number; resource: string } {
+    return this.token
+      ? { limit: 5000, resource: 'authenticated user' }
+      : { limit: 60, resource: 'unauthenticated requests' };
   }
 
   /**

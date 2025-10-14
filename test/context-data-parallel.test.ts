@@ -39,12 +39,12 @@ describe('ContextDataFetcher - Parallel Processing', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('should handle missing GitHub token gracefully', async () => {
+  it('should work in unauthenticated mode and return empty array for non-existent issues', async () => {
     delete process.env.GITHUB_TOKEN;
 
-    await expect(contextFetcher.fetchGitHubData([1234], 'test', 'repo', false)).rejects.toThrow(
-      'GitHub API authentication required',
-    );
+    // In unauthenticated mode, should return empty array if no valid issues found
+    const result = await contextFetcher.fetchGitHubData([1234], 'test', 'repo', false);
+    expect(result).toEqual([]);
   });
 
   it('should return empty array when no issue IDs provided', async () => {

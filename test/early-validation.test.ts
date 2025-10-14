@@ -97,11 +97,13 @@ describe('validateGitHubIdsExistence', () => {
     );
   });
 
-  it('should throw error for missing GITHUB_TOKEN', async () => {
+  it('should work in unauthenticated mode but may fail for non-existent issues', async () => {
     delete process.env.GITHUB_TOKEN;
 
+    // In unauthenticated mode, should attempt validation but may fail due to rate limits or missing issues
+    // This tests that the client allows unauthenticated attempts rather than throwing auth errors
     await expect(validateGitHubIdsExistence([123], 'auth0', 'nextjs-auth0')).rejects.toThrow(
-      'GITHUB_TOKEN environment variable is required',
+      /Failed to validate issue #123/,
     );
   });
 

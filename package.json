@@ -6,6 +6,15 @@
   "bin": {
     "space": "space-wrapper.sh"
   },
+  "files": [
+    "dist/**/*",
+    "space-wrapper.sh",
+    "src/templates/**/*",
+    "assets/**/*",
+    "config.yaml",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "scripts": {
     "build": "tsc && chmod +x dist/bin/workspace.js && chmod +x space-wrapper.sh",
@@ -26,9 +35,9 @@
     "format": "prettier --write \"**/*.{ts,js,md,json}\"",
     "prepare": "husky install",
     "clean": "rm -rf dist",
-    "install-global": "pnpm run build && npm config set prefix ~/.npm-global && npm install -g . && pnpm run test:install",
-    "install-global:dev": "pnpm run build:dev && npm config set prefix ~/.npm-global && npm install -g . && pnpm run test:install",
-    "uninstall-global": "npm config set prefix ~/.npm-global && npm uninstall -g @tusharpandey13/space-cli 2>/dev/null || true",
+    "install-global": "node scripts/install-global.js",
+    "install-global:dev": "npm run build:dev && node scripts/install-global.js",
+    "uninstall-global": "node scripts/uninstall-global.js",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [

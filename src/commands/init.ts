@@ -1554,15 +1554,14 @@ async function handlePRInitialization(
   // Extract GitHub repository information
   const repoInfo = extractGitHubRepoInfo(project.repo);
 
-  // Use GitHub API for PR identification if available (replaces git clone)
+  // Use GitHub API for PR identification (supports unauthenticated access for public repos)
   if (repoInfo.isGitHub) {
     try {
-      const isApiAvailable = isGitHubApiAvailable();
-      if (!isApiAvailable) {
-        throw new Error('GITHUB_TOKEN is required for PR initialization but is not set');
-      }
-
-      logger.verbose(`🔍 Fetching PR #${prId} information via GitHub API...`);
+      const isTokenAvailable = isGitHubApiAvailable();
+      const authStatus = isTokenAvailable
+        ? 'authenticated (5000/hour)'
+        : 'unauthenticated (60/hour)';
+      logger.verbose(`🔍 Fetching PR #${prId} information via GitHub API (${authStatus})...`);
 
       // Get PR information directly from GitHub API (no clone needed)
       const prInfo = await getCachedPullRequestInfo(prId, repoInfo.org, repoInfo.repo, isDryRun);

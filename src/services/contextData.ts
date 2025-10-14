@@ -54,19 +54,13 @@ export class ContextDataFetcher {
     }
 
     // Initialize GitHub API client for any issues requiring API access
+    // Client now supports unauthenticated mode for public repos (60/hour limit)
     if (issueIds.length > 0) {
-      try {
-        // This will throw GitHubAuthError if GITHUB_TOKEN is missing
-        this.getApiClient();
-      } catch (error) {
-        if (error instanceof GitHubAuthError) {
-          throw new Error(
-            'GitHub API authentication required. Please set GITHUB_TOKEN environment variable.\n' +
-              GitHubApiClient.getMissingTokenMessage(),
-          );
-        }
-        throw error;
-      }
+      const client = this.getApiClient();
+      const rateLimitInfo = client.getRateLimitInfo();
+      logger.verbose(
+        `🔗 GitHub API access: ${rateLimitInfo.resource} (${rateLimitInfo.limit}/hour limit)`,
+      );
     }
 
     // Process all issues in parallel for better performance

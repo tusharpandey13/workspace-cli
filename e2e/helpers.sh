@@ -5,6 +5,19 @@
 
 set -euo pipefail
 
+# Load safeguards to prevent destructive operations
+SAFEGUARDS_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/safeguards.sh"
+if [[ -f "$SAFEGUARDS_PATH" ]]; then
+    source "$SAFEGUARDS_PATH"
+fi
+
+# Color codes for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m' # No Color
+
 # Global configuration
 SPACE_CLI="$SCRIPT_DIR/../dist/bin/workspace.js"
 SPACE_CLI_PATH="$SPACE_CLI"
@@ -200,26 +213,43 @@ EOF
     log_info "GitHub CLI mocking enabled"
 }
 
-# Optimized git operations for faster tests
+# NON-DESTRUCTIVE git operations for tests
+# Uses environment variables instead of global config to avoid modifying user settings
 setup_git_optimizations() {
-    # Configure git for faster operations
-    git config --global init.defaultBranch main
-    git config --global user.name "E2E Test"
-    git config --global user.email "e2e@test.local"
-    git config --global advice.detachedHead false
-    git config --global gc.auto 0  # Disable automatic garbage collection
-    git config --global fetch.parallel 4  # Parallel fetch operations
-    git config --global clone.defaultRemoteName origin
-    git config --global core.preloadindex true  # Speed up git operations
-    git config --global core.fscache true  # File system caching (Windows/Mac)
-    git config --global pack.threads 0  # Use all available CPU cores
+    # IMPORTANT: Use environment variables only - NO git config --global
+    # This ensures we don't modify the user's git configuration
     
-    # Configure shallow clone preferences for environment variables
+    # Git author/committer identity (replaces git config --global user.*)
+    export GIT_AUTHOR_NAME="E2E Test"
+    export GIT_COMMITTER_NAME="E2E Test"
+    export GIT_AUTHOR_EMAIL="e2e@test.local"
+    export GIT_COMMITTER_EMAIL="e2e@test.local"
+    
+    # Git behavior configuration (replaces git config --global settings)
+    export GIT_CONFIG_NOSYSTEM=1  # Don't read system-wide config
+    export GIT_CONFIG_GLOBAL=/dev/null  # Ignore user's global config
+    
+    # Git optimization environment variables
     export GIT_CLONE_OPTS="--depth 1 --single-branch --no-tags"
     export GIT_FETCH_OPTS="--depth=1"
-    export GIT_CONFIG_NOSYSTEM=1  # Don't read system-wide config
     
-    log_debug "Git optimizations configured"
+    # Additional git environment tweaks (non-destructive)
+    export GIT_TEMPLATE_DIR="$TEST_BASE_DIR/.git-templates"
+    export GIT_CONFIG_COUNT=6
+    export GIT_CONFIG_KEY_0="init.defaultBranch"
+    export GIT_CONFIG_VALUE_0="main"
+    export GIT_CONFIG_KEY_1="advice.detachedHead"
+    export GIT_CONFIG_VALUE_1="false"
+    export GIT_CONFIG_KEY_2="gc.auto"
+    export GIT_CONFIG_VALUE_2="0"
+    export GIT_CONFIG_KEY_3="fetch.parallel"
+    export GIT_CONFIG_VALUE_3="4"
+    export GIT_CONFIG_KEY_4="core.preloadindex"
+    export GIT_CONFIG_VALUE_4="true"
+    export GIT_CONFIG_KEY_5="pack.threads"
+    export GIT_CONFIG_VALUE_5="0"
+    
+    log_debug "Git optimizations configured (non-destructive, environment-only)"
 }
 
 # Fast git clone with error handling
@@ -404,14 +434,13 @@ setup_test_environment() {
     # Create clean test environment
     create_clean_test_environment
     
-    # Setup git optimizations
+    # Setup git optimizations (non-destructive, environment-only)
     setup_git_optimizations
     
-    # Backup existing user config before starting tests
-    if [[ -f "$HOME/.space-config.yaml" ]]; then
-        cp "$HOME/.space-config.yaml" "$HOME/.space-config.yaml.e2e-backup"
-        log_info "Backed up existing config to ~/.space-config.yaml.e2e-backup"
-    fi
+    # NON-DESTRUCTIVE: Do NOT touch user's real config
+    # Instead, use XDG_CONFIG_HOME to isolate all config operations
+    export XDG_CONFIG_HOME="$TEST_BASE_DIR/.config"
+    export SPACE_CONFIG_PATH="$TEST_BASE_DIR/.config/space/config.yaml"
     
     # Clean and create test directory
     if [[ -d "$TEST_BASE_DIR" ]]; then
@@ -421,11 +450,12 @@ setup_test_environment() {
     safe_operation "create_test_directory" 3 1 mkdir -p "$TEST_BASE_DIR"
     cd "$TEST_BASE_DIR"
     
-    # Create subdirectories including isolated home and mocks
-    mkdir -p src workspaces env-files configs logs home mocks
+    # Create subdirectories for isolated testing
+    # NOTE: We do NOT override HOME - that would break IDE and other tools
+    mkdir -p src workspaces env-files configs logs .config/space mocks
     
-    # Set up isolated HOME for config operations
-    export TEST_HOME="$TEST_BASE_DIR/home"
+    # Create test-specific config (does not touch ~/.space-config.yaml)
+    log_debug "Using isolated config at: $SPACE_CONFIG_PATH"
     
     # Setup GitHub API access for tests
     # For tests that need GitHub API access, set GITHUB_TOKEN
@@ -449,17 +479,8 @@ setup_test_environment() {
 cleanup_test_environment() {
     log_info "Cleaning up test environment"
     
-    # Remove any config files that might have been created in user's home during tests
-    if [[ -f "$HOME/.space-config.yaml" ]] && [[ ! -f "$HOME/.space-config.yaml.e2e-backup" ]]; then
-        log_warning "Removing test-created config file from home directory"
-        rm -f "$HOME/.space-config.yaml"
-    fi
-    
-    # Restore user's original config if it was backed up
-    if [[ -f "$HOME/.space-config.yaml.e2e-backup" ]]; then
-        mv "$HOME/.space-config.yaml.e2e-backup" "$HOME/.space-config.yaml"
-        log_info "Restored original config from backup"
-    fi
+    # IMPORTANT: Only clean up test directories, NEVER touch user's HOME
+    # All config files should be in TEST_BASE_DIR, not ~/.space-config.yaml
     
     if [[ -d "$TEST_BASE_DIR" ]]; then
         # Force remove any git worktrees that might be stuck
@@ -601,19 +622,29 @@ run_space_command() {
         cd '/Users/tushar.pandey/src/workspace-cli'
         
         # Set controlled environment for CLI execution
-        export HOME='$TEST_HOME'
+        # IMPORTANT: Do NOT export HOME - that breaks IDE, shell, and other tools
+        # Instead, use XDG_CONFIG_HOME for config isolation
+        export XDG_CONFIG_HOME='$TEST_BASE_DIR/.config'
+        export SPACE_CONFIG_PATH='$TEST_BASE_DIR/.config/space/config.yaml'
         export NODE_ENV=test
         export WORKSPACE_DISABLE_PROGRESS=1
         export WORKSPACE_DISABLE_CACHE=1
         
-        # GitHub CLI mocking if enabled
+        # Git identity (non-destructive, environment-only)
+        export GIT_AUTHOR_NAME='E2E Test'
+        export GIT_COMMITTER_NAME='E2E Test'
+        export GIT_AUTHOR_EMAIL='e2e@test.local'
+        export GIT_COMMITTER_EMAIL='e2e@test.local'
+        export GIT_CONFIG_GLOBAL=/dev/null
+        export GIT_CONFIG_NOSYSTEM=1
+        
+        # GitHub CLI mocking if enabled (isolated PATH)
         if [[ '${GH_MOCK:-0}' == '1' ]]; then
             export PATH='$TEST_BASE_DIR/mocks:$PATH'
             export GH_TOKEN='mock_token_for_tests'
         fi
         
         # Clear potentially problematic variables
-        unset GITHUB_TOKEN 2>/dev/null || true
         unset NPM_CONFIG_PREFIX 2>/dev/null || true
         unset NODE_EXTRA_CA_CERTS 2>/dev/null || true
         
@@ -855,10 +886,20 @@ run_interactive_test_case() {
         cd '/Users/tushar.pandey/src/workspace-cli'
         
         # Set controlled environment for interactive CLI execution
-        export HOME='$TEST_HOME'
+        # IMPORTANT: Do NOT export HOME - use XDG_CONFIG_HOME instead
+        export XDG_CONFIG_HOME='$TEST_BASE_DIR/.config'
+        export SPACE_CONFIG_PATH='$TEST_BASE_DIR/.config/space/config.yaml'
         export NODE_ENV=test
         export WORKSPACE_DISABLE_PROGRESS=1
         export WORKSPACE_DISABLE_CACHE=1
+        
+        # Git identity (non-destructive)
+        export GIT_AUTHOR_NAME='E2E Test'
+        export GIT_COMMITTER_NAME='E2E Test'
+        export GIT_AUTHOR_EMAIL='e2e@test.local'
+        export GIT_COMMITTER_EMAIL='e2e@test.local'
+        export GIT_CONFIG_GLOBAL=/dev/null
+        export GIT_CONFIG_NOSYSTEM=1
         
         # GitHub CLI mocking if enabled
         if [[ '${GH_MOCK:-0}' == '1' ]]; then

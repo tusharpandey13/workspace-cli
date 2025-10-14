@@ -41,10 +41,11 @@ describe('GitHubApiClient', () => {
       expect(client).toBeInstanceOf(GitHubApiClient);
     });
 
-    it('should throw GitHubAuthError when no token is available', () => {
+    it('should allow creation without token (unauthenticated mode)', () => {
       delete process.env.GITHUB_TOKEN;
-      expect(() => new GitHubApiClient()).toThrow(GitHubAuthError);
-      expect(() => new GitHubApiClient()).toThrow('GITHUB_TOKEN environment variable is required');
+      const client = new GitHubApiClient();
+      expect(client).toBeInstanceOf(GitHubApiClient);
+      expect(client.isAuthenticated()).toBe(false);
     });
 
     it('should use default baseUrl', () => {

@@ -30,7 +30,10 @@ export class SetupWizard {
   private configPath: string;
 
   constructor() {
-    this.configPath = path.join(os.homedir(), '.space-config.yaml');
+    // Respect SPACE_CONFIG_PATH environment variable for test isolation
+    // This allows E2E tests to run without modifying user's real config
+    this.configPath =
+      process.env.SPACE_CONFIG_PATH || path.join(os.homedir(), '.space-config.yaml');
   }
 
   /**

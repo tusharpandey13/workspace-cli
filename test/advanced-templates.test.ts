@@ -83,7 +83,7 @@ describe('Advanced Template Integration', () => {
         expect(content).toContain('🛑 If you answered "NO"');
         expect(content).toContain('SECURITY CONSIDERATIONS');
         expect(content).toContain('MANDATORY for bug fixes');
-        expect(content).toContain('Structured validation patterns');
+        expect(content).toContain('structured validation patterns'); // lowercase 's'
       }
     });
   });

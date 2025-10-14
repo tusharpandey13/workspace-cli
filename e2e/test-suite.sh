@@ -278,8 +278,9 @@ run_verification_tests() {
     run_space_command "" setup --non-interactive --src-dir "$TEST_BASE_DIR/src" \
         --add-project "verify:Verify:https://github.com/auth0/nextjs-auth0.git" >/dev/null 2>&1 || true
     
-    # Check for generated config in isolated test home directory
-    local test_config="$TEST_BASE_DIR/home/.space-config.yaml"
+    # Check for generated config in isolated test config directory
+    # Config path is set by run_space_command via SPACE_CONFIG_PATH env var
+    local test_config="$TEST_BASE_DIR/.config/space/config.yaml"
     if [[ -f "$test_config" ]]; then
         if verify_file_exists "$test_config" "VERIFY-03"; then
             TESTS_PASSED=$((TESTS_PASSED + 1))
@@ -288,7 +289,7 @@ run_verification_tests() {
         fi
         # Config will be cleaned up with test environment
     else
-        log_warning "VERIFY-03: Config not created in isolated test environment"
+        log_warning "VERIFY-03: Config not created in isolated test environment (expected at $test_config)"
         TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
     TESTS_TOTAL=$((TESTS_TOTAL + 1))
