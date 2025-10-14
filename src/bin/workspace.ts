@@ -185,13 +185,13 @@ const program = new Command();
 program
   .name('space')
   .description('Stack-agnostic space CLI tool')
-  .version(pkg.version)
+  .version(pkg.version, '-v, --version', 'output current version')
   .addHelpText('after', buildHelpText());
 
 // Global options
 program.option('-e, --env <path>', 'Path to .space.env file');
 program.option('-c, --config <path>', 'Path to configuration file');
-program.option('-v, --verbose', 'Enable verbose logging');
+program.option('--verbose', 'Enable verbose logging');
 program.option('--debug', 'Enable debug logging');
 program.option('--pr <pr_id>', 'Open space for specific pull request');
 program.option('--non-interactive', 'Skip all user input prompts for automated usage');

@@ -57,9 +57,11 @@ describe('CLI Help Tests', () => {
   it('should display clean command help', () => {
     const output = execSync(`node ${CLI_PATH} clean --help`, { encoding: 'utf8' });
 
-    expect(output).toContain('Clean up and remove space');
+    expect(output).toContain('Clean up and remove workspace');
     expect(output).toContain('WARNING: This action is irreversible!');
     expect(output).toContain('Examples:');
     expect(output).toContain('Related commands:');
+    expect(output).toContain('Prunes stale git worktree references');
+    expect(output).toContain('Removes local branches to prevent future checkout conflicts');
   });
 });

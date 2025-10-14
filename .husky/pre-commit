@@ -1,3 +1,33 @@
 #!/usr/bin/env sh
 
+# Run lint-staged first
 pnpm lint-staged
+
+# Additional checks for global installation consistency
+echo "🔍 Checking for potential global installation issues..."
+
+# Check if there's a global installation
+if command -v space >/dev/null 2>&1; then
+    # Get current package.json version
+    PACKAGE_VERSION=$(node -pe "require('./package.json').version")
+    
+    # Get global version (if available)
+    GLOBAL_VERSION=$(space --version 2>/dev/null || echo "unknown")
+    
+    if [ "$PACKAGE_VERSION" != "$GLOBAL_VERSION" ]; then
+        echo "⚠️  WARNING: Global installation version mismatch detected!"
+        echo "   Package.json version: $PACKAGE_VERSION"
+        echo "   Global version: $GLOBAL_VERSION"
+        echo ""
+        echo "💡 To fix this after commit, run:"
+        echo "   pnpm run install-global:safe"
+        echo ""
+        echo "   This ensures your global installation stays in sync."
+    else
+        echo "✅ Global installation version is consistent"
+    fi
+else
+    echo "ℹ️  No global installation detected"
+fi
+
+echo "✅ Pre-commit checks completed"

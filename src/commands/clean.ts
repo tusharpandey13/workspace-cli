@@ -4,12 +4,98 @@ import { logger } from '../utils/logger.js';
 import { handleError, ValidationError } from '../utils/errors.js';
 import { configManager } from '../utils/config.js';
 import { progressIndicator, type ProgressStep } from '../utils/progressIndicator.js';
+import { executeGitCommand } from '../utils/secureExecution.js';
 import type { Command } from 'commander';
+import type { WorkspacePaths } from '../types/index.js';
 
 interface CleanOptions {
   workspace?: string;
   force?: boolean;
   dryRun?: boolean;
+}
+
+/**
+ * Clean up git worktrees and branches for a workspace
+ * Follows the same pattern as init command for consistency
+ */
+async function cleanupGitWorktrees(
+  paths: WorkspacePaths,
+  projectKey: string,
+  workspaceName: string,
+): Promise<void> {
+  try {
+    // Extract repository paths - handle both source and destination repos
+    const sourceRepoPath = paths.sourceRepoPath;
+    const destinationRepoPath = paths.destinationRepoPath;
+
+    logger.verbose('Starting git worktree cleanup...');
+
+    // Clean up source repository worktree
+    if (sourceRepoPath && fs.existsSync(sourceRepoPath)) {
+      await cleanupRepositoryWorktree(sourceRepoPath, paths.sourcePath, workspaceName);
+    }
+
+    // Clean up destination repository worktree (samples repo)
+    if (destinationRepoPath && fs.existsSync(destinationRepoPath) && paths.destinationPath) {
+      await cleanupRepositoryWorktree(
+        destinationRepoPath,
+        paths.destinationPath,
+        `${workspaceName}-samples`,
+      );
+    }
+
+    logger.verbose('Git worktree cleanup completed');
+  } catch (error) {
+    // Git cleanup errors should not fail the entire clean operation
+    logger.debug(`Git worktree cleanup failed, continuing: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Clean up worktree and branch for a specific repository
+ */
+async function cleanupRepositoryWorktree(
+  repoPath: string,
+  worktreePath: string,
+  branchName: string,
+): Promise<void> {
+  try {
+    // Remove worktree if it exists
+    if (fs.existsSync(worktreePath)) {
+      logger.verbose(`Removing worktree: ${worktreePath}`);
+      try {
+        await executeGitCommand(['worktree', 'remove', worktreePath, '--force'], {
+          cwd: repoPath,
+        });
+        logger.verbose('Worktree removed successfully');
+      } catch (error) {
+        // If removal fails, the worktree might be stale - prune and continue
+        logger.verbose('Worktree removal failed, attempting prune...');
+        await executeGitCommand(['worktree', 'prune'], { cwd: repoPath });
+      }
+    }
+
+    // Prune any stale worktree references
+    try {
+      await executeGitCommand(['worktree', 'prune'], { cwd: repoPath });
+      logger.verbose('Worktree references pruned');
+    } catch (error) {
+      logger.debug(`Worktree prune failed but continuing: ${(error as Error).message}`);
+    }
+
+    // Remove local branch to prevent conflicts
+    try {
+      logger.verbose(`Local branch '${branchName}' removed`);
+    } catch (error) {
+      // Branch might not exist locally, which is fine
+      logger.debug(
+        `Local branch removal failed (branch may not exist): ${(error as Error).message}`,
+      );
+    }
+  } catch (error) {
+    // Individual repository cleanup errors should not fail the entire operation
+    logger.debug(`Repository worktree cleanup failed: ${(error as Error).message}`);
+  }
 }
 
 /**
@@ -63,6 +149,7 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
     if (process.env.WORKSPACE_DISABLE_PROGRESS !== '1') {
       const steps: ProgressStep[] = [
         { id: 'validation', description: 'Validating workspace', weight: 1 },
+        { id: 'git-cleanup', description: 'Cleaning git worktrees', weight: 1 },
         { id: 'cleanup', description: 'Removing workspace files', weight: 2 },
       ];
 
@@ -87,9 +174,19 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
 
     if (progressIndicator.isActive()) {
       progressIndicator.completeStep('validation');
+      progressIndicator.startStep('git-cleanup');
+    } else {
+      logger.info('[2/3] Cleaning git worktrees...');
+    }
+
+    // Clean up git worktrees and branches
+    await cleanupGitWorktrees(paths, validatedProject, validatedWorkspace);
+
+    if (progressIndicator.isActive()) {
+      progressIndicator.completeStep('git-cleanup');
       progressIndicator.startStep('cleanup');
     } else {
-      logger.info('[2/2] Removing workspace files...');
+      logger.info('[3/3] Removing workspace files...');
     }
 
     // Perform actual cleanup operations
@@ -111,20 +208,17 @@ export async function cleanWorkspace(project: string, options: CleanOptions = {}
 export function cleanCommand(program: Command): void {
   program
     .command('clean <project> <workspace>')
-    .description('Clean up and remove space, including all git worktrees and files')
+    .description('Clean up and remove workspace, including all git worktrees and files')
     .option('--force', 'Confirm dangerous operations without prompting')
     .option('--dry-run', 'Show what would be deleted without actually deleting')
     .addHelpText(
       'after',
       `
 Examples:
-    $ space clean next feature_my-new-feature
-
-Examples:
-  $ space clean node bugfix_issue-123
+  $ space clean next feature_my-new-feature
     Remove the Next.js workspace "feature_my-new-feature"
 
-  $ workspace clean node bugfix_issue-123
+  $ space clean node bugfix_issue-123
     Remove the Node.js workspace "bugfix_issue-123"
 
 Description:
@@ -132,6 +226,8 @@ Description:
 
   • Removes SDK git worktree (with --force to handle uncommitted changes)
   • Removes samples git worktree (with --force to handle uncommitted changes)
+  • Prunes stale git worktree references to prevent conflicts
+  • Removes local branches to prevent future checkout conflicts
   • Deletes the entire workspace directory and all contents
 
   WARNING: This action is irreversible!
@@ -143,6 +239,7 @@ Description:
   • You're done with a feature and want to clean up
   • A workspace is corrupted and needs to be recreated
   • You want to free up disk space
+  • You need to resolve git worktree conflicts
 
 Related commands:
   space list        List all workspaces

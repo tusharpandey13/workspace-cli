@@ -1,6 +1,6 @@
 {
   "name": "@tusharpandey13/space-cli",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Stack-agnostic CLI tool to automate multi-worktree development workflows for any codebase.",
   "preferGlobal": true,
   "bin": {
@@ -29,6 +29,7 @@
     "test:install": "pnpm run test:install:local && pnpm run test:install:global",
     "test:install:local": "node dist/bin/workspace.js --version",
     "test:install:global": "space --version",
+    "test:version-consistency": "node -e \"const pkg = require('./package.json'); const { execSync } = require('child_process'); const globalVersion = execSync('space --version', { encoding: 'utf8' }).trim(); if (pkg.version !== globalVersion) { console.error('❌ Version mismatch:', pkg.version, 'vs', globalVersion); process.exit(1); } else { console.log('✅ Versions match:', pkg.version); }\"",
     "troubleshoot": "scripts/troubleshoot.sh",
     "lint": "eslint . --ext .ts --ext .js || true",
     "lint:fix": "eslint . --ext .ts --ext .js --fix",
@@ -37,6 +38,7 @@
     "clean": "rm -rf dist",
     "install-global": "node scripts/install-global.js",
     "install-global:dev": "npm run build:dev && node scripts/install-global.js",
+    "install-global:safe": "npm run clean && npm run build && node scripts/install-global.js",
     "uninstall-global": "node scripts/uninstall-global.js",
     "prepublishOnly": "npm run clean && npm run build"
   },

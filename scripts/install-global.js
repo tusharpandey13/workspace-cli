@@ -119,6 +119,57 @@ async function testGlobalInstallation() {
 }
 
 /**
+ * Verify that globally installed version matches package.json version
+ */
+async function verifyVersionConsistency() {
+  console.log('🔍 Verifying version consistency...');
+
+  try {
+    // Get version from package.json
+    const packageJsonPath = resolve(projectRoot, 'package.json');
+    const { readFile } = await import('fs/promises');
+    const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
+    const expectedVersion = packageJson.version;
+
+    // Get version from globally installed CLI
+    const { spawn } = await import('child_process');
+    const globalVersion = await new Promise((resolve, reject) => {
+      const child = spawn('space', ['--version'], { stdio: 'pipe' });
+      let output = '';
+
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      child.on('exit', (code) => {
+        if (code === 0) {
+          resolve(output.trim());
+        } else {
+          reject(new Error(`Failed to get global version, exit code: ${code}`));
+        }
+      });
+
+      child.on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    if (globalVersion === expectedVersion) {
+      console.log(`✅ Version consistency verified: ${expectedVersion}`);
+      return true;
+    } else {
+      throw new Error(
+        `❌ Version mismatch! Package.json: ${expectedVersion}, Global: ${globalVersion}`,
+      );
+    }
+  } catch (error) {
+    console.error('❌ Version verification failed:', error.message);
+    console.error('💡 This indicates a stale global installation that could cause issues.');
+    throw error;
+  }
+}
+
+/**
  * Main installation process
  */
 async function installGlobal() {
@@ -128,7 +179,7 @@ async function installGlobal() {
     // Step 1: Detect package manager
     const pm = await detectPackageManager();
 
-    // Step 2: Build project
+    // Step 2: Clean and build project
     console.log('🔨 Building project...');
     await runCommand(pm.buildCmd[0], pm.buildCmd.slice(1));
 
@@ -139,6 +190,9 @@ async function installGlobal() {
     // Step 4: Test installation
     if (process.env.SKIP_INSTALL_TEST !== 'true') {
       await testGlobalInstallation();
+
+      // Step 5: Verify version consistency
+      await verifyVersionConsistency();
     }
 
     console.log('\n🎉 Global installation completed successfully!');
@@ -152,6 +206,7 @@ async function installGlobal() {
     console.error('3. Check that your package manager global directory is writable');
     console.error('4. For npm: npm config get prefix should point to a writable location');
     console.error('5. For pnpm: pnpm config get global-bin-dir should be in your PATH');
+    console.error('6. If version mismatch: clean build and retry installation');
     process.exit(1);
   }
 }
