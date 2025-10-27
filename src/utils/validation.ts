@@ -16,7 +16,7 @@ const ALLOWED_GIT_HOSTS = [
 /**
  * Allowed commands for secure execution
  */
-const ALLOWED_COMMANDS = ['git', 'gh', 'sh', 'node', 'npm', 'pnpm', 'yarn'];
+const ALLOWED_COMMANDS = ['git', 'sh', 'node', 'npm', 'pnpm', 'yarn'];
 
 function hasControlCharacters(input: string): boolean {
   // Check for control characters using code points to avoid linter errors
@@ -332,7 +332,7 @@ export async function validateDependencies(): Promise<void> {
   const { configManager } = await import('./config.js');
 
   // Use default dependencies if config is not loaded
-  let dependencies = ['git', 'gh']; // Default fallback
+  let dependencies = ['git']; // Default fallback
 
   try {
     if (configManager.isLoaded()) {

@@ -19,7 +19,7 @@
 ## 🚀 Quick Start
 
 ```bash
-pnpm add -g @tusharpandey13/space-cli
+npm add -g @tusharpandey13/space-cli
 ```
 
 **That's it!** You now have isolated directories for your main repo and samples, ready for development.  
